@@ -19,7 +19,6 @@
 
 #ifdef __cplusplus
 
-#include "OSLikeStuff/scheduler_api.h"
 #include "definitions_cxx.hpp"
 #include "io/midi/learned_midi.h"
 #include "playback/playback_handler.h"
@@ -67,11 +66,6 @@ public:
 
 	void sendNote(MIDISource source, bool on, int32_t note, uint8_t velocity, uint8_t channel, int32_t filter);
 	void sendCC(MIDISource source, int32_t channel, int32_t cc, int32_t value, int32_t filter);
-	bool checkIncomingSerialMidi();
-	static void check_incoming_usb();
-	void checkIncomingUsbMidi();
-
-	void checkIncomingUsbSysex(uint8_t const* message, int32_t ip, int32_t d, int32_t cable);
 
 	void sendMidi(MIDISource source, MIDIMessage message, int32_t filter = kMIDIOutputFilterNoMPE, bool sendUSB = true);
 	void sendClock(MIDISource source, bool sendUSB = true, int32_t howMany = 1);
@@ -80,9 +74,9 @@ public:
 	void sendPositionPointer(MIDISource source, uint16_t positionPointer);
 	void sendContinue(MIDISource source);
 
+	void checkIncomingMidi();
 	void flushMIDI();
 	void sendUsbMidi(MIDIMessage message, int32_t filter);
-	void sendSerialMidi(MIDIMessage message);
 
 	void sendPGMChange(MIDISource source, int32_t channel, int32_t pgm, int32_t filter);
 	void sendAllNotesOff(MIDISource source, int32_t channel, int32_t filter);
@@ -95,22 +89,19 @@ public:
 	void sendChannelAftertouch(MIDISource source, int32_t channel, uint8_t value, int32_t filter);
 	void sendPolyphonicAftertouch(MIDISource source, int32_t channel, uint8_t value, uint8_t noteCode, int32_t filter);
 	bool anythingInOutputBuffer();
-	void setupUSBHostReceiveTransfer(int32_t ip, int32_t midiDeviceNum);
-	void flushUSBMIDIOutput();
 
 	// If bit "16" (actually bit 4) is 1, this is a program change. (Wait, still?)
 	LearnedMIDI globalMIDICommands[kNumGlobalMIDICommands];
 
 	bool midiThru;
-	LearnedMIDI midiFollowChannelType[kNumMIDIFollowChannelTypesIncludingTracks]; // A, B, C, Track, NONE, Track 1-16
-	MIDIFollowChannelType midiFollowFeedbackChannelType;                          // A, B, C, Track, NONE
+	LearnedMIDI midiFollowChannelType[kNumMIDIFollowChannelTypes]; // A, B, C
+	MIDIFollowChannelType midiFollowFeedbackChannelType;           // A, B, C, NONE
 	uint8_t midiFollowKitRootNote;
 	bool midiFollowDisplayParam;
 	MIDIFollowFeedbackAutomationMode midiFollowFeedbackAutomation;
 	bool midiFollowFeedbackFilter;
 	MIDITakeoverMode midiTakeover;
 	bool midiSelectKitRow;
-	TaskID routine_task_id;
 
 	// shared buffer for formatting sysex messages.
 	// Not safe for use in interrupts.
@@ -147,21 +138,12 @@ private:
 	EventStackStorage eventStack_;
 	/// Top of the event stack. If this is equal to eventStack_.begin(), the stack is empty.
 	EventStackStorage::iterator eventStackTop_;
-
-	int32_t getPotentialNumConnectedUSBMIDIDevices(int32_t ip);
 };
 
-uint32_t setupUSBMessage(MIDIMessage message);
-
 extern MidiEngine midiEngine;
-extern bool anythingInUSBOutputBuffer;
 
 extern "C" {
 #endif
-extern uint16_t g_usb_usbmode;
-
-void usbSendCompleteAsHost(int32_t ip);       // used when deluge is in host mode
-void usbSendCompleteAsPeripheral(int32_t ip); // used in peripheral mode
 #ifdef __cplusplus
 }
 #endif

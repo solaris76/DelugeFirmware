@@ -486,8 +486,11 @@ enum class Error {
 	INVALID_PATTERN_VERSION,
 	OUT_OF_BUFFER_SPACE,
 	INVALID_SYSEX_FORMAT,
+<<<<<<< HEAD
 	POS_PAST_STRING,
 	FILE_NOT_SAVED,
+=======
+>>>>>>> 72643e56 (Create MIDI "root complex" abstraction. (#3157))
 };
 
 enum class SampleRepeatMode {
