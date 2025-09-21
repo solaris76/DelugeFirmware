@@ -71,34 +71,16 @@ void MIDIDrum::noteOnPostArp(int32_t noteCodePostArp, ArpNote* arpNote, int32_t 
 	NonAudioDrum::noteOnPostArp(noteCodePostArp, arpNote, noteIndex);
 	lastVelocity = arpNote->velocity;
 
-	// Convert outputDevice to deviceFilter bitmask
-	uint32_t deviceFilter = 0;
-	if (outputDevice > 0) {
-		if (outputDevice == 1) {
-			deviceFilter = 1; // DIN only (bit 0)
-		}
-		else {
-			deviceFilter = (1 << (outputDevice - 1)); // USB device (bit outputDevice-1)
-		}
-	}
-
+	// Send MIDI note using routing data class
+	uint32_t deviceFilter = outputRouting.toDeviceFilter();
 	midiEngine.sendNote(this, true, noteCodePostArp, arpNote->velocity, channel, kMIDIOutputFilterNoMPE, deviceFilter);
 }
 
 void MIDIDrum::noteOffPostArp(int32_t noteCodePostArp) {
 	NonAudioDrum::noteOffPostArp(noteCodePostArp);
 
-	// Convert outputDevice to deviceFilter bitmask
-	uint32_t deviceFilter = 0;
-	if (outputDevice > 0) {
-		if (outputDevice == 1) {
-			deviceFilter = 1; // DIN only (bit 0)
-		}
-		else {
-			deviceFilter = (1 << (outputDevice - 1)); // USB device (bit outputDevice-1)
-		}
-	}
-
+	// Send MIDI note off using routing data class
+	uint32_t deviceFilter = outputRouting.toDeviceFilter();
 	midiEngine.sendNote(this, false, noteCodePostArp, kDefaultNoteOffVelocity, channel, kMIDIOutputFilterNoMPE,
 	                    deviceFilter);
 }
@@ -115,6 +97,8 @@ void MIDIDrum::writeToFile(Serializer& writer, bool savingSong, ParamManager* pa
 	writeDrumTagsToFile(writer);
 	writer.writeAttribute("channel", channel, false);
 	writer.writeAttribute("note", note, false);
+	writer.writeAttribute("outputDevice", outputRouting.device, false);
+	writer.writeAttribute("outputChannel", outputRouting.channel, false);
 	writer.writeOpeningTagEnd();
 
 	NonAudioDrum::writeArpeggiatorToFile(writer);
@@ -132,6 +116,14 @@ Error MIDIDrum::readFromFile(Deserializer& reader, Song* song, Clip* clip, int32
 		if (!strcmp(tagName, "note")) {
 			note = reader.readTagOrAttributeValueInt();
 			reader.exitTag("note");
+		}
+		else if (!strcmp(tagName, "outputDevice")) {
+			outputRouting.device = reader.readTagOrAttributeValueInt();
+			reader.exitTag("outputDevice");
+		}
+		else if (!strcmp(tagName, "outputChannel")) {
+			outputRouting.channel = reader.readTagOrAttributeValueInt();
+			reader.exitTag("outputChannel");
 		}
 		else if (NonAudioDrum::readDrumTagFromFile(reader, tagName)) {}
 		else {
