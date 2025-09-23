@@ -39,6 +39,7 @@
 #include "gui/ui_timer_manager.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
+#include "gui/views/generative_mode_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/timeline_view.h"
 #include "gui/views/view.h"
@@ -528,6 +529,15 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 			}
 
 			if (currentUIMode == UI_MODE_NONE) {
+				// Check if we're in a synth clip - if so, toggle to generative mode
+				if (getCurrentOutputType() == OutputType::SYNTH) {
+					InstrumentClip* clip = getCurrentInstrumentClip();
+					if (clip) {
+						deluge::gui::views::generativeModeView.openUI(clip);
+						changeRootUI(&deluge::gui::views::generativeModeView);
+						return ActionResult::DEALT_WITH;
+					}
+				}
 				handleInstrumentChange(OutputType::SYNTH);
 			}
 			else if (currentUIMode == UI_MODE_ADDING_DRUM_NOTEROW || currentUIMode == UI_MODE_AUDITIONING) {
@@ -545,6 +555,15 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 			}
 
 			if (currentUIMode == UI_MODE_NONE) {
+				// Check if we're in a MIDI clip - if so, toggle to generative mode
+				if (getCurrentOutputType() == OutputType::MIDI_OUT) {
+					InstrumentClip* clip = getCurrentInstrumentClip();
+					if (clip) {
+						deluge::gui::views::generativeModeView.openUI(clip);
+						changeRootUI(&deluge::gui::views::generativeModeView);
+						return ActionResult::DEALT_WITH;
+					}
+				}
 				changeOutputType(OutputType::MIDI_OUT);
 
 				// Drop out of scale mode if the clip is now routed to MIDI transpose,
