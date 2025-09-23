@@ -69,22 +69,28 @@ void GenerativeModeView::focusRegained() {
 	// This simulates what happens when a pad is pressed - calculate parameter values
 	// and render the pads with the current parameter values
 
-	// Initialize parameter values if they haven't been set yet
+	// Only initialize parameter values if they haven't been set yet
+	// Parameters start at 4 (center), so we only reset if they're still at default
 	if (currentClip_) {
+		// Check if any parameter has been modified from its default value
+		bool hasBeenModified = false;
 		for (int32_t x = 0; x < 16; x++) {
-			// Initialize all parameters to 0 (center) if not set
-			setParameterValue(x, 0);
+			if (getParameterValue(x) != 4) {
+				hasBeenModified = true;
+				break;
+			}
+		}
+
+		// Only initialize to 0 if no parameters have been modified yet
+		if (!hasBeenModified) {
+			for (int32_t x = 0; x < 16; x++) {
+				setParameterValue(x, 0);
+			}
 		}
 	}
 
-	renderMainPads(0xFFFFFFFF, PadLEDs::image, PadLEDs::occupancyMask, true);
-
-	// Force OLED display update
-	if (display->haveOLED()) {
-		deluge::hid::display::oled_canvas::Canvas& canvas = deluge::hid::display::OLED::main;
-		renderOLED(canvas);
-		deluge::hid::display::OLED::markChanged();
-	}
+	// Trigger UI rendering to ensure pads are displayed
+	uiNeedsRendering(this);
 }
 
 void GenerativeModeView::render() {
@@ -396,95 +402,103 @@ void GenerativeModeView::backButtonAction() {
 }
 
 void GenerativeModeView::setParameterValue(int32_t column, int32_t value) {
+	if (!currentClip_)
+		return;
+
 	// Clamp value to -7 to +7 range (full range)
 	value = std::max(-7, std::min(7, (int)value));
+	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
 
 	switch (column) {
 	case 0:
-		steps_ = value;
+		instrumentClip->generativeSteps_ = value;
 		break;
 	case 1:
-		pulses_ = value;
+		instrumentClip->generativePulses_ = value;
 		break;
 	case 2:
-		division_ = value;
+		instrumentClip->generativeDivision_ = value;
 		break;
 	case 3:
-		repeats_ = value;
+		instrumentClip->generativeRepeats_ = value;
 		break;
 	case 4:
-		voicing_ = value;
+		instrumentClip->generativeVoicing_ = value;
 		break;
 	case 5:
-		range_ = value;
+		instrumentClip->generativeRange_ = value;
 		break;
 	case 6:
-		groove_ = value;
+		instrumentClip->generativeGroove_ = value;
 		break;
 	case 7:
-		scale_ = value;
+		instrumentClip->generativeScale_ = value;
 		break;
 	case 8:
-		chord_ = value;
+		instrumentClip->generativeChord_ = value;
 		break;
 	case 9:
-		swing_ = value;
+		instrumentClip->generativeSwing_ = value;
 		break;
 	case 10:
-		velocity_ = value;
+		instrumentClip->generativeVelocity_ = value;
 		break;
 	case 11:
-		octave_ = value;
+		instrumentClip->generativeOctave_ = value;
 		break;
 	case 12:
-		transpose_ = value;
+		instrumentClip->generativeTranspose_ = value;
 		break;
 	case 13:
-		probability_ = value;
+		instrumentClip->generativeProbability_ = value;
 		break;
 	case 14:
-		length_ = value;
+		instrumentClip->generativeLength_ = value;
 		break;
 	case 15:
-		accent_ = value;
+		instrumentClip->generativeAccent_ = value;
 		break;
 	}
 }
 
 int32_t GenerativeModeView::getParameterValue(int32_t column) {
+	if (!currentClip_)
+		return 0;
+
+	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
 	switch (column) {
 	case 0:
-		return steps_;
+		return instrumentClip->generativeSteps_;
 	case 1:
-		return pulses_;
+		return instrumentClip->generativePulses_;
 	case 2:
-		return division_;
+		return instrumentClip->generativeDivision_;
 	case 3:
-		return repeats_;
+		return instrumentClip->generativeRepeats_;
 	case 4:
-		return voicing_;
+		return instrumentClip->generativeVoicing_;
 	case 5:
-		return range_;
+		return instrumentClip->generativeRange_;
 	case 6:
-		return groove_;
+		return instrumentClip->generativeGroove_;
 	case 7:
-		return scale_;
+		return instrumentClip->generativeScale_;
 	case 8:
-		return chord_;
+		return instrumentClip->generativeChord_;
 	case 9:
-		return swing_;
+		return instrumentClip->generativeSwing_;
 	case 10:
-		return velocity_;
+		return instrumentClip->generativeVelocity_;
 	case 11:
-		return octave_;
+		return instrumentClip->generativeOctave_;
 	case 12:
-		return transpose_;
+		return instrumentClip->generativeTranspose_;
 	case 13:
-		return probability_;
+		return instrumentClip->generativeProbability_;
 	case 14:
-		return length_;
+		return instrumentClip->generativeLength_;
 	case 15:
-		return accent_;
+		return instrumentClip->generativeAccent_;
 	default:
 		return 0;
 	}

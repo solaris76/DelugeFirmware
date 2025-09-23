@@ -136,6 +136,24 @@ public:
 
 	OutputType outputTypeWhileLoading; // For use only while loading song
 
+	// Generative Mode parameters (persisted with clip)
+	int32_t generativeSteps_ = 4;       // Column 0: Sequence length (1-16 steps)
+	int32_t generativePulses_ = 4;      // Column 1: Number of pulses ÷ steps
+	int32_t generativeDivision_ = 4;    // Column 2: Musical divisions (half speed, etc.)
+	int32_t generativeRepeats_ = 4;     // Column 3: Probability of note repetition
+	int32_t generativeVoicing_ = 4;     // Column 4: Preset musical voicings/intervals
+	int32_t generativeRange_ = 4;       // Column 5: Note range (1 semitone to 5 octaves)
+	int32_t generativeGroove_ = 4;      // Column 6: Velocity patterns
+	int32_t generativeScale_ = 4;       // Column 7: Scale type
+	int32_t generativeChord_ = 4;       // Column 8: Chord progression
+	int32_t generativeSwing_ = 4;       // Column 9: Swing amount
+	int32_t generativeVelocity_ = 4;    // Column 10: Base velocity
+	int32_t generativeOctave_ = 4;      // Column 11: Octave offset
+	int32_t generativeTranspose_ = 4;   // Column 12: Transpose amount
+	int32_t generativeProbability_ = 4; // Column 13: Note probability
+	int32_t generativeLength_ = 4;      // Column 14: Note length
+	int32_t generativeAccent_ = 4;      // Column 15: Accent probability
+
 	void lengthChanged(ModelStackWithTimelineCounter* modelStack, int32_t oldLength, Action* action = nullptr) override;
 	NoteRow* createNewNoteRowForKit(ModelStackWithTimelineCounter* modelStack, bool atStart,
 	                                int32_t* getIndex = nullptr);
