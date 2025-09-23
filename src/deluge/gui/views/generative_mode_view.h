@@ -4,18 +4,24 @@
 #include "gui/colour/rgb.h"
 #include "gui/ui/ui.h"
 #include "hid/button.h"
+#include "model/clip/clip_minder.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
 
 namespace deluge::gui::views {
 
-class GenerativeModeView : public UI {
+class GenerativeModeView : public UI, public ClipMinder {
 public:
 	GenerativeModeView() = default;
 	virtual ~GenerativeModeView() = default;
 
+	// Static flag to track if we came from generative view
+	static bool cameFromGenerativeView;
+
 	void openUI(InstrumentClip* clip);
 	void closeUI();
+	bool opened() override;
+	void focusRegained() override;
 
 	// UI overrides
 	void render();
@@ -82,6 +88,7 @@ private:
 	int32_t getRandomNoteInScale(int32_t octave);
 	int32_t getRandomVelocity();
 	bool shouldPlaceNote();
+	void showParameterValuePopup();
 };
 
 extern GenerativeModeView generativeModeView;

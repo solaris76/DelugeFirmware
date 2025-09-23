@@ -530,7 +530,8 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 
 			if (currentUIMode == UI_MODE_NONE) {
 				// Check if we're in a synth clip - if so, toggle to generative mode
-				if (getCurrentOutputType() == OutputType::SYNTH) {
+				// But only if shift is NOT held (shift+synth should create new synth preset)
+				if (getCurrentOutputType() == OutputType::SYNTH && !Buttons::isShiftButtonPressed()) {
 					InstrumentClip* clip = getCurrentInstrumentClip();
 					if (clip) {
 						deluge::gui::views::generativeModeView.openUI(clip);
@@ -556,7 +557,8 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 
 			if (currentUIMode == UI_MODE_NONE) {
 				// Check if we're in a MIDI clip - if so, toggle to generative mode
-				if (getCurrentOutputType() == OutputType::MIDI_OUT) {
+				// But only if shift is NOT held (shift+midi should create new midi preset)
+				if (getCurrentOutputType() == OutputType::MIDI_OUT && !Buttons::isShiftButtonPressed()) {
 					InstrumentClip* clip = getCurrentInstrumentClip();
 					if (clip) {
 						deluge::gui::views::generativeModeView.openUI(clip);

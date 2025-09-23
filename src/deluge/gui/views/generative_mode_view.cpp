@@ -1,10 +1,13 @@
 #include "gui/views/generative_mode_view.h"
 #include "definitions_cxx.hpp"
 #include "gui/colour/rgb.h"
+#include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "hid/buttons.h"
 #include "hid/display/display.h"
 #include "hid/display/oled.h"
 #include "hid/led/pad_leds.h"
+#include "model/clip/clip_minder.h"
 #include "model/clip/instrument_clip.h"
 #include "model/note/note_row.h"
 #include "model/song/song.h"
@@ -14,6 +17,9 @@
 namespace deluge::gui::views {
 
 GenerativeModeView generativeModeView{};
+
+// Static variable definition
+bool GenerativeModeView::cameFromGenerativeView = false;
 
 void GenerativeModeView::openUI(InstrumentClip* clip) {
 	currentClip_ = clip;
@@ -46,14 +52,39 @@ void GenerativeModeView::openUI(InstrumentClip* clip) {
 
 	// Tell the UI system that this view needs rendering
 	uiNeedsRendering(this);
-
-	// Force immediate rendering to show pads
-	render();
 }
 
 void GenerativeModeView::closeUI() {
 	currentClip_ = nullptr;
 	currentInstrument_ = nullptr;
+}
+
+bool GenerativeModeView::opened() {
+	focusRegained();
+	return true;
+}
+
+void GenerativeModeView::focusRegained() {
+	// Force immediate pad LED rendering when view gains focus
+	// This simulates what happens when a pad is pressed - calculate parameter values
+	// and render the pads with the current parameter values
+
+	// Initialize parameter values if they haven't been set yet
+	if (currentClip_) {
+		for (int32_t x = 0; x < 16; x++) {
+			// Initialize all parameters to 0 (center) if not set
+			setParameterValue(x, 0);
+		}
+	}
+
+	renderMainPads(0xFFFFFFFF, PadLEDs::image, PadLEDs::occupancyMask, true);
+
+	// Force OLED display update
+	if (display->haveOLED()) {
+		deluge::hid::display::oled_canvas::Canvas& canvas = deluge::hid::display::OLED::main;
+		renderOLED(canvas);
+		deluge::hid::display::OLED::markChanged();
+	}
 }
 
 void GenerativeModeView::render() {
@@ -66,8 +97,7 @@ void GenerativeModeView::render() {
 	}
 
 	// Render pad LEDs
-	renderMainPads(0xFFFFFFFF, &PadLEDs::imageStore[kDisplayHeight], &PadLEDs::occupancyMaskStore[kDisplayHeight],
-	               true);
+	renderMainPads(0xFFFFFFFF, PadLEDs::image, PadLEDs::occupancyMask, true);
 }
 
 void GenerativeModeView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) {
@@ -196,14 +226,15 @@ bool GenerativeModeView::renderMainPads(uint32_t whichRows, RGB image[][kDisplay
 
 		// Light up pads based on parameter value relative to current red line position
 		// The fader should move with the red line as you scroll
-		if (paramValue < 0) {
-			// Negative values: light up pads below red line
-			int32_t endY = std::min(static_cast<int32_t>(7), redLineY - paramValue);
-			for (int32_t y = redLineY + 1; y <= endY; y++) {
+		// paramValue = redLineY - y, so positive values are ABOVE red line, negative values are BELOW
+		if (paramValue > 0) {
+			// Positive values: light up pads above red line (y < redLineY)
+			int32_t endY = std::max(static_cast<int32_t>(0), redLineY - paramValue);
+			for (int32_t y = redLineY - 1; y >= endY; y--) {
 				if (y >= 0 && y < kDisplayHeight && x < kDisplayWidth) {
-					// Use symmetric gradient for negative values (reverse order from center)
+					// Use symmetric gradient for positive values (reverse order from center)
 					// Map distance from red line to color index (6-0, reversed)
-					int32_t distance = y - redLineY - 1;
+					int32_t distance = redLineY - y - 1;
 					int32_t colorIndex = 6 - std::min(static_cast<int32_t>(6), distance);
 					if (colorIndex >= 0 && colorIndex < 8) {
 						image[y][x] = colors[colorIndex];
@@ -212,15 +243,15 @@ bool GenerativeModeView::renderMainPads(uint32_t whichRows, RGB image[][kDisplay
 				}
 			}
 		}
-		else if (paramValue > 0) {
-			// Positive values: light up pads above red line
-			int32_t endY = std::max(static_cast<int32_t>(0), redLineY - paramValue);
-			for (int32_t y = redLineY - 1; y >= endY; y--) {
+		else if (paramValue < 0) {
+			// Negative values: light up pads below red line (y > redLineY)
+			int32_t endY = std::min(static_cast<int32_t>(7), redLineY + (-paramValue));
+			for (int32_t y = redLineY + 1; y <= endY; y++) {
 				if (y >= 0 && y < kDisplayHeight && x < kDisplayWidth) {
-					// Use symmetric gradient for positive values (reverse order from center)
-					// Map distance from red line to color index (6-0, reversed)
-					int32_t distance = redLineY - y - 1;
-					int32_t colorIndex = 6 - std::min(static_cast<int32_t>(6), distance);
+					// Use symmetric gradient for negative values (same order as positive)
+					// Map distance from red line to color index (0-6, same as positive)
+					int32_t distance = y - redLineY - 1;
+					int32_t colorIndex = std::min(static_cast<int32_t>(6), distance);
 					if (colorIndex >= 0 && colorIndex < 8) {
 						image[y][x] = colors[colorIndex];
 						occupancyMask[y][x] = 64; // Full occupancy
@@ -242,8 +273,31 @@ ActionResult GenerativeModeView::buttonAction(deluge::hid::Button b, bool on, bo
 		return ActionResult::DEALT_WITH;
 	}
 
+	// Song view button - same functionality as instrument clip view
+	else if (b == SESSION_VIEW) {
+		if (on) {
+			if (inCardRoutine) {
+				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+			}
+			// Now we can call this directly since we inherit from ClipMinder
+			transitionToArrangerOrSession();
+		}
+	}
+
+	// Clip view button - same functionality as instrument clip view
+	else if (b == CLIP_VIEW) {
+		if (on) {
+			if (inCardRoutine) {
+				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+			}
+			// Set flag to indicate we came from generative view
+			cameFromGenerativeView = true;
+			changeRootUI(&automationView);
+		}
+	}
+
 	// Allow exiting via Synth/MIDI buttons
-	if ((b == SYNTH || b == MIDI) && on) {
+	else if ((b == SYNTH || b == MIDI) && on) {
 		closeUI();
 		// Return to instrument clip view
 		changeRootUI(&instrumentClipView);
@@ -264,27 +318,13 @@ ActionResult GenerativeModeView::padAction(int32_t x, int32_t y, int32_t velocit
 			// Calculate where the red line currently is
 			int32_t redLineY = 3 - viewOffset_;
 
-			// Convert display Y coordinate to parameter value (-7 to +7)
-			// Map the available pad range to the full parameter range
-			int32_t paramValue;
-			if (y < redLineY) {
-				// Above red line: positive values
-				// Map available rows above red line to +1 to +7
-				int32_t availableRowsAbove = redLineY;
-				int32_t distanceFromRedLine = redLineY - y;
-				paramValue = (distanceFromRedLine * 7) / std::max(static_cast<int32_t>(1), availableRowsAbove);
-			}
-			else if (y > redLineY) {
-				// Below red line: negative values
-				// Map available rows below red line to -1 to -7
-				int32_t availableRowsBelow = 7 - redLineY;
-				int32_t distanceFromRedLine = y - redLineY;
-				paramValue = -(distanceFromRedLine * 7) / std::max(static_cast<int32_t>(1), availableRowsBelow);
-			}
-			else {
-				// Red line pad: value 0
-				paramValue = 0;
-			}
+			// FINAL CORRECT calculation: value = redLineY - y
+			// If red line is at y=0 and we tap y=7, we get 0-7 = -7
+			// If red line is at y=7 and we tap y=1, we get 7-1 = +6
+			int32_t paramValue = redLineY - y;
+
+			// Clamp to valid range (-7 to +7)
+			paramValue = std::max(static_cast<int32_t>(-7), std::min(static_cast<int32_t>(7), paramValue));
 
 			setParameterValue(x, paramValue);
 			uiNeedsRendering(this);
@@ -295,6 +335,9 @@ ActionResult GenerativeModeView::padAction(int32_t x, int32_t y, int32_t velocit
 				renderOLED(canvas);
 				deluge::hid::display::OLED::markChanged();
 			}
+
+			// Show parameter value popup
+			showParameterValuePopup();
 		}
 	}
 
@@ -331,11 +374,16 @@ ActionResult GenerativeModeView::horizontalEncoderAction(int32_t offset) {
 		deluge::hid::display::OLED::markChanged();
 	}
 
+	// Show parameter value popup
+	showParameterValuePopup();
+
 	return ActionResult::DEALT_WITH;
 }
 
 void GenerativeModeView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
-	// Could use mod encoders for real-time parameter adjustment
+	// Gold knobs control actual synth parameters or MIDI CC values, just like in normal clip view
+	// Delegate to the base UI modEncoderAction which handles synth/MIDI parameters properly
+	UI::modEncoderAction(whichModEncoder, offset);
 }
 
 void GenerativeModeView::selectEncoderAction(int32_t offset) {
@@ -489,6 +537,47 @@ int32_t GenerativeModeView::getRandomVelocity() {
 
 bool GenerativeModeView::shouldPlaceNote() {
 	return true;
+}
+
+void GenerativeModeView::showParameterValuePopup() {
+	// Get parameter names
+	const char* parameterNames[] = {
+	    "Steps",       // Column 0
+	    "Pulses",      // Column 1
+	    "Division",    // Column 2
+	    "Repeats",     // Column 3
+	    "Voicing",     // Column 4
+	    "Range",       // Column 5
+	    "Groove",      // Column 6
+	    "Scale",       // Column 7
+	    "Chord",       // Column 8
+	    "Swing",       // Column 9
+	    "Velocity",    // Column 10
+	    "Octave",      // Column 11
+	    "Transpose",   // Column 12
+	    "Probability", // Column 13
+	    "Length",      // Column 14
+	    "Accent"       // Column 15
+	};
+
+	// Get current parameter value
+	int32_t currentValue = getParameterValue(selectedParameter_);
+	const char* paramName = parameterNames[selectedParameter_];
+
+	// Invert the value for OLED display (since pads start at 0,0 top-left)
+	int32_t displayValue = -currentValue;
+
+	// Create popup text with parameter name and value
+	char popupText[20];
+	if (displayValue >= 0) {
+		snprintf(popupText, sizeof(popupText), "%s +%d", paramName, displayValue);
+	}
+	else {
+		snprintf(popupText, sizeof(popupText), "%s %d", paramName, displayValue);
+	}
+
+	// Show popup for 3 flashes (same as gold knob popups)
+	display->displayPopup(popupText, 3, false, 255, 1, PopupType::NOTIFICATION);
 }
 
 } // namespace deluge::gui::views

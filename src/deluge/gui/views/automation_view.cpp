@@ -38,7 +38,7 @@
 #include "gui/views/audio_clip_view.h"
 #include "gui/views/automation/editor_layout/mod_controllable.h"
 #include "gui/views/automation/editor_layout/note.h"
-#include "gui/views/instrument_clip_view.h"
+#include "gui/views/generative_mode_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/timeline_view.h"
 #include "gui/views/view.h"
@@ -1339,7 +1339,12 @@ void AutomationView::handleClipButtonAction(bool on, bool isAudioClip) {
 		if (padSelectionOn) {
 			initPadSelection();
 		}
-		if (isAudioClip) {
+		// Check if we came from generative view
+		if (deluge::gui::views::GenerativeModeView::cameFromGenerativeView) {
+			deluge::gui::views::GenerativeModeView::cameFromGenerativeView = false; // Reset flag
+			changeRootUI(&deluge::gui::views::generativeModeView);
+		}
+		else if (isAudioClip) {
 			changeRootUI(&audioClipView);
 		}
 		else {
