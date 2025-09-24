@@ -701,6 +701,10 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 	Debug::println("Call number:");
 	Debug::println(callCount);
 
+	// Add more granular debugging at the very beginning
+	Debug::println("=== ENTERING InstrumentClip::processCurrentPos ===");
+	Debug::println("Function entry point reached successfully");
+
 	Debug::println("About to check modelStack validity...");
 
 	Debug::println("Checking modelStack validity...");
@@ -795,9 +799,15 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 		// Process Pulse Sequencer timing if active and paramManager is properly initialized
 		// Re-enabled with comprehensive safety checks
 		if (isPulseSeqActive()) {
-			Debug::println("Pulse sequencer is active, but processing is DISABLED to prevent E410 crashes");
-			// TEMPORARILY DISABLED: Pulse sequencer processing causing E410 crashes
-			// TODO: Fix pulse sequencer processing logic
+			Debug::println("Pulse sequencer processing enabled - calling processPulseSeqTick");
+			Debug::println("About to call processPulseSeqTick with lastProcessedPos and currentlyPlayingReversed");
+			Debug::println("lastProcessedPos:");
+			Debug::println(lastProcessedPos);
+			Debug::println("currentlyPlayingReversed:");
+			Debug::println(currentlyPlayingReversed);
+			Debug::println("Calling processPulseSeqTick now...");
+			processPulseSeqTick(lastProcessedPos, currentlyPlayingReversed);
+			Debug::println("processPulseSeqTick returned successfully");
 		}
 
 		Debug::println("Pulse sequencer processing complete, starting main note processing...");
@@ -4809,6 +4819,7 @@ void InstrumentClip::incrementPos(ModelStackWithTimelineCounter* modelStack, int
 int32_t InstrumentClip::processPulseSeqTick(uint32_t clipCurrentPos, bool currentlyPlayingReversed) {
 	Debug::println("=== ENTERING processPulseSeqTick ===");
 	Debug::println("processPulseSeqTick called");
+	Debug::println("Function entry point reached successfully");
 
 	// Additional safety checks
 	if (!paramManager.summaries[0].paramCollection) {
@@ -4948,7 +4959,9 @@ void InstrumentClip::startPulseSeq() {
 	pulseSeqIsActive_ = true;
 	currentPulseSeqStage_ = 0; // Start at stage 1 (0-based indexing)
 
+	Debug::println("About to call getPulseCountValue(0)...");
 	pulsesRemainingInStage_ = getPulseCountValue(0);
+	Debug::println("getPulseCountValue(0) returned successfully");
 
 	Debug::println("Pulse Sequencer started successfully from stage 1");
 }
