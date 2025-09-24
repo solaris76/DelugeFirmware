@@ -10,13 +10,13 @@
 
 namespace deluge::gui::views {
 
-class GenerativeModeView : public UI, public ClipMinder {
+class PulseSeqView : public UI, public ClipMinder {
 public:
-	GenerativeModeView() = default;
-	virtual ~GenerativeModeView() = default;
+	PulseSeqView() = default;
+	virtual ~PulseSeqView() = default;
 
-	// Static flag to track if we came from generative view
-	static bool cameFromGenerativeView;
+	// Static flag to track if we came from pulse seq view
+	static bool cameFromPulseSeqView;
 
 	void openUI(InstrumentClip* clip);
 	void closeUI();
@@ -44,16 +44,20 @@ public:
 	// Required pure virtual function
 	UIType getUIType() override { return UIType::NONE; }
 
-	// Generative parameters
+	// Pulse sequencer parameters
 	void setParameterValue(int32_t column, int32_t value);
 	int32_t getParameterValue(int32_t column);
+	void setPitchValue(int32_t column, int32_t value);
+	int32_t getPitchValue(int32_t column);
+	void setPulseCountValue(int32_t column, int32_t value);
+	int32_t getPulseCountValue(int32_t column);
 	void generatePattern();
 
 private:
 	InstrumentClip* currentClip_ = nullptr;
 	Instrument* currentInstrument_ = nullptr;
 
-	// Generative parameters (0-8 range for each)
+	// Pulse sequencer parameters (0-8 range for each)
 	int32_t steps_ = 4;    // Column 0: Sequence length (1-16 steps)
 	int32_t pulses_ = 4;   // Column 1: Number of pulses ÷ steps
 	int32_t division_ = 4; // Column 2: Musical divisions (half speed, etc.)
@@ -88,9 +92,9 @@ private:
 	int32_t getRandomNoteInScale(int32_t octave);
 	int32_t getRandomVelocity();
 	bool shouldPlaceNote();
-	void showParameterValuePopup();
+	void showParameterValuePopup(int32_t parameterType, int32_t value);
 };
 
-extern GenerativeModeView generativeModeView;
+extern PulseSeqView pulseSeqView;
 
 } // namespace deluge::gui::views

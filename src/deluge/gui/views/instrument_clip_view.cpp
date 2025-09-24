@@ -39,7 +39,7 @@
 #include "gui/ui_timer_manager.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
-#include "gui/views/generative_mode_view.h"
+#include "gui/views/pulse_seq_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/timeline_view.h"
 #include "gui/views/view.h"
@@ -534,8 +534,8 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 				if (getCurrentOutputType() == OutputType::SYNTH && !Buttons::isShiftButtonPressed()) {
 					InstrumentClip* clip = getCurrentInstrumentClip();
 					if (clip) {
-						deluge::gui::views::generativeModeView.openUI(clip);
-						changeRootUI(&deluge::gui::views::generativeModeView);
+						deluge::gui::views::pulseSeqView.openUI(clip);
+						changeRootUI(&deluge::gui::views::pulseSeqView);
 						return ActionResult::DEALT_WITH;
 					}
 				}
@@ -561,8 +561,8 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 				if (getCurrentOutputType() == OutputType::MIDI_OUT && !Buttons::isShiftButtonPressed()) {
 					InstrumentClip* clip = getCurrentInstrumentClip();
 					if (clip) {
-						deluge::gui::views::generativeModeView.openUI(clip);
-						changeRootUI(&deluge::gui::views::generativeModeView);
+						deluge::gui::views::pulseSeqView.openUI(clip);
+						changeRootUI(&deluge::gui::views::pulseSeqView);
 						return ActionResult::DEALT_WITH;
 					}
 				}
