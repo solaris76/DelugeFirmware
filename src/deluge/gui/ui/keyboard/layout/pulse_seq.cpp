@@ -107,8 +107,8 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 				}
 
 				// Show note name popup
-				std::string noteName = getNoteName(pressed.x);
-				display->displayNotification("Pitch", noteName.c_str());
+				String noteName = getNoteName(pressed.x);
+				display->displayNotification("Pitch", noteName.get());
 			}
 		}
 	}
@@ -140,7 +140,23 @@ void KeyboardLayoutPulseSeq::handleHorizontalEncoder(int32_t offset, bool shiftE
 		return;
 	}
 
-	// Horizontal encoder functionality removed - use pad presses to start/stop instead
+	// Horizontal encoder controls gate duration when shift is held
+	if (shiftEnabled) {
+		InstrumentClip* currentClip = getCurrentInstrumentClip();
+		if (currentClip && currentClip->paramManager.summaries[0].paramCollection) {
+			int32_t currentDuration = currentClip->getGateDuration();
+			int32_t newDuration = currentDuration + offset;
+
+			// Clamp gate duration between 1 and 16 (1/16th note to full 16th note)
+			if (newDuration < 1)
+				newDuration = 1;
+			if (newDuration > 16)
+				newDuration = 16;
+
+			currentClip->setGateDuration(newDuration);
+		}
+		return;
+	}
 
 	// Horizontal encoder moves selection between stages (columns)
 	// This could be used for selecting which stage to edit
@@ -331,12 +347,14 @@ int32_t KeyboardLayoutPulseSeq::getActualNoteValue(int32_t column) {
 	return 60; // Default to middle C
 }
 
-std::string KeyboardLayoutPulseSeq::getNoteName(int32_t column) {
+String KeyboardLayoutPulseSeq::getNoteName(int32_t column) {
 	InstrumentClip* currentClip = getCurrentInstrumentClip();
 	if (currentClip && currentClip->paramManager.summaries[0].paramCollection) {
 		return currentClip->getNoteName(column);
 	}
-	return "C4"; // Default note name
+	String result;
+	result.set("C4");
+	return result; // Default note name
 }
 
 }; // namespace deluge::gui::ui::keyboard::layout

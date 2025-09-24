@@ -199,6 +199,16 @@ public:
 	int32_t currentPulseSeqStage_ = 0;   // Current stage (0-7)
 	int32_t pulsesRemainingInStage_ = 1; // Pulses left in current stage
 	bool pulseSeqIsActive_ = false;      // Whether Pulse Sequencer is running
+
+	// Gate Duration Control (in 16th note ticks)
+	int32_t gateDuration_ = 3; // Default gate duration: 3/4 of a 16th note (short note)
+
+	// Note tracking for HOLD gate
+	int32_t currentHoldNote_ = -1; // Currently held note (-1 = none)
+
+	// Note tracking for SINGLE and MULTIPLE gates
+	int32_t currentGateNote_ = -1;       // Currently gated note (-1 = none)
+	int32_t gateNoteTicksRemaining_ = 0; // Ticks remaining for current gate note
 	// Pulse Sequencer methods
 	int32_t processPulseSeqTick(uint32_t clipCurrentPos, bool currentlyPlayingReversed);
 	void startPulseSeq();
@@ -214,12 +224,15 @@ public:
 	int32_t getOctaveValue(int32_t column) const;
 	int32_t getPulseCountValue(int32_t column) const;
 	int32_t getActualNoteValue(int32_t column) const;
-	std::string getNoteName(int32_t column) const;
+	String getNoteName(int32_t column) const;
 	void setGateTypeValue(int32_t column, int32_t value);
 	void setScaleNoteValue(int32_t column, int32_t value);
 	void setOctaveValue(int32_t column, int32_t value);
 	void setPulseCountValue(int32_t column, int32_t value);
 	void sendPulseSeqNote(int32_t note, int32_t velocity);
+	void sendPulseSeqNoteOff(int32_t note);
+	int32_t getGateDuration() const { return gateDuration_; }
+	void setGateDuration(int32_t duration) { gateDuration_ = duration; }
 
 	void lengthChanged(ModelStackWithTimelineCounter* modelStack, int32_t oldLength, Action* action = nullptr) override;
 	NoteRow* createNewNoteRowForKit(ModelStackWithTimelineCounter* modelStack, bool atStart,

@@ -58,7 +58,7 @@ private:
 
 	// Note generation helpers
 	int32_t getActualNoteValue(int32_t column);
-	std::string getNoteName(int32_t column);
+	String getNoteName(int32_t column);
 
 	// Gate line calculation
 	int32_t getGateLineY();
