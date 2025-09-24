@@ -7,6 +7,7 @@
 #include "model/clip/clip_minder.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
+#include "model/scale/note_set.h"
 
 namespace deluge::gui::views {
 
@@ -47,11 +48,18 @@ public:
 	// Pulse sequencer parameters
 	void setParameterValue(int32_t column, int32_t value);
 	int32_t getParameterValue(int32_t column);
-	void setPitchValue(int32_t column, int32_t value);
-	int32_t getPitchValue(int32_t column);
+	void setScaleNoteValue(int32_t column, int32_t value);
+	int32_t getScaleNoteValue(int32_t column);
+	void setOctaveValue(int32_t column, int32_t value);
+	int32_t getOctaveValue(int32_t column);
 	void setPulseCountValue(int32_t column, int32_t value);
 	int32_t getPulseCountValue(int32_t column);
 	void generatePattern();
+
+	// Scale note helper functions
+	NoteSet getCurrentScaleNotes();
+	int32_t getActualNoteValue(int32_t column);
+	void getNoteName(char* buffer, int32_t bufferSize, int32_t column);
 
 private:
 	InstrumentClip* currentClip_ = nullptr;

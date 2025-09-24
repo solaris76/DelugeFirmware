@@ -165,25 +165,35 @@ public:
 	int32_t gateType6_ = 0; // Stage 6 gate type
 	int32_t gateType7_ = 0; // Stage 7 gate type
 
-	// Pitch (0-8: +1 to +8 semitones)
-	int32_t pitch0_ = 0; // Stage 0 pitch
-	int32_t pitch1_ = 0; // Stage 1 pitch
-	int32_t pitch2_ = 0; // Stage 2 pitch
-	int32_t pitch3_ = 0; // Stage 3 pitch
-	int32_t pitch4_ = 0; // Stage 4 pitch
-	int32_t pitch5_ = 0; // Stage 5 pitch
-	int32_t pitch6_ = 0; // Stage 6 pitch
-	int32_t pitch7_ = 0; // Stage 7 pitch
+	// Scale Note (0-11: scale degree within octave)
+	int32_t scaleNote0_ = 0; // Stage 0 scale note degree
+	int32_t scaleNote1_ = 0; // Stage 1 scale note degree
+	int32_t scaleNote2_ = 0; // Stage 2 scale note degree
+	int32_t scaleNote3_ = 0; // Stage 3 scale note degree
+	int32_t scaleNote4_ = 0; // Stage 4 scale note degree
+	int32_t scaleNote5_ = 0; // Stage 5 scale note degree
+	int32_t scaleNote6_ = 0; // Stage 6 scale note degree
+	int32_t scaleNote7_ = 0; // Stage 7 scale note degree
 
-	// Pulse Count (0-8: 1 to 8 pulses)
-	int32_t pulse0_ = 0; // Stage 0 pulse count
-	int32_t pulse1_ = 0; // Stage 1 pulse count
-	int32_t pulse2_ = 0; // Stage 2 pulse count
-	int32_t pulse3_ = 0; // Stage 3 pulse count
-	int32_t pulse4_ = 0; // Stage 4 pulse count
-	int32_t pulse5_ = 0; // Stage 5 pulse count
-	int32_t pulse6_ = 0; // Stage 6 pulse count
-	int32_t pulse7_ = 0; // Stage 7 pulse count
+	// Octave (-3 to +3: octave offset from root)
+	int32_t octave0_ = 0; // Stage 0 octave offset
+	int32_t octave1_ = 0; // Stage 1 octave offset
+	int32_t octave2_ = 0; // Stage 2 octave offset
+	int32_t octave3_ = 0; // Stage 3 octave offset
+	int32_t octave4_ = 0; // Stage 4 octave offset
+	int32_t octave5_ = 0; // Stage 5 octave offset
+	int32_t octave6_ = 0; // Stage 6 octave offset
+	int32_t octave7_ = 0; // Stage 7 octave offset
+
+	// Pulse Count (1-8: 1 to 8 pulses)
+	int32_t pulse0_ = 1; // Stage 0 pulse count
+	int32_t pulse1_ = 1; // Stage 1 pulse count
+	int32_t pulse2_ = 1; // Stage 2 pulse count
+	int32_t pulse3_ = 1; // Stage 3 pulse count
+	int32_t pulse4_ = 1; // Stage 4 pulse count
+	int32_t pulse5_ = 1; // Stage 5 pulse count
+	int32_t pulse6_ = 1; // Stage 6 pulse count
+	int32_t pulse7_ = 1; // Stage 7 pulse count
 
 	void lengthChanged(ModelStackWithTimelineCounter* modelStack, int32_t oldLength, Action* action = nullptr) override;
 	NoteRow* createNewNoteRowForKit(ModelStackWithTimelineCounter* modelStack, bool atStart,

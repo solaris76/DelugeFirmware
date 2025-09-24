@@ -10,6 +10,8 @@
 #include "model/clip/clip_minder.h"
 #include "model/clip/instrument_clip.h"
 #include "model/note/note_row.h"
+#include "model/scale/note_set.h"
+#include "model/scale/preset_scales.h"
 #include "model/song/song.h"
 #include <algorithm>
 #include <random>
@@ -25,7 +27,7 @@ void PulseSeqView::openUI(InstrumentClip* clip) {
 	currentClip_ = clip;
 	currentInstrument_ = (Instrument*)clip->output;
 	selectedParameter_ = 0; // Start with column 0 selected (red line at column 0)
-	viewOffset_ = 0;        // Start with red line in center
+	viewOffset_ = 0;        // Start with gate line at GL=3 (default position)
 	isGenerating_ = false;
 
 	// Initialize with reasonable defaults (all at center/home = 0)
@@ -189,16 +191,12 @@ bool PulseSeqView::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth 
 	    RGB{128, 0, 255} // Hold: Purple
 	};
 
-	// Pitch colors (above red line) - avoid gate type colors
-	RGB pitchColors[8] = {
-	    RGB{255, 100, 0}, // +1: Orange
-	    RGB{255, 150, 0}, // +2: Light orange
-	    RGB{255, 200, 0}, // +3: Yellow-orange
-	    RGB{255, 255, 0}, // +4: Yellow
-	    RGB{200, 255, 0}, // +5: Yellow-green
-	    RGB{150, 255, 0}, // +6: Light green
-	    RGB{100, 255, 0}, // +7: Green
-	    RGB{50, 255, 0}   // +8: Dark green
+	// Scale note navigation colors (above red line) - avoid gate type colors
+	RGB scaleNoteColors[4] = {
+	    RGB{255, 100, 0}, // Pitch down: Orange
+	    RGB{255, 200, 0}, // Pitch up: Yellow-orange
+	    RGB{255, 255, 0}, // Octave down: Yellow
+	    RGB{200, 255, 0}  // Octave up: Yellow-green
 	};
 
 	// Pulse count colors (below red line) - avoid gate type colors
@@ -216,7 +214,8 @@ bool PulseSeqView::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth 
 	// Render each column as a sequencer stage
 	for (int32_t x = 0; x < 8; x++) {
 		int32_t gateType = getParameterValue(x);    // 0-3 for gate types (Off, Single, Multiple, Hold)
-		int32_t pitch = getPitchValue(x);           // 0-8 for pitch (+1 to +8 semitones)
+		int32_t scaleNote = getScaleNoteValue(x);   // 0-11 for scale note degree
+		int32_t octave = getOctaveValue(x);         // -3 to +3 for octave offset
 		int32_t pulseCount = getPulseCountValue(x); // 0-8 for pulse count (1 to 8 pulses)
 		bool isSelected = (x == selectedParameter_);
 
@@ -228,46 +227,44 @@ bool PulseSeqView::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth 
 			}
 		}
 
-		// Calculate where the red line should appear based on viewOffset
-		int32_t redLineY = 3 - viewOffset_; // 3 is center, viewOffset shifts it
+		// Calculate where the gate line should appear based on viewOffset
+		int32_t gateLineY = 3 + viewOffset_; // 3 is center, viewOffset shifts it
 
-		// Draw the gate type color on the red line
-		if (redLineY >= 0 && redLineY < 8 && x < kDisplayWidth) {
+		// Draw the gate type color on the gate line
+		if (gateLineY >= 0 && gateLineY < 8 && x < kDisplayWidth) {
 			RGB gateColor = gateColors[gateType];
 
 			if (isSelected) {
 				// Selected stage: flash the gate color subtly
 				// Use a brighter version for flashing effect
-				image[redLineY][x] =
+				image[gateLineY][x] =
 				    RGB{static_cast<uint8_t>(gateColor.r * 1.5), static_cast<uint8_t>(gateColor.g * 1.5),
 				        static_cast<uint8_t>(gateColor.b * 1.5)};
 			}
 			else {
 				// Non-selected: normal gate color
-				image[redLineY][x] = gateColor;
+				image[gateLineY][x] = gateColor;
 			}
-			occupancyMask[redLineY][x] = 64; // Full occupancy
+			occupancyMask[gateLineY][x] = 64; // Full occupancy
 		}
 
-		// Draw pitch pads above red line (if pitch > 0)
-		if (pitch > 0) {
-			for (int32_t i = 0; i < pitch && i < 8; i++) {
-				int32_t y = redLineY - 1 - i; // Go up from red line
-				if (y >= 0 && y < kDisplayHeight && x < kDisplayWidth) {
-					image[y][x] = pitchColors[i];
-					occupancyMask[y][x] = 64;
-				}
-			}
-		}
-
-		// Draw pulse count pads below red line (if pulseCount > 0)
+		// Draw pulse count pads above gate line (if pulseCount > 0)
 		if (pulseCount > 0) {
 			for (int32_t i = 0; i < pulseCount && i < 8; i++) {
-				int32_t y = redLineY + 1 + i; // Go down from red line
+				int32_t y = gateLineY - 1 - i; // Go up from gate line
 				if (y >= 0 && y < kDisplayHeight && x < kDisplayWidth) {
 					image[y][x] = pulseColors[i];
 					occupancyMask[y][x] = 64;
 				}
+			}
+		}
+
+		// Draw scale note navigation pads below gate line (4 pads)
+		for (int32_t i = 0; i < 4; i++) {
+			int32_t y = gateLineY + 1 + i; // Go down from gate line
+			if (y >= 0 && y < kDisplayHeight && x < kDisplayWidth) {
+				image[y][x] = scaleNoteColors[i];
+				occupancyMask[y][x] = 64;
 			}
 		}
 	}
@@ -320,34 +317,99 @@ ActionResult PulseSeqView::buttonAction(deluge::hid::Button b, bool on, bool inC
 ActionResult PulseSeqView::padAction(int32_t x, int32_t y, int32_t velocity) {
 	if (velocity > 0) {
 		// Each column represents a sequencer stage
-		if (x >= 0 && x < 16) {
+		if (x >= 0 && x < 8) {
 			// Update selected stage to the column we're pressing
 			selectedParameter_ = x;
 
-			// Calculate where the red line currently is
-			int32_t redLineY = 3 - viewOffset_;
+			// Calculate where the gate line currently is
+			int32_t gateLineY = 3 + viewOffset_;
 
-			if (y == redLineY) {
-				// Tapping the red line cycles through gate types for this sequencer stage
+			if (y == gateLineY) {
+				// Tapping the gate line cycles through gate types for this sequencer stage
 				int32_t currentGateType = getParameterValue(x);
 				int32_t nextGateType = (currentGateType + 1) % 4; // Cycle 0->1->2->3->0
 				setParameterValue(x, nextGateType);
 				showParameterValuePopup(0, nextGateType); // 0 = Gate type
 			}
-			else if (y < redLineY) {
-				// Tapping above red line sets pitch for this sequencer stage (+1 to +8)
-				int32_t pitch = redLineY - y; // Distance from red line
-				pitch = std::max(static_cast<int32_t>(1), std::min(static_cast<int32_t>(8), pitch)); // Clamp to 1-8
-				setPitchValue(x, pitch);
-				showParameterValuePopup(1, pitch); // 1 = Pitch
+			else if (y == gateLineY - 1) {
+				// Pulse count 1: set pulse count to 1
+				setPulseCountValue(x, 1);
+				showParameterValuePopup(2, 1); // 2 = Pulse count
 			}
-			else if (y > redLineY) {
-				// Tapping below red line sets pulse count for this sequencer stage (1 to 8)
-				int32_t pulseCount = y - redLineY; // Distance from red line
-				pulseCount =
-				    std::max(static_cast<int32_t>(1), std::min(static_cast<int32_t>(8), pulseCount)); // Clamp to 1-8
-				setPulseCountValue(x, pulseCount);
-				showParameterValuePopup(2, pulseCount); // 2 = Pulse count
+			else if (y == gateLineY - 2) {
+				// Pulse count 2: set pulse count to 2
+				setPulseCountValue(x, 2);
+				showParameterValuePopup(2, 2); // 2 = Pulse count
+			}
+			else if (y == gateLineY - 3) {
+				// Pulse count 3: set pulse count to 3
+				setPulseCountValue(x, 3);
+				showParameterValuePopup(2, 3); // 2 = Pulse count
+			}
+			else if (y == gateLineY - 4) {
+				// Pulse count 4: set pulse count to 4
+				setPulseCountValue(x, 4);
+				showParameterValuePopup(2, 4); // 2 = Pulse count
+			}
+			else if (y == gateLineY - 5) {
+				// Pulse count 5: set pulse count to 5
+				setPulseCountValue(x, 5);
+				showParameterValuePopup(2, 5); // 2 = Pulse count
+			}
+			else if (y == gateLineY - 6) {
+				// Pulse count 6: set pulse count to 6
+				setPulseCountValue(x, 6);
+				showParameterValuePopup(2, 6); // 2 = Pulse count
+			}
+			else if (y == gateLineY - 7) {
+				// Pulse count 7: set pulse count to 7
+				setPulseCountValue(x, 7);
+				showParameterValuePopup(2, 7); // 2 = Pulse count
+			}
+			else if (y == gateLineY - 8) {
+				// Pulse count 8: set pulse count to 8
+				setPulseCountValue(x, 8);
+				showParameterValuePopup(2, 8); // 2 = Pulse count
+			}
+			else if (y == gateLineY + 1) {
+				// Pitch up: increase scale note degree
+				int32_t currentScaleNote = getScaleNoteValue(x);
+				int32_t newScaleNote = (currentScaleNote + 1) % 12; // Wrap around
+				setScaleNoteValue(x, newScaleNote);
+
+				char noteName[10];
+				getNoteName(noteName, sizeof(noteName), x);
+				display->displayNotification("Note", noteName);
+			}
+			else if (y == gateLineY + 2) {
+				// Pitch down: decrease scale note degree
+				int32_t currentScaleNote = getScaleNoteValue(x);
+				int32_t newScaleNote = (currentScaleNote - 1 + 12) % 12; // Wrap around
+				setScaleNoteValue(x, newScaleNote);
+
+				char noteName[10];
+				getNoteName(noteName, sizeof(noteName), x);
+				display->displayNotification("Note", noteName);
+			}
+			else if (y == gateLineY + 3) {
+				// Octave up: increase octave
+				int32_t currentOctave = getOctaveValue(x);
+				int32_t newOctave = std::min(static_cast<int32_t>(3), currentOctave + 1);
+				setOctaveValue(x, newOctave);
+
+				char noteName[10];
+				getNoteName(noteName, sizeof(noteName), x);
+				display->displayNotification("Note", noteName);
+			}
+			else if (y == gateLineY + 4) {
+				// Octave down: decrease octave
+				int32_t currentOctave = getOctaveValue(x);
+				int32_t newOctave = std::max(static_cast<int32_t>(-3), currentOctave - 1);
+				setOctaveValue(x, newOctave);
+
+				char noteName[10];
+				getNoteName(noteName, sizeof(noteName), x);
+				display->displayNotification("Note", noteName);
 			}
 
 			uiNeedsRendering(this);
@@ -365,13 +427,26 @@ ActionResult PulseSeqView::padAction(int32_t x, int32_t y, int32_t velocity) {
 }
 
 ActionResult PulseSeqView::verticalEncoderAction(int32_t offset, bool inCardRoutine) {
-	// Scroll the view up/down to show different parts of the -8 to +8 range
+	// Scroll the view up/down to show different parts of the range
 	// viewOffset_ controls which part of the range is visible
-	viewOffset_ += offset;
+	// We want GL to range from 3 to 7 (5 positions)
+	// Default GL=3, CW increases GL, CCW decreases GL
 
-	// Clamp viewOffset to keep the red line visible
-	// viewOffset: -4 to +3 (red line constrained to rows 0-7, covers full range)
-	viewOffset_ = std::max(static_cast<int32_t>(-4), std::min(static_cast<int32_t>(3), viewOffset_));
+	int32_t oldViewOffset = viewOffset_;
+	int32_t oldGateLineY = 3 + viewOffset_; // GL = 3 + VO
+
+	viewOffset_ += offset; // Clockwise moves gate line up (higher Y values)
+
+	// Clamp viewOffset to keep GL between 3 and 7 (not below 3)
+	// GL = 3 + VO, so:
+	// GL = 3 means VO = 0
+	// GL = 7 means VO = 4
+	// Therefore: VO should be clamped to 0 to 4
+	viewOffset_ = std::max(static_cast<int32_t>(0), std::min(static_cast<int32_t>(4), viewOffset_));
+
+	int32_t newGateLineY = 3 + viewOffset_;
+
+	// Debug logging removed - gate line positioning working correctly
 
 	uiNeedsRendering(this);
 	return ActionResult::DEALT_WITH;
@@ -449,40 +524,133 @@ void PulseSeqView::setParameterValue(int32_t column, int32_t value) {
 	}
 }
 
-void PulseSeqView::setPitchValue(int32_t column, int32_t value) {
+void PulseSeqView::setScaleNoteValue(int32_t column, int32_t value) {
 	if (!currentClip_)
 		return;
 
-	// Clamp pitch to 0-8 range (0 = no pitch, 1-8 = +1 to +8 semitones)
-	value = std::max(0, std::min(8, (int)value));
+	// Clamp scale note to 0-11 range (scale degree within octave)
+	value = std::max(0, std::min(11, (int)value));
 	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
 
-	// Each column is a sequencer stage - pitch only
+	// Each column is a sequencer stage - scale note only
 	switch (column) {
 	case 0:
-		instrumentClip->pitch0_ = value; // Stage 0 pitch
+		instrumentClip->scaleNote0_ = value; // Stage 0 scale note
 		break;
 	case 1:
-		instrumentClip->pitch1_ = value; // Stage 1 pitch
+		instrumentClip->scaleNote1_ = value; // Stage 1 scale note
 		break;
 	case 2:
-		instrumentClip->pitch2_ = value; // Stage 2 pitch
+		instrumentClip->scaleNote2_ = value; // Stage 2 scale note
 		break;
 	case 3:
-		instrumentClip->pitch3_ = value; // Stage 3 pitch
+		instrumentClip->scaleNote3_ = value; // Stage 3 scale note
 		break;
 	case 4:
-		instrumentClip->pitch4_ = value; // Stage 4 pitch
+		instrumentClip->scaleNote4_ = value; // Stage 4 scale note
 		break;
 	case 5:
-		instrumentClip->pitch5_ = value; // Stage 5 pitch
+		instrumentClip->scaleNote5_ = value; // Stage 5 scale note
 		break;
 	case 6:
-		instrumentClip->pitch6_ = value; // Stage 6 pitch
+		instrumentClip->scaleNote6_ = value; // Stage 6 scale note
 		break;
 	case 7:
-		instrumentClip->pitch7_ = value; // Stage 7 pitch
+		instrumentClip->scaleNote7_ = value; // Stage 7 scale note
 		break;
+	}
+}
+
+int32_t PulseSeqView::getScaleNoteValue(int32_t column) {
+	if (!currentClip_)
+		return 0;
+
+	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
+	// Each column is a sequencer stage - scale note only
+	switch (column) {
+	case 0:
+		return instrumentClip->scaleNote0_; // Stage 0 scale note
+	case 1:
+		return instrumentClip->scaleNote1_; // Stage 1 scale note
+	case 2:
+		return instrumentClip->scaleNote2_; // Stage 2 scale note
+	case 3:
+		return instrumentClip->scaleNote3_; // Stage 3 scale note
+	case 4:
+		return instrumentClip->scaleNote4_; // Stage 4 scale note
+	case 5:
+		return instrumentClip->scaleNote5_; // Stage 5 scale note
+	case 6:
+		return instrumentClip->scaleNote6_; // Stage 6 scale note
+	case 7:
+		return instrumentClip->scaleNote7_; // Stage 7 scale note
+	default:
+		return 0;
+	}
+}
+
+void PulseSeqView::setOctaveValue(int32_t column, int32_t value) {
+	if (!currentClip_)
+		return;
+
+	// Clamp octave to -3 to +3 range
+	value = std::max(-3, std::min(3, (int)value));
+	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
+
+	// Each column is a sequencer stage - octave only
+	switch (column) {
+	case 0:
+		instrumentClip->octave0_ = value; // Stage 0 octave
+		break;
+	case 1:
+		instrumentClip->octave1_ = value; // Stage 1 octave
+		break;
+	case 2:
+		instrumentClip->octave2_ = value; // Stage 2 octave
+		break;
+	case 3:
+		instrumentClip->octave3_ = value; // Stage 3 octave
+		break;
+	case 4:
+		instrumentClip->octave4_ = value; // Stage 4 octave
+		break;
+	case 5:
+		instrumentClip->octave5_ = value; // Stage 5 octave
+		break;
+	case 6:
+		instrumentClip->octave6_ = value; // Stage 6 octave
+		break;
+	case 7:
+		instrumentClip->octave7_ = value; // Stage 7 octave
+		break;
+	}
+}
+
+int32_t PulseSeqView::getOctaveValue(int32_t column) {
+	if (!currentClip_)
+		return 0;
+
+	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
+	// Each column is a sequencer stage - octave only
+	switch (column) {
+	case 0:
+		return instrumentClip->octave0_; // Stage 0 octave
+	case 1:
+		return instrumentClip->octave1_; // Stage 1 octave
+	case 2:
+		return instrumentClip->octave2_; // Stage 2 octave
+	case 3:
+		return instrumentClip->octave3_; // Stage 3 octave
+	case 4:
+		return instrumentClip->octave4_; // Stage 4 octave
+	case 5:
+		return instrumentClip->octave5_; // Stage 5 octave
+	case 6:
+		return instrumentClip->octave6_; // Stage 6 octave
+	case 7:
+		return instrumentClip->octave7_; // Stage 7 octave
+	default:
+		return 0;
 	}
 }
 
@@ -490,8 +658,8 @@ void PulseSeqView::setPulseCountValue(int32_t column, int32_t value) {
 	if (!currentClip_)
 		return;
 
-	// Clamp pulse count to 0-8 range (0 = no pulses, 1-8 = 1 to 8 pulses)
-	value = std::max(0, std::min(8, (int)value));
+	// Clamp pulse count to 1-8 range (1-8 = 1 to 8 pulses, never 0)
+	value = std::max(1, std::min(8, (int)value));
 	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
 
 	// Each column is a sequencer stage - pulse count only
@@ -551,34 +719,6 @@ int32_t PulseSeqView::getParameterValue(int32_t column) {
 	}
 }
 
-int32_t PulseSeqView::getPitchValue(int32_t column) {
-	if (!currentClip_)
-		return 0;
-
-	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
-	// Each column is a sequencer stage - pitch only
-	switch (column) {
-	case 0:
-		return instrumentClip->pitch0_; // Stage 0 pitch
-	case 1:
-		return instrumentClip->pitch1_; // Stage 1 pitch
-	case 2:
-		return instrumentClip->pitch2_; // Stage 2 pitch
-	case 3:
-		return instrumentClip->pitch3_; // Stage 3 pitch
-	case 4:
-		return instrumentClip->pitch4_; // Stage 4 pitch
-	case 5:
-		return instrumentClip->pitch5_; // Stage 5 pitch
-	case 6:
-		return instrumentClip->pitch6_; // Stage 6 pitch
-	case 7:
-		return instrumentClip->pitch7_; // Stage 7 pitch
-	default:
-		return 0;
-	}
-}
-
 int32_t PulseSeqView::getPulseCountValue(int32_t column) {
 	if (!currentClip_)
 		return 0;
@@ -605,6 +745,51 @@ int32_t PulseSeqView::getPulseCountValue(int32_t column) {
 	default:
 		return 0;
 	}
+}
+
+// Helper functions for scale note calculation
+NoteSet PulseSeqView::getCurrentScaleNotes() {
+	if (!currentClip_ || !currentClip_->inScaleMode) {
+		// Return chromatic scale (all 12 notes) if no scale selected
+		NoteSet chromatic;
+		chromatic.fill(); // Sets all 12 semitones
+		return chromatic;
+	}
+
+	// Get the current song's scale notes
+	return currentSong->key.modeNotes;
+}
+
+int32_t PulseSeqView::getActualNoteValue(int32_t column) {
+	int32_t scaleNote = getScaleNoteValue(column);
+	int32_t octave = getOctaveValue(column);
+
+	NoteSet scaleNotes = getCurrentScaleNotes();
+
+	// Get the note at the specified scale degree
+	int32_t noteInOctave = scaleNotes[scaleNote];
+
+	if (noteInOctave == -1) {
+		// Scale degree doesn't exist, fallback to chromatic
+		noteInOctave = scaleNote;
+	}
+
+	// Add root note offset and octave
+	int32_t rootNote = currentSong->key.rootNote;
+
+	return rootNote + noteInOctave + (octave * 12);
+}
+
+void PulseSeqView::getNoteName(char* buffer, int32_t bufferSize, int32_t column) {
+	int32_t actualNote = getActualNoteValue(column);
+
+	// Convert MIDI note number to note name
+	const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
+	int32_t noteInOctave = actualNote % 12;
+	int32_t octave = (actualNote / 12) - 1; // MIDI note 60 = C4
+
+	snprintf(buffer, bufferSize, "%s%d", noteNames[noteInOctave], octave);
 }
 
 void PulseSeqView::generatePattern() {
