@@ -91,7 +91,13 @@ def sysex_console(midiout, midiin):
             ):
                 target_bytes = unpack_7bit_to_8bit(msg[5:-1])
                 decoded = target_bytes.decode("ascii").replace("\n", "")
-                print(decoded, flush=True)
+
+                # Filter out task scheduler messages
+                if (
+                    "task_scheduler" not in decoded.lower()
+                    and "task:" not in decoded.lower()
+                ):
+                    print(decoded, flush=True)
         else:
             # add a short sleep so the while loop doesn't hammer your cpu
             time.sleep(0.01)

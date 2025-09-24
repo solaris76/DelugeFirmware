@@ -21,6 +21,7 @@
 #include "gui/views/session_view.h"
 #include "gui/views/view.h"
 #include "io/debug/log.h"
+#include "io/debug/print.h"
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
 #include "model/clip/audio_clip.h"
@@ -213,6 +214,7 @@ bool Clip::isActiveOnOutput() {
 // Note: it's now the caller's job to increment currentPos before calling this! But we check here whether it's looped
 // and needs setting back to "0". We may change the TimelineCounter in the modelStack if new Clip got created.
 void Clip::processCurrentPos(ModelStackWithTimelineCounter* modelStack, uint32_t ticksSinceLast) {
+	Debug::println("Clip::processCurrentPos called");
 
 	// Firstly, a bit of stuff that has to be dealt with ideally before calling posReachedEnd(), and definitely before
 	// we think about pingponging while in reverse. The consequence of not doing this is only apparent in one special

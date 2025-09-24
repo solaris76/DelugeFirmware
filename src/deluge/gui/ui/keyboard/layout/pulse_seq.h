@@ -38,9 +38,7 @@ public:
 	bool supportsInstrument() override { return true; }
 	bool supportsKit() override { return false; }
 
-	// Pulse Sequencer specific methods
-	void processPulseSeqTick();
-	void processPulseSeqTiming();
+	// Pulse Sequencer specific methods (delegate to InstrumentClip)
 	void startPulseSeq();
 	void stopPulseSeq();
 	void resetPulseSeq();
@@ -63,7 +61,7 @@ private:
 	std::string getNoteName(int32_t column);
 
 	// Gate line calculation
-	int32_t getGateLineY() { return 3 + getState().pulseSeq.gateLineOffset; }
+	int32_t getGateLineY();
 
 	// Color arrays for different parameter types
 	RGB gateColors[4] = {

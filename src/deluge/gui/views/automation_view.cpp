@@ -39,7 +39,6 @@
 #include "gui/views/audio_clip_view.h"
 #include "gui/views/automation/editor_layout/mod_controllable.h"
 #include "gui/views/automation/editor_layout/note.h"
-#include "gui/views/pulse_seq_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/timeline_view.h"
 #include "gui/views/view.h"

@@ -156,24 +156,24 @@ public:
 
 	// Pulse-Sequencer Stage Parameters (8 stages × 3 parameters each)
 	// Gate Types (0-3: Off, Single, Multiple, Hold)
-	int32_t gateType0_ = 0; // Stage 0 gate type
-	int32_t gateType1_ = 0; // Stage 1 gate type
-	int32_t gateType2_ = 0; // Stage 2 gate type
-	int32_t gateType3_ = 0; // Stage 3 gate type
-	int32_t gateType4_ = 0; // Stage 4 gate type
-	int32_t gateType5_ = 0; // Stage 5 gate type
-	int32_t gateType6_ = 0; // Stage 6 gate type
-	int32_t gateType7_ = 0; // Stage 7 gate type
+	int32_t gateType0_ = 1; // Stage 0 gate type - SINGLE (default for testing)
+	int32_t gateType1_ = 1; // Stage 1 gate type - SINGLE (default for testing)
+	int32_t gateType2_ = 0; // Stage 2 gate type - OFF
+	int32_t gateType3_ = 1; // Stage 3 gate type - SINGLE (default for testing)
+	int32_t gateType4_ = 0; // Stage 4 gate type - OFF
+	int32_t gateType5_ = 1; // Stage 5 gate type - SINGLE (default for testing)
+	int32_t gateType6_ = 0; // Stage 6 gate type - OFF
+	int32_t gateType7_ = 1; // Stage 7 gate type - SINGLE (default for testing)
 
 	// Scale Note (0-11: scale degree within octave)
-	int32_t scaleNote0_ = 0; // Stage 0 scale note degree
-	int32_t scaleNote1_ = 0; // Stage 1 scale note degree
-	int32_t scaleNote2_ = 0; // Stage 2 scale note degree
-	int32_t scaleNote3_ = 0; // Stage 3 scale note degree
-	int32_t scaleNote4_ = 0; // Stage 4 scale note degree
-	int32_t scaleNote5_ = 0; // Stage 5 scale note degree
-	int32_t scaleNote6_ = 0; // Stage 6 scale note degree
-	int32_t scaleNote7_ = 0; // Stage 7 scale note degree
+	int32_t scaleNote0_ = 0; // Stage 0 scale note degree - Root
+	int32_t scaleNote1_ = 2; // Stage 1 scale note degree - Third
+	int32_t scaleNote2_ = 0; // Stage 2 scale note degree - Root
+	int32_t scaleNote3_ = 4; // Stage 3 scale note degree - Fifth
+	int32_t scaleNote4_ = 0; // Stage 4 scale note degree - Root
+	int32_t scaleNote5_ = 7; // Stage 5 scale note degree - Octave
+	int32_t scaleNote6_ = 0; // Stage 6 scale note degree - Root
+	int32_t scaleNote7_ = 5; // Stage 7 scale note degree - Sixth
 
 	// Octave (-3 to +3: octave offset from root)
 	int32_t octave0_ = 0; // Stage 0 octave offset
@@ -199,6 +199,27 @@ public:
 	int32_t currentPulseSeqStage_ = 0;   // Current stage (0-7)
 	int32_t pulsesRemainingInStage_ = 1; // Pulses left in current stage
 	bool pulseSeqIsActive_ = false;      // Whether Pulse Sequencer is running
+	// Pulse Sequencer methods
+	int32_t processPulseSeqTick(uint32_t clipCurrentPos, bool currentlyPlayingReversed);
+	void startPulseSeq();
+	void stopPulseSeq();
+	void resetPulseSeq();
+
+	// Pulse Sequencer helper methods
+	bool isPulseSeqActive() const { return pulseSeqIsActive_; }
+	int32_t getCurrentPulseSeqStage() const { return currentPulseSeqStage_; }
+	int32_t getPulsesRemainingInStage() const { return pulsesRemainingInStage_; }
+	int32_t getGateTypeValue(int32_t column) const;
+	int32_t getScaleNoteValue(int32_t column) const;
+	int32_t getOctaveValue(int32_t column) const;
+	int32_t getPulseCountValue(int32_t column) const;
+	int32_t getActualNoteValue(int32_t column) const;
+	std::string getNoteName(int32_t column) const;
+	void setGateTypeValue(int32_t column, int32_t value);
+	void setScaleNoteValue(int32_t column, int32_t value);
+	void setOctaveValue(int32_t column, int32_t value);
+	void setPulseCountValue(int32_t column, int32_t value);
+	void sendPulseSeqNote(int32_t note, int32_t velocity);
 
 	void lengthChanged(ModelStackWithTimelineCounter* modelStack, int32_t oldLength, Action* action = nullptr) override;
 	NoteRow* createNewNoteRowForKit(ModelStackWithTimelineCounter* modelStack, bool atStart,

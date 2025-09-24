@@ -22,7 +22,6 @@
 #include "gui/ui/load/load_instrument_preset_ui.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
-#include "gui/views/pulse_seq_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/view.h"
 #include "hid/buttons.h"
@@ -355,7 +354,11 @@ void InstrumentClip::repeatOrChopToExactLength(ModelStackWithTimelineCounter* mo
 	                              // above of what that call would do.
 
 	if (playbackHandler.isEitherClockActive() && modelStack->song->isClipActive(this)) {
+		Debug::println("About to call resumePlayback");
 		resumePlayback(modelStack);
+	}
+	else {
+		Debug::println("Not calling resumePlayback - conditions not met");
 	}
 }
 
@@ -692,11 +695,66 @@ void InstrumentClip::pingpongOccurred(ModelStackWithTimelineCounter* modelStack)
 }
 
 void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack, uint32_t ticksSinceLast) {
+	static int32_t callCount = 0;
+	callCount++;
+	Debug::println("InstrumentClip::processCurrentPos called");
+	Debug::println("Call number:");
+	Debug::println(callCount);
 
+	Debug::println("About to check modelStack validity...");
+
+	Debug::println("Checking modelStack validity...");
+	if (modelStack == nullptr) {
+		Debug::println("ERROR: modelStack is NULL!");
+		return;
+	}
+	Debug::println("modelStack is valid");
+
+	Debug::println("Checking this pointer validity...");
+	if (this == nullptr) {
+		Debug::println("ERROR: this pointer is NULL!");
+		return;
+	}
+	Debug::println("this pointer is valid");
+
+	Debug::println("Checking pulse sequencer state...");
+	if (pulseSeqIsActive_) {
+		Debug::println("Pulse sequencer is active");
+	}
+	else {
+		Debug::println("Pulse sequencer is NOT active");
+	}
+	Debug::println("Pulse sequencer state checked");
+
+	Debug::println("Checking paramManager validity...");
+	Debug::println("About to check paramManager.summaries[0].paramCollection...");
+	if (paramManager.summaries[0].paramCollection != nullptr) {
+		Debug::println("paramManager.summaries[0].paramCollection is valid");
+	}
+	else {
+		Debug::println("paramManager.summaries[0].paramCollection is NULL");
+	}
+	Debug::println("paramManager validity checked");
+
+	Debug::println("Checking paramManager.summaries array validity...");
+	if (paramManager.summaries != nullptr) {
+		Debug::println("paramManager.summaries array is valid");
+	}
+	else {
+		Debug::println("paramManager.summaries array is NULL");
+	}
+	Debug::println("paramManager.summaries array validity checked");
+
+	Debug::println("About to call Clip::processCurrentPos...");
 	Clip::processCurrentPos(modelStack, ticksSinceLast);
+	Debug::println("Clip::processCurrentPos completed successfully");
+
+	Debug::println("About to check modelStack->getTimelineCounter()...");
 	if (modelStack->getTimelineCounter() != this) {
+		Debug::println("modelStack->getTimelineCounter() != this, returning early");
 		return; // Is this in case it's created a new Clip or something?
 	}
+	Debug::println("modelStack->getTimelineCounter() == this, continuing...");
 
 	// We already incremented / decremented noteRowsNumTicksBehindClip and ticksTilNextNoteRowEvent, in the call to
 	// incrementPos().
@@ -734,26 +792,29 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 
 		noteRowsNumTicksBehindClip = 0;
 
-		// Process Pulse Sequencer timing if active
-		if (pulseSeqIsActive_) {
-			// Check if we're in Pulse Sequencer view and process timing
-			extern deluge::gui::views::PulseSeqView pulseSeqView;
-			Debug::println("PulseSeq active, checking view...");
-			if (pulseSeqView.opened()) {
-				Debug::println("PulseSeq view is open, calling doTickForward");
-				int32_t ticksTilNextPulseSeqEvent =
-				    pulseSeqView.doTickForward(lastProcessedPos, currentlyPlayingReversed);
+		// Process Pulse Sequencer timing if active and paramManager is properly initialized
+		// Re-enabled with comprehensive safety checks
+		if (isPulseSeqActive()) {
+			Debug::println("Pulse sequencer is active, checking conditions...");
+
+			// Extra safety checks to prevent E410 error
+			if (paramManager.summaries[0].paramCollection != nullptr && output && currentSong
+			    && paramManager.summaries[0].paramCollection != nullptr) {
+
+				Debug::println("All conditions met, calling processPulseSeqTick...");
+				int32_t ticksTilNextPulseSeqEvent = processPulseSeqTick(lastProcessedPos, currentlyPlayingReversed);
+				Debug::println("processPulseSeqTick returned successfully");
+
 				if (ticksTilNextPulseSeqEvent < ticksTilNextNoteRowEvent) {
 					ticksTilNextNoteRowEvent = ticksTilNextPulseSeqEvent;
 				}
 			}
 			else {
-				Debug::println("PulseSeq view is NOT open");
+				Debug::println("Conditions not met for processPulseSeqTick");
 			}
 		}
-		else {
-			Debug::println("PulseSeq is NOT active");
-		}
+
+		Debug::println("Pulse sequencer processing complete, starting main note processing...");
 
 		// Count up how many of each probability there are
 		uint8_t probabilityCount[kNumProbabilityValues];
@@ -929,6 +990,8 @@ doNewProbability:
 	if (ticksTilNextNoteRowEvent < playbackHandler.swungTicksTilNextEvent) {
 		playbackHandler.swungTicksTilNextEvent = ticksTilNextNoteRowEvent;
 	}
+
+	Debug::println("InstrumentClip::processCurrentPos completed successfully");
 }
 
 void InstrumentClip::sendPendingNoteOn(ModelStackWithTimelineCounter* modelStack, PendingNoteOn* pendingNoteOn) {
@@ -1151,6 +1214,8 @@ ModelStackWithNoteRow* InstrumentClip::getOrCreateNoteRowForYNote(int32_t yNote,
 // I think you need to check (playbackHandler.isEitherClockActive() && song->isClipActive(thisClip)) before calling
 // this.
 void InstrumentClip::resumePlayback(ModelStackWithTimelineCounter* modelStack, bool mayMakeSound) {
+	Debug::println("resumePlayback called - mayMakeSound:");
+	Debug::println(mayMakeSound ? "true" : "false");
 	for (int32_t i = 0; i < noteRows.getNumElements(); i++) {
 		NoteRow* thisNoteRow = noteRows.getElement(i);
 		if (!thisNoteRow->muted) {
@@ -1159,6 +1224,9 @@ void InstrumentClip::resumePlayback(ModelStackWithTimelineCounter* modelStack, b
 			thisNoteRow->resumePlayback(modelStackWithNoteRow, mayMakeSound);
 		}
 	}
+
+	// Pulse Sequencer will be started manually when needed
+
 	expectEvent();
 }
 
@@ -1175,6 +1243,9 @@ void InstrumentClip::expectNoFurtherTicks(Song* song, bool actuallySoundChange) 
 	    setupModelStackWithTimelineCounter(modelStackMemory, song, this); // TODO: make caller supply this
 
 	stopAllNotesPlaying(modelStack, actuallySoundChange && !currentlyRecordingLinearly); // Stop all sound
+
+	// Stop Pulse Sequencer
+	stopPulseSeq();
 
 	ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
 	    modelStack->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &paramManager);
@@ -4747,3 +4818,499 @@ void InstrumentClip::incrementPos(ModelStackWithTimelineCounter* modelStack, int
     for (int32_t i = 0; i < noteRows.getNumElements(); i++) {
         NoteRow* thisNoteRow = noteRows.getElement(i);
 */
+
+// Pulse Sequencer methods
+int32_t InstrumentClip::processPulseSeqTick(uint32_t clipCurrentPos, bool currentlyPlayingReversed) {
+	Debug::println("processPulseSeqTick called");
+
+	// Additional safety checks
+	if (!paramManager.summaries[0].paramCollection) {
+		Debug::println("processPulseSeqTick: paramManager not ready, stopping sequencer");
+		pulseSeqIsActive_ = false;
+		return 2147483647;
+	}
+
+	if (!pulseSeqIsActive_) {
+		Debug::println("Pulse sequencer not active, returning max value");
+		return 2147483647; // Return max value to indicate no processing needed
+	}
+
+	Debug::println("Pulse sequencer is active, calculating timing...");
+
+	// Use same swung tick calculation as arpeggiator
+	const uint32_t syncLevel = 6; // SYNC_LEVEL_32ND to get 16th note timing
+	const uint32_t syncType = 0;  // SYNC_TYPE_EVEN
+
+	uint32_t ticksPerPeriod = 3 << (9 - syncLevel);
+	if (syncType == SYNC_TYPE_TRIPLET) {
+		ticksPerPeriod = ticksPerPeriod * 2 / 3;
+	}
+	else if (syncType == SYNC_TYPE_DOTTED) {
+		ticksPerPeriod = ticksPerPeriod * 3 / 2;
+	}
+
+	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
+
+	if (!howFarIntoPeriod) {
+		Debug::println("Time for a new 16th note tick");
+		// Time for a new 16th note tick
+		pulsesRemainingInStage_--;
+
+		Debug::println("Getting gate type and pulse count...");
+		// Get current stage parameters
+		int32_t gateType = getGateTypeValue(currentPulseSeqStage_);
+		Debug::println("Got gate type successfully");
+		int32_t pulseCount = getPulseCountValue(currentPulseSeqStage_);
+		Debug::println("Got pulse count successfully");
+		Debug::println("About to check gate type logic...");
+
+		// Generate notes based on gate type
+		if (gateType != 0) { // Not OFF
+			Debug::println("Gate type is not OFF, proceeding with note generation...");
+			Debug::println("About to call getActualNoteValue...");
+			int32_t note = getActualNoteValue(currentPulseSeqStage_);
+			Debug::println("getActualNoteValue returned successfully");
+			int32_t velocity = 100; // Default velocity
+
+			switch (gateType) {
+			case 1:                                              // Single - play once when entering stage
+				if (pulsesRemainingInStage_ == pulseCount - 1) { // First tick of stage
+					Debug::println("About to call sendPulseSeqNote for single gate...");
+					sendPulseSeqNote(note, velocity);
+					Debug::println("Single gate triggered");
+				}
+				break;
+
+			case 2: // Multiple - play on every 16th note while in stage
+				sendPulseSeqNote(note, velocity);
+				Debug::println("Multiple gate triggered");
+				break;
+
+			case 3:                                              // Hold - sustained note for entire stage duration
+				if (pulsesRemainingInStage_ == pulseCount - 1) { // First tick of stage
+					sendPulseSeqNote(note, velocity);
+					Debug::println("Hold gate started");
+				}
+				break;
+			}
+		}
+
+		// If we've used up all pulses in this stage, move to next stage
+		if (pulsesRemainingInStage_ <= 0) {
+			// Move to next stage
+			currentPulseSeqStage_++;
+			if (currentPulseSeqStage_ >= 8) {
+				currentPulseSeqStage_ = 0; // Loop back to stage 0
+			}
+
+			// Set pulses remaining for new stage
+			int32_t newPulseCount = getPulseCountValue(currentPulseSeqStage_);
+			pulsesRemainingInStage_ = newPulseCount;
+
+			// Debug: Show stage advancement
+			char debugMsg[64];
+			snprintf(debugMsg, sizeof(debugMsg), "Advanced to Stage=%d PulseCount=%d", currentPulseSeqStage_,
+			         newPulseCount);
+			Debug::println(debugMsg);
+		}
+
+		howFarIntoPeriod = ticksPerPeriod; // Overwrite this
+	}
+	else {
+		if (!currentlyPlayingReversed) {
+			howFarIntoPeriod = ticksPerPeriod - howFarIntoPeriod;
+		}
+	}
+
+	return howFarIntoPeriod;
+}
+
+void InstrumentClip::startPulseSeq() {
+	Debug::println("startPulseSeq() called");
+
+	// Only start if paramManager is properly initialized
+	if (!paramManager.summaries[0].paramCollection) {
+		Debug::println("Pulse Sequencer: paramManager not ready");
+		return; // Can't start without proper parameter management
+	}
+
+	// Additional check: make sure we're in a valid state
+	if (!output || !currentSong) {
+		Debug::println("Pulse Sequencer: output or currentSong not ready");
+		return;
+	}
+
+	// Check if already active
+	if (pulseSeqIsActive_) {
+		Debug::println("Pulse Sequencer: already active, ignoring start request");
+		return;
+	}
+
+	Debug::println("Setting pulse sequencer to active...");
+	// Reset to stage 1 (index 0) when starting
+	pulseSeqIsActive_ = true;
+	currentPulseSeqStage_ = 0; // Start at stage 1 (0-based indexing)
+
+	Debug::println("Getting pulse count for stage 0...");
+	pulsesRemainingInStage_ = getPulseCountValue(0);
+
+	Debug::println("Pulse Sequencer started successfully from stage 1");
+}
+
+void InstrumentClip::stopPulseSeq() {
+	pulseSeqIsActive_ = false;
+	Debug::println("Pulse Sequencer stopped");
+}
+
+void InstrumentClip::resetPulseSeq() {
+	currentPulseSeqStage_ = 0;
+	pulsesRemainingInStage_ = getPulseCountValue(0);
+	Debug::println("Pulse Sequencer reset");
+}
+
+// Pulse Sequencer helper methods
+int32_t InstrumentClip::getGateTypeValue(int32_t column) const {
+	switch (column) {
+	case 0:
+		return gateType0_;
+	case 1:
+		return gateType1_;
+	case 2:
+		return gateType2_;
+	case 3:
+		return gateType3_;
+	case 4:
+		return gateType4_;
+	case 5:
+		return gateType5_;
+	case 6:
+		return gateType6_;
+	case 7:
+		return gateType7_;
+	default:
+		return 0;
+	}
+}
+
+int32_t InstrumentClip::getScaleNoteValue(int32_t column) const {
+	switch (column) {
+	case 0:
+		return scaleNote0_;
+	case 1:
+		return scaleNote1_;
+	case 2:
+		return scaleNote2_;
+	case 3:
+		return scaleNote3_;
+	case 4:
+		return scaleNote4_;
+	case 5:
+		return scaleNote5_;
+	case 6:
+		return scaleNote6_;
+	case 7:
+		return scaleNote7_;
+	default:
+		return 0;
+	}
+}
+
+int32_t InstrumentClip::getOctaveValue(int32_t column) const {
+	switch (column) {
+	case 0:
+		return octave0_;
+	case 1:
+		return octave1_;
+	case 2:
+		return octave2_;
+	case 3:
+		return octave3_;
+	case 4:
+		return octave4_;
+	case 5:
+		return octave5_;
+	case 6:
+		return octave6_;
+	case 7:
+		return octave7_;
+	default:
+		return 0;
+	}
+}
+
+int32_t InstrumentClip::getPulseCountValue(int32_t column) const {
+	int32_t value = 1; // Default to 1
+
+	switch (column) {
+	case 0:
+		value = pulse0_;
+		break;
+	case 1:
+		value = pulse1_;
+		break;
+	case 2:
+		value = pulse2_;
+		break;
+	case 3:
+		value = pulse3_;
+		break;
+	case 4:
+		value = pulse4_;
+		break;
+	case 5:
+		value = pulse5_;
+		break;
+	case 6:
+		value = pulse6_;
+		break;
+	case 7:
+		value = pulse7_;
+		break;
+	default:
+		value = 1;
+		break;
+	}
+
+	// Ensure minimum value of 1 (safety check)
+	return std::max(static_cast<int32_t>(1), value);
+}
+
+int32_t InstrumentClip::getActualNoteValue(int32_t column) const {
+	int32_t scaleNote = getScaleNoteValue(column);
+	int32_t octave = getOctaveValue(column);
+
+	// Get root note from song with validation
+	extern ::Song* currentSong;
+	if (!currentSong) {
+		return 60; // Default to middle C if no song
+	}
+
+	int32_t rootNote = currentSong->key.rootNote;
+
+	// Get scale notes from NoteSet with validation
+	NoteSet scaleNotes = currentSong->key.modeNotes;
+	int32_t scaleNoteCount = currentSong->key.modeNotes.count();
+
+	// Ensure we have valid scale data
+	if (scaleNoteCount <= 0) {
+		return rootNote + (octave * kOctaveSize); // Fallback to chromatic
+	}
+
+	// Clamp scale note to valid range
+	if (scaleNote < 0)
+		scaleNote = 0;
+	if (scaleNote >= scaleNoteCount)
+		scaleNote = scaleNoteCount - 1;
+
+	// Get the semitone offset for this scale degree
+	int32_t semitoneOffset = scaleNotes[scaleNote];
+	if (semitoneOffset == -1) {
+		semitoneOffset = 0; // Fallback to root if invalid
+	}
+
+	// Calculate the final note value
+	// scaleNote is now a scale degree (0 to scaleNoteCount-1)
+	// octave is an octave offset (-2 to +2)
+	int32_t finalNote = rootNote + (octave * kOctaveSize) + semitoneOffset;
+
+	// Clamp to valid MIDI note range (0-127)
+	finalNote = std::max(static_cast<int32_t>(0), std::min(static_cast<int32_t>(127), finalNote));
+
+	return finalNote;
+}
+
+std::string InstrumentClip::getNoteName(int32_t column) const {
+	int32_t note = getActualNoteValue(column);
+
+	// Convert MIDI note to note name
+	int32_t octave = (note / kOctaveSize) - 1;
+	int32_t noteInOctave = note % kOctaveSize;
+
+	const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
+	char noteStr[16];
+	snprintf(noteStr, sizeof(noteStr), "%s%d", noteNames[noteInOctave], octave);
+
+	return std::string(noteStr);
+}
+
+void InstrumentClip::sendPulseSeqNote(int32_t note, int32_t velocity) {
+	// Get the instrument and create a ModelStack for note sending
+	extern ::Song* currentSong;
+
+	if (!currentSong) {
+		return; // No song available
+	}
+
+	if (!output) {
+		return; // No output instrument
+	}
+
+	// Only send notes to melodic instruments (synth, MIDI, CV)
+	if (output->type != OutputType::SYNTH && output->type != OutputType::MIDI_OUT && output->type != OutputType::CV) {
+		return; // Not a melodic instrument
+	}
+
+	// Validate paramManager before using it
+	if (!paramManager.summaries[0].paramCollection) {
+		return; // ParamManager not properly initialized
+	}
+
+	// Create ModelStack for note sending
+	ModelStackWithTimelineCounter* modelStackWithTimelineCounter = currentSong->setupModelStackWithCurrentClip(this);
+	if (!modelStackWithTimelineCounter) {
+		return; // Failed to create ModelStack
+	}
+
+	ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+	    modelStackWithTimelineCounter->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &paramManager);
+
+	if (!modelStackWithThreeMainThings) {
+		return; // Failed to create ModelStack
+	}
+
+	// Send the note using the melodic instrument's sendNote method
+	// This is the same mechanism used by the arpeggiator
+	((MelodicInstrument*)output)
+	    ->sendNote(modelStackWithThreeMainThings, true, note, nullptr, MIDI_CHANNEL_NONE, velocity, 0, 0, 0);
+}
+
+// Pulse Sequencer setter methods
+void InstrumentClip::setGateTypeValue(int32_t column, int32_t value) {
+	if (column < 0 || column >= 8)
+		return;
+
+	switch (column) {
+	case 0:
+		gateType0_ = value;
+		break;
+	case 1:
+		gateType1_ = value;
+		break;
+	case 2:
+		gateType2_ = value;
+		break;
+	case 3:
+		gateType3_ = value;
+		break;
+	case 4:
+		gateType4_ = value;
+		break;
+	case 5:
+		gateType5_ = value;
+		break;
+	case 6:
+		gateType6_ = value;
+		break;
+	case 7:
+		gateType7_ = value;
+		break;
+	}
+}
+
+void InstrumentClip::setScaleNoteValue(int32_t column, int32_t value) {
+	if (column < 0 || column >= 8)
+		return;
+
+	// Clamp to valid scale note range (0 to scaleNoteCount-1)
+	extern ::Song* currentSong;
+	int32_t scaleNoteCount = currentSong->key.modeNotes.count();
+	value = std::max(static_cast<int32_t>(0), std::min(value, scaleNoteCount - 1));
+
+	switch (column) {
+	case 0:
+		scaleNote0_ = value;
+		break;
+	case 1:
+		scaleNote1_ = value;
+		break;
+	case 2:
+		scaleNote2_ = value;
+		break;
+	case 3:
+		scaleNote3_ = value;
+		break;
+	case 4:
+		scaleNote4_ = value;
+		break;
+	case 5:
+		scaleNote5_ = value;
+		break;
+	case 6:
+		scaleNote6_ = value;
+		break;
+	case 7:
+		scaleNote7_ = value;
+		break;
+	}
+}
+
+void InstrumentClip::setOctaveValue(int32_t column, int32_t value) {
+	if (column < 0 || column >= 8)
+		return;
+
+	// Clamp to valid octave range (-6 to +6)
+	value = std::max(static_cast<int32_t>(-6), std::min(static_cast<int32_t>(6), value));
+
+	switch (column) {
+	case 0:
+		octave0_ = value;
+		break;
+	case 1:
+		octave1_ = value;
+		break;
+	case 2:
+		octave2_ = value;
+		break;
+	case 3:
+		octave3_ = value;
+		break;
+	case 4:
+		octave4_ = value;
+		break;
+	case 5:
+		octave5_ = value;
+		break;
+	case 6:
+		octave6_ = value;
+		break;
+	case 7:
+		octave7_ = value;
+		break;
+	}
+}
+
+void InstrumentClip::setPulseCountValue(int32_t column, int32_t value) {
+	if (column < 0 || column >= 8)
+		return;
+
+	// Clamp to valid pulse count range (1 to 8)
+	value = std::max(static_cast<int32_t>(1), std::min(static_cast<int32_t>(8), value));
+
+	switch (column) {
+	case 0:
+		pulse0_ = value;
+		break;
+	case 1:
+		pulse1_ = value;
+		break;
+	case 2:
+		pulse2_ = value;
+		break;
+	case 3:
+		pulse3_ = value;
+		break;
+	case 4:
+		pulse4_ = value;
+		break;
+	case 5:
+		pulse5_ = value;
+		break;
+	case 6:
+		pulse6_ = value;
+		break;
+	case 7:
+		pulse7_ = value;
+		break;
+	}
+}

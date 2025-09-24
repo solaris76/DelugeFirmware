@@ -62,10 +62,10 @@ PLACE_SDRAM_DATA layout::KeyboardLayoutIsomorphic keyboard_layout_isomorphic{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutVelocityDrums keyboard_layout_velocity_drums{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutInKey keyboard_layout_in_key{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutPiano keyboard_layout_piano{};
+PLACE_SDRAM_DATA layout::KeyboardLayoutPulseSeq keyboard_layout_pulse_seq{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutChord keyboard_layout_chord{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutChordLibrary keyboard_layout_chord_library{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutNorns keyboard_layout_norns{};
-PLACE_SDRAM_DATA layout::KeyboardLayoutPulseSeq keyboard_layout_pulse_seq{};
 PLACE_SDRAM_DATA std::array<KeyboardLayout*, KeyboardLayoutType::KeyboardLayoutTypeMaxElement> layout_list = {nullptr};
 
 KeyboardScreen::KeyboardScreen() {
@@ -675,10 +675,12 @@ void KeyboardScreen::selectLayout(int8_t offset) {
 		) {
 			// Don't check the next conditions, this one is already lost
 		}
-		else if (getCurrentOutputType() == OutputType::KIT && layout_list[nextLayout]->supportsKit()) {
+		else if (getCurrentOutputType() == OutputType::KIT && layout_list[nextLayout]
+		         && layout_list[nextLayout]->supportsKit()) {
 			break;
 		}
-		else if (getCurrentOutputType() != OutputType::KIT && layout_list[nextLayout]->supportsInstrument()) {
+		else if (getCurrentOutputType() != OutputType::KIT && layout_list[nextLayout]
+		         && layout_list[nextLayout]->supportsInstrument()) {
 			break;
 		}
 
@@ -942,40 +944,14 @@ void KeyboardScreen::graphicsRoutine() {
 	keyboardTickSquares[kDisplayHeight - 1] = newTickSquare;
 
 	PadLEDs::setTickSquares(keyboardTickSquares, colours);
-
-	// Process Pulse Sequencer timing if active
-	if (getCurrentInstrumentClip()
-	    && getCurrentInstrumentClip()->keyboardState.currentLayout == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
-		layout::KeyboardLayoutPulseSeq* pulseSeqLayout =
-		    static_cast<layout::KeyboardLayoutPulseSeq*>(layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq]);
-		if (pulseSeqLayout) {
-			pulseSeqLayout->processPulseSeqTiming();
-		}
-	}
 }
 
 void KeyboardScreen::notifyPlaybackBegun() {
-	// Start Pulse Sequencer if it's the current layout
-	if (getCurrentInstrumentClip()
-	    && getCurrentInstrumentClip()->keyboardState.currentLayout == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
-		layout::KeyboardLayoutPulseSeq* pulseSeqLayout =
-		    static_cast<layout::KeyboardLayoutPulseSeq*>(layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq]);
-		if (pulseSeqLayout) {
-			pulseSeqLayout->startPulseSeq();
-		}
-	}
+	// Pulse Sequencer is now handled directly in InstrumentClip
 }
 
 void KeyboardScreen::playbackEnded() {
-	// Stop Pulse Sequencer if it's the current layout
-	if (getCurrentInstrumentClip()
-	    && getCurrentInstrumentClip()->keyboardState.currentLayout == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
-		layout::KeyboardLayoutPulseSeq* pulseSeqLayout =
-		    static_cast<layout::KeyboardLayoutPulseSeq*>(layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq]);
-		if (pulseSeqLayout) {
-			pulseSeqLayout->stopPulseSeq();
-		}
-	}
+	// Pulse Sequencer is now handled directly in InstrumentClip
 }
 
 } // namespace deluge::gui::ui::keyboard
