@@ -167,20 +167,23 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 	int32_t gateLineY = getGateLineY();
 
+	// Check pulse sequencer state once per render cycle (cache to avoid repeated calls)
+	bool isPulseSeqActive = false;
+	int32_t currentStage = 0;
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (currentClip && currentClip->paramManager.summaries[0].paramCollection) {
+		isPulseSeqActive = currentClip->isPulseSeqActive();
+		if (isPulseSeqActive) {
+			currentStage = currentClip->getCurrentPulseSeqStage();
+		}
+	}
+
 	// Render each column (stage)
 	for (int32_t x = 0; x < 8; x++) {
 		// Get parameters for this stage
 		int32_t gateType = getGateTypeValue(x);
 		int32_t pulseCount = getPulseCountValue(x);
 
-		// Check if pulse sequencer is active from InstrumentClip
-		bool isPulseSeqActive = false;
-		InstrumentClip* currentClip = getCurrentInstrumentClip();
-		if (currentClip && currentClip->paramManager.summaries[0].paramCollection) {
-			isPulseSeqActive = currentClip->isPulseSeqActive();
-		}
-
-		int32_t currentStage = getCurrentStage();
 		bool isCurrentStage = (x == currentStage && isPulseSeqActive);
 
 		// Debug output removed to prevent E410 error

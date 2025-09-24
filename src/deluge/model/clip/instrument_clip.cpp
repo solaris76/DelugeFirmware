@@ -795,23 +795,9 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 		// Process Pulse Sequencer timing if active and paramManager is properly initialized
 		// Re-enabled with comprehensive safety checks
 		if (isPulseSeqActive()) {
-			Debug::println("Pulse sequencer is active, checking conditions...");
-
-			// Extra safety checks to prevent E410 error
-			if (paramManager.summaries[0].paramCollection != nullptr && output && currentSong
-			    && paramManager.summaries[0].paramCollection != nullptr) {
-
-				Debug::println("All conditions met, calling processPulseSeqTick...");
-				int32_t ticksTilNextPulseSeqEvent = processPulseSeqTick(lastProcessedPos, currentlyPlayingReversed);
-				Debug::println("processPulseSeqTick returned successfully");
-
-				if (ticksTilNextPulseSeqEvent < ticksTilNextNoteRowEvent) {
-					ticksTilNextNoteRowEvent = ticksTilNextPulseSeqEvent;
-				}
-			}
-			else {
-				Debug::println("Conditions not met for processPulseSeqTick");
-			}
+			Debug::println("Pulse sequencer is active, but processing is DISABLED to prevent E410 crashes");
+			// TEMPORARILY DISABLED: Pulse sequencer processing causing E410 crashes
+			// TODO: Fix pulse sequencer processing logic
 		}
 
 		Debug::println("Pulse sequencer processing complete, starting main note processing...");
@@ -4821,6 +4807,7 @@ void InstrumentClip::incrementPos(ModelStackWithTimelineCounter* modelStack, int
 
 // Pulse Sequencer methods
 int32_t InstrumentClip::processPulseSeqTick(uint32_t clipCurrentPos, bool currentlyPlayingReversed) {
+	Debug::println("=== ENTERING processPulseSeqTick ===");
 	Debug::println("processPulseSeqTick called");
 
 	// Additional safety checks
@@ -4838,7 +4825,7 @@ int32_t InstrumentClip::processPulseSeqTick(uint32_t clipCurrentPos, bool curren
 	Debug::println("Pulse sequencer is active, calculating timing...");
 
 	// Use same swung tick calculation as arpeggiator
-	const uint32_t syncLevel = 6; // SYNC_LEVEL_32ND to get 16th note timing
+	const uint32_t syncLevel = 5; // SYNC_LEVEL_16TH for proper 16th note timing
 	const uint32_t syncType = 0;  // SYNC_TYPE_EVEN
 
 	uint32_t ticksPerPeriod = 3 << (9 - syncLevel);
@@ -4849,17 +4836,27 @@ int32_t InstrumentClip::processPulseSeqTick(uint32_t clipCurrentPos, bool curren
 		ticksPerPeriod = ticksPerPeriod * 3 / 2;
 	}
 
+	Debug::println("Timing calculation:");
+	Debug::println("clipCurrentPos:");
+	Debug::println(clipCurrentPos);
+	Debug::println("ticksPerPeriod:");
+	Debug::println(ticksPerPeriod);
+
 	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
 
 	if (!howFarIntoPeriod) {
 		Debug::println("Time for a new 16th note tick");
 		// Time for a new 16th note tick
+		Debug::println("About to decrement pulsesRemainingInStage_");
 		pulsesRemainingInStage_--;
+		Debug::println("Successfully decremented pulsesRemainingInStage_");
 
 		Debug::println("Getting gate type and pulse count...");
+		Debug::println("About to call getGateTypeValue");
 		// Get current stage parameters
 		int32_t gateType = getGateTypeValue(currentPulseSeqStage_);
 		Debug::println("Got gate type successfully");
+		Debug::println("About to call getPulseCountValue");
 		int32_t pulseCount = getPulseCountValue(currentPulseSeqStage_);
 		Debug::println("Got pulse count successfully");
 		Debug::println("About to check gate type logic...");
@@ -4951,7 +4948,6 @@ void InstrumentClip::startPulseSeq() {
 	pulseSeqIsActive_ = true;
 	currentPulseSeqStage_ = 0; // Start at stage 1 (0-based indexing)
 
-	Debug::println("Getting pulse count for stage 0...");
 	pulsesRemainingInStage_ = getPulseCountValue(0);
 
 	Debug::println("Pulse Sequencer started successfully from stage 1");
