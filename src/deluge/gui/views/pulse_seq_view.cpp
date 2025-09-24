@@ -1,23 +1,31 @@
 #include "gui/views/pulse_seq_view.h"
 #include "definitions_cxx.hpp"
 #include "gui/colour/rgb.h"
+#include "gui/ui/ui.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
 #include "hid/buttons.h"
 #include "hid/display/display.h"
 #include "hid/display/oled.h"
 #include "hid/led/pad_leds.h"
+#include "io/debug/print.h"
 #include "model/clip/clip_minder.h"
 #include "model/clip/instrument_clip.h"
+#include "model/instrument/melodic_instrument.h"
+#include "model/model_stack.h"
 #include "model/note/note_row.h"
 #include "model/scale/note_set.h"
 #include "model/scale/preset_scales.h"
 #include "model/song/song.h"
 #include <algorithm>
+#include <climits>
+#include <cstdint>
+#include <cstring>
 #include <random>
 
 namespace deluge::gui::views {
 
+// Global instance
 PulseSeqView pulseSeqView{};
 
 // Static variable definition
@@ -57,8 +65,18 @@ void PulseSeqView::openUI(InstrumentClip* clip) {
 }
 
 void PulseSeqView::closeUI() {
+	// Stop the Pulse Sequencer timing
+	stopPulseSeq();
+
 	currentClip_ = nullptr;
 	currentInstrument_ = nullptr;
+}
+
+void PulseSeqView::notifyPlaybackBegun() {
+	// Start the Pulse Sequencer when playback begins
+	display->displayNotification("PulseSeq", "Started");
+	Debug::println("Playback Begun!");
+	startPulseSeq();
 }
 
 bool PulseSeqView::opened() {
@@ -186,7 +204,7 @@ bool PulseSeqView::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth 
 	// Gate type colors
 	RGB gateColors[4] = {
 	    RGB{32, 32, 32}, // Off: Dim gray
-	    RGB{0, 0, 255},  // Single: Blue
+	    RGB{0, 0, 200},  // Single: Blue
 	    RGB{0, 255, 0},  // Multiple: Green
 	    RGB{128, 0, 255} // Hold: Purple
 	};
@@ -233,8 +251,14 @@ bool PulseSeqView::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth 
 		// Draw the gate type color on the gate line
 		if (gateLineY >= 0 && gateLineY < 8 && x < kDisplayWidth) {
 			RGB gateColor = gateColors[gateType];
+			bool isCurrentStage =
+			    (x == getCurrentStage() && getCurrentInstrumentClip() && getCurrentInstrumentClip()->pulseSeqIsActive_);
 
-			if (isSelected) {
+			if (isCurrentStage) {
+				// Current stage: bright red highlight
+				image[gateLineY][x] = RGB{255, 0, 0}; // Bright red
+			}
+			else if (isSelected) {
 				// Selected stage: flash the gate color subtly
 				// Use a brighter version for flashing effect
 				image[gateLineY][x] =
@@ -311,7 +335,39 @@ ActionResult PulseSeqView::buttonAction(deluge::hid::Button b, bool on, bool inC
 		return ActionResult::DEALT_WITH;
 	}
 
+	// Delegate all other buttons (including PLAY) to parent view
+	else {
+		ActionResult result = ClipMinder::buttonAction(b, on);
+		if (result == ActionResult::NOT_DEALT_WITH) {
+			// Let the global view system handle it (including PLAY button)
+			return ActionResult::NOT_DEALT_WITH;
+		}
+		return result;
+	}
+
 	return ActionResult::DEALT_WITH;
+}
+
+void PulseSeqView::graphicsRoutine() {
+	// Disable the progress bar (tick squares) in Pulse Sequencer view
+	// We don't want the white progress bar from clip views
+	// The Pulse Sequencer has its own visual feedback with the red stage highlighting
+
+	// Set flash cursor to OFF to disable tick squares (like instrument clips do)
+	if (PadLEDs::flashCursor != FLASH_CURSOR_OFF) {
+		uint8_t tickSquares[kDisplayHeight];
+		memset(tickSquares, 255, kDisplayHeight); // 255 = disabled
+
+		uint8_t colours[kDisplayHeight];
+		memset(colours, 0, kDisplayHeight);
+
+		PadLEDs::setTickSquares(tickSquares, colours);
+	}
+
+	// Force UI refresh during Pulse Sequencer playback to show red pad movement
+	if (getCurrentInstrumentClip() && getCurrentInstrumentClip()->pulseSeqIsActive_) {
+		uiNeedsRendering(this);
+	}
 }
 
 ActionResult PulseSeqView::padAction(int32_t x, int32_t y, int32_t velocity) {
@@ -720,30 +776,30 @@ int32_t PulseSeqView::getParameterValue(int32_t column) {
 }
 
 int32_t PulseSeqView::getPulseCountValue(int32_t column) {
-	if (!currentClip_)
-		return 0;
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (!currentClip)
+		return 1; // Default to 1 pulse instead of 0
 
-	InstrumentClip* instrumentClip = (InstrumentClip*)currentClip_;
 	// Each column is a sequencer stage - pulse count only
 	switch (column) {
 	case 0:
-		return instrumentClip->pulse0_; // Stage 0 pulse count
+		return currentClip->pulse0_; // Stage 0 pulse count
 	case 1:
-		return instrumentClip->pulse1_; // Stage 1 pulse count
+		return currentClip->pulse1_; // Stage 1 pulse count
 	case 2:
-		return instrumentClip->pulse2_; // Stage 2 pulse count
+		return currentClip->pulse2_; // Stage 2 pulse count
 	case 3:
-		return instrumentClip->pulse3_; // Stage 3 pulse count
+		return currentClip->pulse3_; // Stage 3 pulse count
 	case 4:
-		return instrumentClip->pulse4_; // Stage 4 pulse count
+		return currentClip->pulse4_; // Stage 4 pulse count
 	case 5:
-		return instrumentClip->pulse5_; // Stage 5 pulse count
+		return currentClip->pulse5_; // Stage 5 pulse count
 	case 6:
-		return instrumentClip->pulse6_; // Stage 6 pulse count
+		return currentClip->pulse6_; // Stage 6 pulse count
 	case 7:
-		return instrumentClip->pulse7_; // Stage 7 pulse count
+		return currentClip->pulse7_; // Stage 7 pulse count
 	default:
-		return 0;
+		return 1; // Default to 1 pulse
 	}
 }
 
@@ -861,4 +917,193 @@ void PulseSeqView::showParameterValuePopup(int32_t parameterType, int32_t value)
 	}
 }
 
+// Pulse Sequencer timing methods
+void PulseSeqView::processPulseSeqTick() {
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (!currentClip || !currentClip->pulseSeqIsActive_) {
+		return;
+	}
+
+	// Debug: Show current state
+	char debugMsg[64];
+	snprintf(debugMsg, sizeof(debugMsg), "Tick: Stage=%d PulsesLeft=%d", currentClip->currentPulseSeqStage_,
+	         currentClip->pulsesRemainingInStage_);
+	Debug::println(debugMsg);
+
+	// Decrement pulses remaining in current stage
+	currentClip->pulsesRemainingInStage_--;
+
+	// If we've used up all pulses in this stage, move to next stage
+	if (currentClip->pulsesRemainingInStage_ <= 0) {
+		// Move to next stage
+		currentClip->currentPulseSeqStage_++;
+		if (currentClip->currentPulseSeqStage_ >= 8) {
+			currentClip->currentPulseSeqStage_ = 0; // Loop back to stage 0
+		}
+
+		// Set pulses remaining for new stage
+		int32_t pulseCount = getPulseCountValue(currentClip->currentPulseSeqStage_);
+		currentClip->pulsesRemainingInStage_ = pulseCount;
+
+		// Debug: Show stage advancement
+		snprintf(debugMsg, sizeof(debugMsg), "Advanced to Stage=%d PulseCount=%d", currentClip->currentPulseSeqStage_,
+		         pulseCount);
+		Debug::println(debugMsg);
+	}
+
+	// Generate note for current stage if gate type is not OFF
+	int32_t currentStage = currentClip->currentPulseSeqStage_;
+	int32_t gateType = getParameterValue(currentStage);
+
+	if (gateType != 0) { // Not OFF
+		// Get the note to play based on scale note and octave
+		int32_t note = getActualNoteValue(currentStage);
+
+		// Get velocity (use default velocity for now)
+		int32_t velocity = 100; // Default velocity
+
+		// Get instrument
+		Instrument* instrument = (Instrument*)currentClip->output;
+
+		// Create model stack for note generation
+		char modelStackMemory[MODEL_STACK_MAX_SIZE];
+		ModelStack* modelStack = setupModelStackWithSong(modelStackMemory, currentSong);
+
+		// Generate the note
+		if (instrument->type == OutputType::KIT) {
+			// For kits, we'd need to handle drums differently
+			// For now, skip kit support
+		}
+		else {
+			// For melodic instruments (synth, MIDI, CV)
+			((MelodicInstrument*)instrument)
+			    ->beginAuditioningForNote(modelStack, note, velocity, zeroMPEValues, MIDI_CHANNEL_NONE, 0);
+
+			// Debug: Show note being played
+			char noteMsg[32];
+			snprintf(noteMsg, sizeof(noteMsg), "Note:%d", note);
+			Debug::println(noteMsg);
+		}
+	}
+
+	// Request UI update to show current stage
+	uiNeedsRendering(this);
+}
+
+// Arpeggiator-style timing integration
+int32_t PulseSeqView::doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed) {
+	Debug::println("doTickForward called!");
+
+	// Get current clip using global function like other views
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (!currentClip) {
+		Debug::println("doTickForward: getCurrentInstrumentClip() returned NULL!");
+		return 2147483647; // No next event
+	}
+	if (!currentClip->pulseSeqIsActive_) {
+		Debug::println("doTickForward: pulseSeqIsActive_ is FALSE!");
+		return 2147483647; // No next event
+	}
+
+	// Use 16th note sync level (same as arpeggiator)
+	const uint32_t syncLevel = 5; // SYNC_LEVEL_16TH
+	const uint32_t syncType = 0;  // SYNC_TYPE_EVEN
+
+	// Calculate ticks per period (same formula as arpeggiator)
+	uint32_t ticksPerPeriod = 3 << (9 - syncLevel);
+	if (syncType == 1) { // SYNC_TYPE_TRIPLET
+		ticksPerPeriod = ticksPerPeriod * 2 / 3;
+	}
+	else if (syncType == 2) { // SYNC_TYPE_DOTTED
+		ticksPerPeriod = ticksPerPeriod * 3 / 2;
+	}
+
+	// Check if we're at the start of a new period
+	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
+
+	// Debug: Show timing calculation (console only)
+	char debugMsg[32];
+	snprintf(debugMsg, sizeof(debugMsg), "HFP:%d", howFarIntoPeriod);
+	Debug::println(debugMsg);
+
+	if (!howFarIntoPeriod) {
+		// Time for a new pulse sequencer step
+		processPulseSeqTick();
+		howFarIntoPeriod = ticksPerPeriod;
+
+		// Debug: Show current stage (only when stage advances)
+		char stageMsg[32];
+		snprintf(stageMsg, sizeof(stageMsg), "Stage:%d", currentClip->currentPulseSeqStage_);
+		display->displayPopup((char*)stageMsg);
+	}
+	else {
+		if (!currentlyPlayingReversed) {
+			howFarIntoPeriod = ticksPerPeriod - howFarIntoPeriod;
+		}
+	}
+
+	return howFarIntoPeriod;
+}
+
+void PulseSeqView::startPulseSeq() {
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (!currentClip) {
+		display->displayNotification("PulseSeq", "No Clip!");
+		return;
+	}
+
+	display->displayNotification("PulseSeq", "Active");
+	Debug::println("PulseSeq Started!");
+	currentClip->pulseSeqIsActive_ = true;
+	currentClip->currentPulseSeqStage_ = 0;
+	currentClip->pulsesRemainingInStage_ = getPulseCountValue(0);
+
+	// Request UI update
+	uiNeedsRendering(this);
+}
+
+void PulseSeqView::stopPulseSeq() {
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (!currentClip) {
+		return;
+	}
+
+	currentClip->pulseSeqIsActive_ = false;
+
+	// Request UI update
+	uiNeedsRendering(this);
+}
+
+void PulseSeqView::resetPulseSeq() {
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (!currentClip) {
+		return;
+	}
+
+	currentClip->currentPulseSeqStage_ = 0;
+	currentClip->pulsesRemainingInStage_ = getPulseCountValue(0);
+
+	// Request UI update
+	uiNeedsRendering(this);
+}
+
+int32_t PulseSeqView::getCurrentStage() {
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (!currentClip) {
+		return 0;
+	}
+	return currentClip->currentPulseSeqStage_;
+}
+
+int32_t PulseSeqView::getPulsesRemainingInStage() {
+	InstrumentClip* currentClip = getCurrentInstrumentClip();
+	if (!currentClip) {
+		return 1;
+	}
+	return currentClip->pulsesRemainingInStage_;
+}
+
 } // namespace deluge::gui::views
+
+// Global instance
+deluge::gui::views::PulseSeqView pulseSeqView;

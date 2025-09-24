@@ -195,6 +195,11 @@ public:
 	int32_t pulse6_ = 1; // Stage 6 pulse count
 	int32_t pulse7_ = 1; // Stage 7 pulse count
 
+	// Pulse Sequencer Timing State
+	int32_t currentPulseSeqStage_ = 0;   // Current stage (0-7)
+	int32_t pulsesRemainingInStage_ = 1; // Pulses left in current stage
+	bool pulseSeqIsActive_ = false;      // Whether Pulse Sequencer is running
+
 	void lengthChanged(ModelStackWithTimelineCounter* modelStack, int32_t oldLength, Action* action = nullptr) override;
 	NoteRow* createNewNoteRowForKit(ModelStackWithTimelineCounter* modelStack, bool atStart,
 	                                int32_t* getIndex = nullptr);

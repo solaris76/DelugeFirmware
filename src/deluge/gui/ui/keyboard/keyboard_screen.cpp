@@ -51,6 +51,7 @@
 #include "gui/ui/keyboard/layout/isomorphic.h"
 #include "gui/ui/keyboard/layout/norns.h"
 #include "gui/ui/keyboard/layout/piano.h"
+#include "gui/ui/keyboard/layout/pulse_seq.h"
 #include "gui/ui/keyboard/layout/velocity_drums.h"
 
 PLACE_SDRAM_BSS deluge::gui::ui::keyboard::KeyboardScreen keyboardScreen{};
@@ -64,6 +65,7 @@ PLACE_SDRAM_DATA layout::KeyboardLayoutPiano keyboard_layout_piano{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutChord keyboard_layout_chord{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutChordLibrary keyboard_layout_chord_library{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutNorns keyboard_layout_norns{};
+PLACE_SDRAM_DATA layout::KeyboardLayoutPulseSeq keyboard_layout_pulse_seq{};
 PLACE_SDRAM_DATA std::array<KeyboardLayout*, KeyboardLayoutType::KeyboardLayoutTypeMaxElement> layout_list = {nullptr};
 
 KeyboardScreen::KeyboardScreen() {
@@ -74,6 +76,7 @@ KeyboardScreen::KeyboardScreen() {
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeChordLibrary] = &keyboard_layout_chord_library;
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeDrums] = &keyboard_layout_velocity_drums;
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeNorns] = &keyboard_layout_norns;
+	layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq] = &keyboard_layout_pulse_seq;
 
 	memset(&pressedPads, 0, sizeof(pressedPads));
 	currentNotesState = {0};
@@ -939,6 +942,40 @@ void KeyboardScreen::graphicsRoutine() {
 	keyboardTickSquares[kDisplayHeight - 1] = newTickSquare;
 
 	PadLEDs::setTickSquares(keyboardTickSquares, colours);
+
+	// Process Pulse Sequencer timing if active
+	if (getCurrentInstrumentClip()
+	    && getCurrentInstrumentClip()->keyboardState.currentLayout == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
+		layout::KeyboardLayoutPulseSeq* pulseSeqLayout =
+		    static_cast<layout::KeyboardLayoutPulseSeq*>(layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq]);
+		if (pulseSeqLayout) {
+			pulseSeqLayout->processPulseSeqTiming();
+		}
+	}
+}
+
+void KeyboardScreen::notifyPlaybackBegun() {
+	// Start Pulse Sequencer if it's the current layout
+	if (getCurrentInstrumentClip()
+	    && getCurrentInstrumentClip()->keyboardState.currentLayout == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
+		layout::KeyboardLayoutPulseSeq* pulseSeqLayout =
+		    static_cast<layout::KeyboardLayoutPulseSeq*>(layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq]);
+		if (pulseSeqLayout) {
+			pulseSeqLayout->startPulseSeq();
+		}
+	}
+}
+
+void KeyboardScreen::playbackEnded() {
+	// Stop Pulse Sequencer if it's the current layout
+	if (getCurrentInstrumentClip()
+	    && getCurrentInstrumentClip()->keyboardState.currentLayout == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
+		layout::KeyboardLayoutPulseSeq* pulseSeqLayout =
+		    static_cast<layout::KeyboardLayoutPulseSeq*>(layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq]);
+		if (pulseSeqLayout) {
+			pulseSeqLayout->stopPulseSeq();
+		}
+	}
 }
 
 } // namespace deluge::gui::ui::keyboard

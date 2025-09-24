@@ -22,9 +22,11 @@
 #include "gui/ui/load/load_instrument_preset_ui.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
+#include "gui/views/pulse_seq_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/view.h"
 #include "hid/buttons.h"
+#include "io/debug/print.h"
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
 #include "memory/general_memory_allocator.h"
@@ -731,6 +733,27 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 		}
 
 		noteRowsNumTicksBehindClip = 0;
+
+		// Process Pulse Sequencer timing if active
+		if (pulseSeqIsActive_) {
+			// Check if we're in Pulse Sequencer view and process timing
+			extern deluge::gui::views::PulseSeqView pulseSeqView;
+			Debug::println("PulseSeq active, checking view...");
+			if (pulseSeqView.opened()) {
+				Debug::println("PulseSeq view is open, calling doTickForward");
+				int32_t ticksTilNextPulseSeqEvent =
+				    pulseSeqView.doTickForward(lastProcessedPos, currentlyPlayingReversed);
+				if (ticksTilNextPulseSeqEvent < ticksTilNextNoteRowEvent) {
+					ticksTilNextNoteRowEvent = ticksTilNextPulseSeqEvent;
+				}
+			}
+			else {
+				Debug::println("PulseSeq view is NOT open");
+			}
+		}
+		else {
+			Debug::println("PulseSeq is NOT active");
+		}
 
 		// Count up how many of each probability there are
 		uint8_t probabilityCount[kNumProbabilityValues];

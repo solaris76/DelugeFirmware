@@ -65,6 +65,10 @@ public:
 	UIModControllableContext getUIModControllableContext() override { return UIModControllableContext::CLIP; }
 	void checkNewInstrument(Instrument* newInstrument);
 
+	// Playback notifications
+	void notifyPlaybackBegun() override;
+	void playbackEnded() override;
+
 private:
 	bool opened() override;
 	void focusRegained() override;

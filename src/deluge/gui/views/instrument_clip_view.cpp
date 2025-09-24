@@ -28,6 +28,7 @@
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/browser/sample_browser.h"
 #include "gui/ui/keyboard/keyboard_screen.h"
+
 #include "gui/ui/load/load_instrument_preset_ui.h"
 #include "gui/ui/menus.h"
 #include "gui/ui/rename/rename_clip_ui.h"
@@ -529,16 +530,6 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 			}
 
 			if (currentUIMode == UI_MODE_NONE) {
-				// Check if we're in a synth clip - if so, toggle to generative mode
-				// But only if shift is NOT held (shift+synth should create new synth preset)
-				if (getCurrentOutputType() == OutputType::SYNTH && !Buttons::isShiftButtonPressed()) {
-					InstrumentClip* clip = getCurrentInstrumentClip();
-					if (clip) {
-						deluge::gui::views::pulseSeqView.openUI(clip);
-						changeRootUI(&deluge::gui::views::pulseSeqView);
-						return ActionResult::DEALT_WITH;
-					}
-				}
 				handleInstrumentChange(OutputType::SYNTH);
 			}
 			else if (currentUIMode == UI_MODE_ADDING_DRUM_NOTEROW || currentUIMode == UI_MODE_AUDITIONING) {
@@ -556,16 +547,6 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 			}
 
 			if (currentUIMode == UI_MODE_NONE) {
-				// Check if we're in a MIDI clip - if so, toggle to generative mode
-				// But only if shift is NOT held (shift+midi should create new midi preset)
-				if (getCurrentOutputType() == OutputType::MIDI_OUT && !Buttons::isShiftButtonPressed()) {
-					InstrumentClip* clip = getCurrentInstrumentClip();
-					if (clip) {
-						deluge::gui::views::pulseSeqView.openUI(clip);
-						changeRootUI(&deluge::gui::views::pulseSeqView);
-						return ActionResult::DEALT_WITH;
-					}
-				}
 				changeOutputType(OutputType::MIDI_OUT);
 
 				// Drop out of scale mode if the clip is now routed to MIDI transpose,

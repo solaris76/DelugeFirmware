@@ -28,6 +28,7 @@
 #include "gui/ui/keyboard/keyboard_screen.h"
 #include "gui/ui/load/load_instrument_preset_ui.h"
 #include "gui/ui/menus.h"
+
 #include "gui/ui/rename/rename_drum_ui.h"
 #include "gui/ui/rename/rename_midi_cc_ui.h"
 #include "gui/ui/sample_marker_editor.h"
@@ -1338,11 +1339,6 @@ void AutomationView::handleClipButtonAction(bool on, bool isAudioClip) {
 	else if (on && (currentUIMode == UI_MODE_NONE || (currentUIMode == UI_MODE_NOTES_PRESSED && padSelectionOn))) {
 		if (padSelectionOn) {
 			initPadSelection();
-		}
-		// Check if we came from generative view
-		if (deluge::gui::views::PulseSeqView::cameFromPulseSeqView) {
-			deluge::gui::views::PulseSeqView::cameFromPulseSeqView = false; // Reset flag
-			changeRootUI(&deluge::gui::views::pulseSeqView);
 		}
 		else if (isAudioClip) {
 			changeRootUI(&audioClipView);

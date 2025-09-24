@@ -2,7 +2,7 @@
 
 #include "definitions_cxx.hpp"
 #include "gui/colour/rgb.h"
-#include "gui/ui/ui.h"
+#include "gui/ui/root_ui.h"
 #include "hid/button.h"
 #include "model/clip/clip_minder.h"
 #include "model/clip/instrument_clip.h"
@@ -11,7 +11,7 @@
 
 namespace deluge::gui::views {
 
-class PulseSeqView : public UI, public ClipMinder {
+class PulseSeqView : public RootUI, public ClipMinder {
 public:
 	PulseSeqView() = default;
 	virtual ~PulseSeqView() = default;
@@ -23,6 +23,7 @@ public:
 	void closeUI();
 	bool opened() override;
 	void focusRegained() override;
+	void notifyPlaybackBegun() override;
 
 	// UI overrides
 	void render();
@@ -34,6 +35,7 @@ public:
 	// Button handling
 	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override;
 	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override;
+	void graphicsRoutine() override;
 	ActionResult verticalEncoderAction(int32_t offset, bool inCardRoutine) override;
 	ActionResult horizontalEncoderAction(int32_t offset) override;
 	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
@@ -60,6 +62,15 @@ public:
 	NoteSet getCurrentScaleNotes();
 	int32_t getActualNoteValue(int32_t column);
 	void getNoteName(char* buffer, int32_t bufferSize, int32_t column);
+
+	// Pulse Sequencer timing methods
+	void processPulseSeqTick();
+	void startPulseSeq();
+	void stopPulseSeq();
+	void resetPulseSeq();
+	int32_t getCurrentStage();
+	int32_t getPulsesRemainingInStage();
+	int32_t doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed);
 
 private:
 	InstrumentClip* currentClip_ = nullptr;
