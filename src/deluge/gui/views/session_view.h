@@ -26,6 +26,7 @@
 class Editor;
 class InstrumentClip;
 class AudioClip;
+class SequencerClip;
 class Clip;
 class ModelStack;
 class ModelStackWithTimelineCounter;
@@ -182,6 +183,10 @@ private:
 
 	Clip* createNewAudioClip(int32_t yDisplay);
 	Clip* createNewInstrumentClip(OutputType outputType, int32_t yDisplay);
+
+	// Clip type conversion methods
+	void convertInstrumentClipToSequencerClip(InstrumentClip* instrumentClip);
+	void convertSequencerClipToInstrumentClip(SequencerClip* sequencerClip);
 
 	bool createNewTrackForAudioClip(AudioClip* newClip);
 	bool createNewTrackForInstrumentClip(OutputType type, InstrumentClip* clip, bool copyDrumsFromClip);

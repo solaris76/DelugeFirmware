@@ -39,6 +39,8 @@
 #include "gui/views/audio_clip_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "gui/views/random_sequencer_clip_view.h"
+#include "model/clip/sequencer_clip.h"
 #include "gui/views/performance_view.h"
 #include "gui/views/view.h"
 #include "gui/waveform/waveform_renderer.h"
@@ -578,63 +580,75 @@ changeOutputType:
 				if (clip->type == ClipType::AUDIO) {
 					display->displayPopup(l10n::get(l10n::String::STRING_FOR_CANT_CONVERT_TYPE));
 				}
-				else {
-
+				else if (clip->type == ClipType::INSTRUMENT) {
 					InstrumentClip* instrumentClip = (InstrumentClip*)clip;
 					Instrument* instrument = (Instrument*)instrumentClip->output;
 
-					// don't allow clip type change if clip is not empty
-					// only impose this restriction if switching to/from kit clip
-					if (((instrument->type == OutputType::KIT) || (newOutputType == OutputType::KIT))
-					    && (!clip->isEmpty() || !clip->output->isEmpty())) {
-						return ActionResult::DEALT_WITH;
-					}
-
-					// If load button held, go into LoadInstrumentPresetUI
-					if (Buttons::isButtonPressed(deluge::hid::button::LOAD)) {
-
-						// Can't do that for MIDI or CV Clips though
-						if (newOutputType == OutputType::MIDI_OUT || newOutputType == OutputType::CV) {
-							goto doActualSimpleChange;
+					// Check if we need to change output type first
+					if (instrument->type != newOutputType) {
+						// First press: Change output type (existing behavior)
+						
+						// don't allow clip type change if clip is not empty
+						// only impose this restriction if switching to/from kit clip
+						if (((instrument->type == OutputType::KIT) || (newOutputType == OutputType::KIT))
+						    && (!clip->isEmpty() || !clip->output->isEmpty())) {
+							return ActionResult::DEALT_WITH;
 						}
 
-						actionLogger.deleteAllLogs();
+						// If load button held, go into LoadInstrumentPresetUI
+						if (Buttons::isButtonPressed(deluge::hid::button::LOAD)) {
 
-						currentUIMode = UI_MODE_NONE;
-						selectedClipYDisplay = 255;
+							// Can't do that for MIDI or CV Clips though
+							if (newOutputType == OutputType::MIDI_OUT || newOutputType == OutputType::CV) {
+								goto doActualSimpleChange;
+							}
 
-						loadInstrumentPresetUI.setupLoadInstrument(newOutputType, instrument, nullptr);
-						openUI(&loadInstrumentPresetUI);
-					}
+							actionLogger.deleteAllLogs();
 
-					// Otherwise, just change the instrument type
-					else {
+							currentUIMode = UI_MODE_NONE;
+							selectedClipYDisplay = 255;
+
+							loadInstrumentPresetUI.setupLoadInstrument(newOutputType, instrument, nullptr);
+							openUI(&loadInstrumentPresetUI);
+						}
+
+						// Otherwise, just change the instrument type
+						else {
 doActualSimpleChange:
 
-						switch (currentSong->sessionLayout) {
-						case SessionLayoutType::SessionLayoutTypeRows: {
-							char modelStackMemory[MODEL_STACK_MAX_SIZE];
-							ModelStackWithTimelineCounter* modelStack =
-							    setupModelStackWithTimelineCounter(modelStackMemory, currentSong, instrumentClip);
+							switch (currentSong->sessionLayout) {
+							case SessionLayoutType::SessionLayoutTypeRows: {
+								char modelStackMemory[MODEL_STACK_MAX_SIZE];
+								ModelStackWithTimelineCounter* modelStack =
+								    setupModelStackWithTimelineCounter(modelStackMemory, currentSong, instrumentClip);
 
-							view.changeOutputType(newOutputType, modelStack, true);
-							break;
-						}
-						case SessionLayoutType::SessionLayoutTypeGrid: {
-							// Mostly taken from ArrangerView::changeOutputType
-							if (instrument->type != newOutputType) {
-								Instrument* newInstrument = currentSong->changeOutputType(instrument, newOutputType);
-								if (newInstrument) {
-									view.displayOutputName(newInstrument);
-									view.setActiveModControllableTimelineCounter(newInstrument->getActiveClip());
-								}
+								view.changeOutputType(newOutputType, modelStack, true);
+								break;
 							}
-							break;
+							case SessionLayoutType::SessionLayoutTypeGrid: {
+								// Mostly taken from ArrangerView::changeOutputType
+								if (instrument->type != newOutputType) {
+									Instrument* newInstrument = currentSong->changeOutputType(instrument, newOutputType);
+									if (newInstrument) {
+										view.displayOutputName(newInstrument);
+										view.setActiveModControllableTimelineCounter(newInstrument->getActiveClip());
+									}
+								}
+								break;
+							}
+							// explicit fallthrough cases
+							case SessionLayoutType::SessionLayoutTypeMaxElement:;
+							}
 						}
-						// explicit fallthrough cases
-						case SessionLayoutType::SessionLayoutTypeMaxElement:;
-						}
+					} else {
+						// Second press: Toggle to SequencerClip (same output type)
+						convertInstrumentClipToSequencerClip(instrumentClip);
 					}
+				}
+				else if (clip->type == ClipType::SEQUENCER) {
+					// Second press: Toggle back to InstrumentClip
+					SequencerClip* sequencerClip = (SequencerClip*)clip;
+					convertSequencerClipToInstrumentClip(sequencerClip);
 				}
 
 				requestRendering(this, 1 << selectedClipYDisplay, 0);
@@ -2811,6 +2825,38 @@ void SessionView::transitionToViewForClip(Clip* clip) {
 		iterateAndCallSpecificDeviceHook(MIDICableUSBHosted::Hook::HOOK_ON_TRANSITION_TO_SESSION_VIEW);
 	}
 
+	// SequencerClips
+	else if (clip->type == ClipType::SEQUENCER) {
+		SequencerClip* sequencerClip = static_cast<SequencerClip*>(clip);
+		
+		currentUIMode = UI_MODE_INSTRUMENT_CLIP_EXPANDING; // Reuse the same mode for now
+		
+		// Route to the appropriate SequencerClipView based on SequencerType
+		switch (sequencerClip->getSequencerType()) {
+			case SequencerType::RANDOM:
+				randomSequencerClipView.renderMainPads(0xFFFFFFFF, PadLEDs::imageStore, PadLEDs::occupancyMaskStore, false);
+				randomSequencerClipView.renderSidebar(0xFFFFFFFF, PadLEDs::imageStore, PadLEDs::occupancyMaskStore);
+				break;
+			case SequencerType::PULSE:
+			case SequencerType::EUCLIDEAN_ENHANCED:
+			case SequencerType::ARPEGGIATOR:
+				// For now, use RandomSequencerClipView as fallback
+				// TODO: Create dedicated views for these types
+				randomSequencerClipView.renderMainPads(0xFFFFFFFF, PadLEDs::imageStore, PadLEDs::occupancyMaskStore, false);
+				randomSequencerClipView.renderSidebar(0xFFFFFFFF, PadLEDs::imageStore, PadLEDs::occupancyMaskStore);
+				break;
+		}
+		
+		PadLEDs::numAnimatedRows = kDisplayHeight + 2;
+		for (int32_t y = 0; y < PadLEDs::numAnimatedRows; y++) {
+			PadLEDs::animatedRowGoingTo[y] = clipPlaceOnScreen;
+			PadLEDs::animatedRowGoingFrom[y] = y - 1;
+		}
+		
+		PadLEDs::setupInstrumentClipCollapseAnimation(true);
+		PadLEDs::renderClipExpandOrCollapse();
+	}
+
 	// AudioClips
 	else {
 		AudioClip* clip = getCurrentAudioClip();
@@ -4862,4 +4908,61 @@ void SessionView::gridPulseSelectedClip() {
 
 	// action the colour change / render the pulse on the grid
 	PadLEDs::sendOutMainPadColours();
+}
+
+void SessionView::convertInstrumentClipToSequencerClip(InstrumentClip* instrumentClip) {
+	if (!instrumentClip) return;
+	
+	actionLogger.deleteAllLogs(); // Can't undo past this!
+	
+	// Create new SequencerClip
+	SequencerClip* sequencerClip = new SequencerClip(currentSong);
+	if (!sequencerClip) return;
+	
+	// Copy basic properties
+	sequencerClip->copyBasicsFrom(instrumentClip);
+	sequencerClip->output = instrumentClip->output;
+	sequencerClip->colourOffset = instrumentClip->colourOffset;
+	
+	// Set default sequencer settings
+	sequencerClip->getSettings().sequencerType = SequencerType::RANDOM;
+	sequencerClip->getSettings().density = 50;
+	sequencerClip->getSettings().velocityMin = 64;
+	sequencerClip->getSettings().velocityMax = 127;
+	sequencerClip->getSettings().octaveRange = 2;
+	sequencerClip->getSettings().patternLength = 8;
+	
+	// Replace the clip in the song - TODO: Implement proper clip replacement
+	// For now, just set the new clip as active
+	sequencerClip->output = instrumentClip->output;
+	
+	// Update the UI
+	view.setActiveModControllableTimelineCounter(sequencerClip);
+	display->displayPopup("Converted to SequencerClip");
+}
+
+void SessionView::convertSequencerClipToInstrumentClip(SequencerClip* sequencerClip) {
+	if (!sequencerClip) return;
+	
+	actionLogger.deleteAllLogs(); // Can't undo past this!
+	
+	// Create new InstrumentClip
+	InstrumentClip* instrumentClip = new InstrumentClip();
+	if (!instrumentClip) return;
+	
+	// Copy basic properties
+	instrumentClip->copyBasicsFrom(sequencerClip);
+	instrumentClip->output = sequencerClip->output;
+	instrumentClip->colourOffset = sequencerClip->colourOffset;
+	
+	// Set default instrument clip settings
+	instrumentClip->inScaleMode = false; // Default scale mode
+	
+	// Replace the clip in the song - TODO: Implement proper clip replacement
+	// For now, just set the new clip as active
+	instrumentClip->output = sequencerClip->output;
+	
+	// Update the UI
+	view.setActiveModControllableTimelineCounter(instrumentClip);
+	display->displayPopup("Converted to InstrumentClip");
 }

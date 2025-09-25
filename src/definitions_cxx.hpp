@@ -1078,6 +1078,7 @@ enum GridMode : uint8_t {
 enum class ClipType {
 	INSTRUMENT,
 	AUDIO,
+	SEQUENCER,
 };
 
 enum class LaunchStyle { DEFAULT, FILL, ONCE };

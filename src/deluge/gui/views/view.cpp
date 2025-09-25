@@ -2065,12 +2065,22 @@ void View::drawOutputNameFromDetails(OutputType outputType, int32_t channel, int
 
 		char const* outputTypeText = getOutputTypeName(outputType, channel);
 
+		// Create display text with clip type information
+		char displayText[32];
+		if (clip && clip->type == ClipType::SEQUENCER) {
+			// Show "SYNTH: SEQ" or "MIDI: SEQ" etc.
+			snprintf(displayText, sizeof(displayText), "%s: SEQ", outputTypeText);
+		} else {
+			// Show "SYNTH: STEP" or "MIDI: STEP" etc. (default step sequencer)
+			snprintf(displayText, sizeof(displayText), "%s: STEP", outputTypeText);
+		}
+
 #if OLED_MAIN_HEIGHT_PIXELS == 64
 		int32_t yPos = OLED_MAIN_TOPMOST_PIXEL + 12;
 #else
 		int32_t yPos = OLED_MAIN_TOPMOST_PIXEL + 3;
 #endif
-		canvas.drawStringCentred(outputTypeText, yPos, kTextSpacingX, kTextSpacingY);
+		canvas.drawStringCentred(displayText, yPos, kTextSpacingX, kTextSpacingY);
 	}
 
 	char buffer[12];
