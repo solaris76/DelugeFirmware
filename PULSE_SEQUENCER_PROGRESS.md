@@ -132,6 +132,43 @@ Stage 7: Gate=SINGLE, Scale=Sixth (5), Octave=0, Pulses=1
 
 ---
 
-**Status**: 🟡 **In Progress** - UI complete, core processing needs E410 fix
-**Next Session**: Debug and fix E410 crash in sequencer processing
-**Target**: Fully functional pulse sequencer with note generation
+## Latest Update - Session 3
+
+**Date**: Current session
+**Status**: Major stability improvements and gate behavior fixes implemented
+
+### Completed This Session:
+✅ **Fixed E410 crashes** during stage transitions with comprehensive safety checks
+✅ **Implemented proper note-on/off logic** for all gate types (OFF, SINGLE, MULTIPLE, HOLD)
+✅ **Added gate duration control** (1-16 ticks, default 3) via Shift+Horizontal Encoder
+✅ **Enhanced memory safety** with bounds checking and validation
+✅ **Added robust error handling** for song data access
+✅ **Improved stage transition logic** with safe state management
+✅ **Fixed unsafe type casting** and array access issues
+✅ **Added fallback mechanisms** for invalid states
+
+### Technical Improvements:
+- Enhanced `startPulseSeq()` with state reset and validation
+- Improved `processPulseSeqTick()` with comprehensive safety checks
+- Protected `getActualNoteValue()` with try-catch and fallbacks
+- Added multiple layers of bounds checking and validation
+- Implemented graceful degradation for edge cases
+
+### Outstanding Issues:
+⚠️ **Still experiencing occasional E410 crashes** after restart (investigation ongoing)
+⚠️ **Need to test all gate types** with various configurations
+⚠️ **Need to verify stage progression** works correctly in all scenarios
+⚠️ **Need to test gate duration control** functionality
+⚠️ **May need additional debugging** for remaining crash scenarios
+
+### Next Session Priorities:
+1. **Monitor for remaining E410 crashes** and add targeted fixes
+2. **Test comprehensive gate behavior scenarios**
+3. **Verify UI controls work correctly**
+4. **Consider adding more granular debug logging** if issues persist
+
+---
+
+**Status**: 🟡 **In Progress** - Major stability improvements applied, testing ongoing
+**Next Session**: Test comprehensive scenarios and monitor for remaining issues
+**Target**: Fully functional pulse sequencer with stable operation
