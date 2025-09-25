@@ -26,6 +26,7 @@
 #include "gui/views/audio_clip_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "gui/views/random_sequencer_clip_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/view.h"
 #include "gui/waveform/waveform_render_data.h"
@@ -34,6 +35,7 @@
 #include "hid/display/oled.h"
 #include "model/clip/audio_clip.h"
 #include "model/clip/instrument_clip.h"
+#include "model/clip/sequencer_clip.h"
 #include "model/sample/sample.h"
 #include "model/song/song.h"
 #include "processing/engines/audio_engine.h"
@@ -1018,9 +1020,15 @@ void renderClipExpandOrCollapse() {
 
 			bool onKeyboardScreen = ((clip->type == ClipType::INSTRUMENT) && ((InstrumentClip*)clip)->onKeyboardScreen);
 
+			// Handle SequencerClips - use base SequencerClipView for now
+			if (clip->type == ClipType::SEQUENCER) {
+				// For simplicity, start with just one sequencer view
+				// TODO: Later add multiple sequencer views and horizontal encoder switching
+				changeRootUI(&randomSequencerClipView); // Using this as the single sequencer view for now
+			}
 			// when transitioning back to clip, if keyboard view is enabled, it takes precedent
 			// over automation and instrument clip views.
-			if (clip->onAutomationClipView && !onKeyboardScreen) {
+			else if (clip->onAutomationClipView && !onKeyboardScreen) {
 				changeRootUI(&automationView);
 				// If we need to zoom in horizontally because the Clip's too short...
 				bool anyZoomingDone = instrumentClipView.zoomToMax(true);

@@ -2833,21 +2833,8 @@ void SessionView::transitionToViewForClip(Clip* clip) {
 
 		currentUIMode = UI_MODE_INSTRUMENT_CLIP_EXPANDING; // Reuse the same mode for now
 
-		// Route to the appropriate SequencerClipView based on SequencerType
-		switch (sequencerClip->getSequencerType()) {
-		case SequencerType::RANDOM:
-			randomSequencerClipView.renderMainPads(0xFFFFFFFF, PadLEDs::imageStore, PadLEDs::occupancyMaskStore, false);
-			randomSequencerClipView.renderSidebar(0xFFFFFFFF, PadLEDs::imageStore, PadLEDs::occupancyMaskStore);
-			break;
-		case SequencerType::PULSE:
-		case SequencerType::EUCLIDEAN_ENHANCED:
-		case SequencerType::ARPEGGIATOR:
-			// For now, use RandomSequencerClipView as fallback
-			// TODO: Create dedicated views for these types
-			randomSequencerClipView.renderMainPads(0xFFFFFFFF, PadLEDs::imageStore, PadLEDs::occupancyMaskStore, false);
-			randomSequencerClipView.renderSidebar(0xFFFFFFFF, PadLEDs::imageStore, PadLEDs::occupancyMaskStore);
-			break;
-		}
+		// For now, use the base SequencerClipView for all sequencer types
+		// TODO: Later add multiple sequencer views and use horizontal encoder to switch between them
 
 		PadLEDs::numAnimatedRows = kDisplayHeight + 2;
 		for (int32_t y = 0; y < PadLEDs::numAnimatedRows; y++) {
@@ -2857,6 +2844,9 @@ void SessionView::transitionToViewForClip(Clip* clip) {
 
 		PadLEDs::setupInstrumentClipCollapseAnimation(true);
 		PadLEDs::renderClipExpandOrCollapse();
+
+		// Hook point for specificMidiDevice
+		iterateAndCallSpecificDeviceHook(MIDICableUSBHosted::Hook::HOOK_ON_TRANSITION_TO_SESSION_VIEW);
 	}
 
 	// AudioClips

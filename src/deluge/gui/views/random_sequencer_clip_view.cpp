@@ -16,8 +16,9 @@
  */
 
 #include "random_sequencer_clip_view.h"
-#include "gui/ui/sound_editor.h"
 #include "gui/colour/colour.h"
+#include "gui/ui/sound_editor.h"
+#include "model/clip/instrument_clip.h"
 #include "model/clip/sequencer_clip.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
@@ -27,20 +28,36 @@
 RandomSequencerClipView randomSequencerClipView{};
 
 void RandomSequencerClipView::renderSequencerControls(RGB image[][kDisplayWidth + kSideBarWidth]) {
-	SequencerClip* clip = getCurrentSequencerClip();
-	if (!clip) {
+	// With new approach, work with InstrumentClip in generative mode
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip || !clip->inGenerativeMode) {
 		return;
 	}
-	
-	// Clear the main pad area
+
+	// Clear the main pad area first
 	for (int y = 0; y < kDisplayHeight; y++) {
 		for (int x = 0; x < kDisplayWidth; x++) {
 			image[y][x] = RGB{0, 0, 0};
 		}
 	}
-	
+
 	// Render density control on top row
 	renderDensityControl(image);
+
+	// Add some distinctive colored pads to show we're in generative mode
+	// Bottom row: Show some colored indicators
+	for (int x = 0; x < 4; x++) {
+		image[kDisplayHeight - 1][x] = RGB{0, 255, 0}; // Green indicators
+	}
+
+	// Right side: Show some pattern indicators
+	for (int y = 2; y < 6; y++) {
+		image[y][kDisplayWidth - 1] = RGB{255, 0, 255}; // Magenta pattern indicators
+	}
+
+	// Center area: Show some generative activity
+	image[3][7] = RGB{255, 255, 0}; // Yellow center
+	image[4][8] = RGB{255, 255, 0}; // Yellow center
 }
 
 void RandomSequencerClipView::handleEncoderTurn(int32_t offset) {
@@ -48,30 +65,26 @@ void RandomSequencerClipView::handleEncoderTurn(int32_t offset) {
 }
 
 void RandomSequencerClipView::renderOLEDInfo(deluge::hid::display::oled_canvas::Canvas& canvas) {
-	SequencerClip* clip = getCurrentSequencerClip();
-	if (clip) {
-		// Display current density
-		canvas.drawString("DENSITY:", 0, 12, kTextSpacingX, kTextSizeYUpdated);
-		std::array<char, 10> densityStr;
-		snprintf(densityStr.data(), densityStr.size(), "%d%%", clip->getSettings().density);
-		canvas.drawString(densityStr.data(), 0, 24, kTextSpacingX, kTextSizeYUpdated);
-	}
+	// Don't override with density info - let the base class show "SYNTH: SEQ" format
+	// The density info can be shown elsewhere or on demand
 }
 
 void RandomSequencerClipView::renderDensityControl(RGB image[][kDisplayWidth + kSideBarWidth]) {
-	SequencerClip* clip = getCurrentSequencerClip();
-	if (!clip) {
+	// With new approach, work with InstrumentClip in generative mode
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip || !clip->inGenerativeMode) {
 		return;
 	}
-	
-	// Show density as a bar across the top row
-	uint32_t density = clip->getSettings().density;
+
+	// For now, show a fixed density of 50% - we can make this adjustable later
+	uint32_t density = 50; // Fixed for now
 	int32_t densityBars = (static_cast<int32_t>(density) * kDisplayWidth) / 100;
-	
+
 	for (int x = 0; x < kDisplayWidth; x++) {
 		if (x < densityBars) {
 			image[0][x] = RGB{255, 255, 0}; // Yellow for density bars
-		} else {
+		}
+		else {
 			image[0][x] = RGB{32, 32, 32}; // Dark gray for empty
 		}
 	}
@@ -82,7 +95,7 @@ void RandomSequencerClipView::handleDensityChange(int32_t offset) {
 	if (!clip) {
 		return;
 	}
-	
+
 	SequencerSettings& settings = clip->getSettings();
 	int32_t newDensity = static_cast<int32_t>(settings.density) + offset;
 	newDensity = (newDensity < 0) ? 0 : (newDensity > 100) ? 100 : newDensity;

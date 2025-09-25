@@ -16,8 +16,11 @@
  */
 
 #include "sequencer_clip_view.h"
-#include "gui/ui/sound_editor.h"
 #include "gui/colour/colour.h"
+#include "gui/ui/sound_editor.h"
+#include "gui/views/instrument_clip_view.h"
+#include "gui/views/view.h"
+#include "model/clip/instrument_clip.h"
 #include "model/clip/sequencer_clip.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
@@ -46,7 +49,7 @@ bool SequencerClipView::renderMainPads(uint32_t whichRows, RGB image[][kDisplayW
 		needsRendering_ = false;
 		lastRenderTime_ = AudioEngine::audioSampleTimer;
 	}
-	
+
 	return true;
 }
 
@@ -72,6 +75,79 @@ void SequencerClipView::tellMatrixDriverWhichRowsContainSomethingZoomable() {
 }
 
 ActionResult SequencerClipView::buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
+	using namespace deluge::hid::button;
+
+	// Handle SYNTH button - simple flag toggle approach (no clip conversion!)
+	if (b == SYNTH && on && currentUIMode == UI_MODE_NONE) {
+		if (inCardRoutine) {
+			return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+		}
+
+		// Simple approach: just toggle back to step mode
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (clip) {
+			clip->inGenerativeMode = false; // Switch back to step mode
+			changeRootUI(&instrumentClipView);
+			uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
+		}
+		return ActionResult::DEALT_WITH;
+	}
+
+	// Handle MIDI button - simple flag toggle approach (same as SYNTH)
+	else if (b == MIDI && on && currentUIMode == UI_MODE_NONE) {
+		if (inCardRoutine) {
+			return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+		}
+
+		// Simple approach: toggle back to step mode and change to MIDI
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (clip) {
+			clip->inGenerativeMode = false; // Switch back to step mode
+			changeRootUI(&instrumentClipView);
+			uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
+			// Then change output type using normal Deluge logic
+			instrumentClipView.changeOutputType(OutputType::MIDI_OUT);
+		}
+		return ActionResult::DEALT_WITH;
+	}
+
+	// Handle KIT button - simple flag toggle approach (same as SYNTH)
+	else if (b == KIT && on && currentUIMode == UI_MODE_NONE) {
+		if (inCardRoutine) {
+			return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+		}
+
+		// Simple approach: toggle back to step mode and change to KIT
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (clip) {
+			clip->inGenerativeMode = false; // Switch back to step mode
+			changeRootUI(&instrumentClipView);
+			uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
+			// Then change output type using normal Deluge logic
+			instrumentClipView.changeOutputType(OutputType::KIT);
+		}
+		return ActionResult::DEALT_WITH;
+	}
+
+	// Handle CV button - simple flag toggle approach (same as SYNTH)
+	else if (b == CV && on && currentUIMode == UI_MODE_NONE) {
+		if (inCardRoutine) {
+			return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+		}
+
+		// Simple approach: toggle back to step mode and change to CV
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (clip) {
+			clip->inGenerativeMode = false; // Switch back to step mode
+			changeRootUI(&instrumentClipView);
+			uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
+			// Then change output type using normal Deluge logic
+			instrumentClipView.changeOutputType(OutputType::CV);
+		}
+		return ActionResult::DEALT_WITH;
+	}
+
+	// For all other buttons, delegate to parent
 	return ClipView::buttonAction(b, on, inCardRoutine);
 }
 
@@ -81,7 +157,7 @@ ActionResult SequencerClipView::padAction(int32_t x, int32_t y, int32_t velocity
 		needsRendering_ = true;
 		return ActionResult::DEALT_WITH;
 	}
-	
+
 	return ClipView::padAction(x, y, velocity);
 }
 
@@ -114,31 +190,32 @@ ActionResult SequencerClipView::horizontalEncoderAction(int32_t offset) {
 	if (clip) {
 		SequencerType currentType = clip->getSequencerType();
 		SequencerType newType = currentType;
-		
+
 		// Cycle through the enum values
 		int32_t currentIndex = static_cast<int32_t>(currentType);
 		int32_t maxIndex = static_cast<int32_t>(SequencerType::ARPEGGIATOR);
-		
+
 		if (offset > 0) {
 			// Next type
 			currentIndex = (currentIndex + 1) % (maxIndex + 1);
-		} else {
+		}
+		else {
 			// Previous type
 			currentIndex = (currentIndex - 1 + (maxIndex + 1)) % (maxIndex + 1);
 		}
-		
+
 		newType = static_cast<SequencerType>(currentIndex);
 		clip->setSequencerType(newType);
-		
+
 		needsRendering_ = true;
-		
+
 		// Display the new type
 		const char* typeNames[] = {"RANDOM", "PULSE", "EUCLIDEAN", "ARP"};
 		display->displayPopup(typeNames[currentIndex][0]);
-		
+
 		return ActionResult::DEALT_WITH;
 	}
-	
+
 	return ActionResult::NOT_DEALT_WITH;
 }
 
@@ -159,17 +236,24 @@ uint32_t SequencerClipView::getMaxZoom() {
 }
 
 void SequencerClipView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) {
-	SequencerClip* clip = getCurrentSequencerClip();
-	if (clip) {
-		canvas.drawString("SEQUENCER", 0, 0, kTextSpacingX, kTextSizeYUpdated);
-		renderOLEDInfo(canvas);
+	// Display the output name in "TRACK: SEQ" format for all track types
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->output && clip->inGenerativeMode) {
+		// Use the global view instance to display output name - this will show "SYNTH: SEQ", "MIDI: SEQ", "CV: SEQ"
+		view.displayOutputName(clip->output, false, clip);
 	}
 }
 
 SequencerClip* SequencerClipView::getCurrentSequencerClip() {
+	// With the new approach, we work with InstrumentClip in generative mode
+	// This function is kept for compatibility but shouldn't be used
+	return nullptr;
+}
+
+InstrumentClip* SequencerClipView::getCurrentInstrumentClip() {
 	Clip* clip = getCurrentClip();
-	if (clip && clip->type == ClipType::SEQUENCER) {
-		return static_cast<SequencerClip*>(clip);
+	if (clip && clip->type == ClipType::INSTRUMENT) {
+		return static_cast<InstrumentClip*>(clip);
 	}
 	return nullptr;
 }
@@ -179,14 +263,15 @@ void SequencerClipView::renderPlayhead(RGB image[][kDisplayWidth + kSideBarWidth
 	if (!clip || !playbackHandler.isEitherClockActive()) {
 		return;
 	}
-	
+
 	uint32_t currentStep = clip->getCurrentStep();
 	uint32_t patternLength = clip->getPatternLength();
-	
+
 	if (patternLength > 0) {
 		int32_t playheadX = (static_cast<int32_t>(currentStep) * kDisplayWidth) / static_cast<int32_t>(patternLength);
-		playheadX = (playheadX < static_cast<int32_t>(kDisplayWidth - 1)) ? playheadX : static_cast<int32_t>(kDisplayWidth - 1);
-		
+		playheadX =
+		    (playheadX < static_cast<int32_t>(kDisplayWidth - 1)) ? playheadX : static_cast<int32_t>(kDisplayWidth - 1);
+
 		// Render playhead as bright green
 		image[kDisplayHeight - 1][playheadX] = RGB{0, 255, 0};
 	}

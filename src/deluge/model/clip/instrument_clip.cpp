@@ -81,6 +81,7 @@ InstrumentClip::InstrumentClip(Song* song) : Clip(ClipType::INSTRUMENT), noteRow
 
 	inScaleMode = flashStorageCodeToScale(FlashStorage::defaultScale) != NO_SCALE;
 	onKeyboardScreen = false;
+	inGenerativeMode = false; // Start in step mode
 
 	if (song) {
 		int32_t yNote = ((uint16_t)(song->key.rootNote + 120) % 12) + 60;
@@ -126,6 +127,7 @@ void InstrumentClip::copyBasicsFrom(Clip const* otherClip) {
 
 	onKeyboardScreen = otherInstrumentClip->onKeyboardScreen;
 	inScaleMode = otherInstrumentClip->inScaleMode;
+	inGenerativeMode = otherInstrumentClip->inGenerativeMode;
 	wrapEditing = otherInstrumentClip->wrapEditing;
 	wrapEditLevel = otherInstrumentClip->wrapEditLevel;
 	yScroll = otherInstrumentClip->yScroll;
@@ -694,6 +696,35 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 	Clip::processCurrentPos(modelStack, ticksSinceLast);
 	if (modelStack->getTimelineCounter() != this) {
 		return; // Is this in case it's created a new Clip or something?
+	}
+
+	// Handle generative mode - generate random notes at 16th note intervals
+	if (inGenerativeMode && playbackHandler.isEitherClockActive()) {
+		static uint32_t generativeTickCounter = 0;
+		generativeTickCounter += ticksSinceLast;
+
+		// Calculate 16th note interval - use a simple fixed interval for now
+		uint32_t sixteenthNoteInterval = 6; // Simple timing for testing
+
+		if (generativeTickCounter >= sixteenthNoteInterval) {
+			generativeTickCounter = 0;
+
+			// 50% chance to generate a note (density control)
+			if ((getRandom255() % 100) < 50) {
+				// Generate a random note in a reasonable range
+				int32_t randomNote = 60 + (getRandom255() % 13) - 6; // C4 +/- half octave
+
+				// Simple note triggering for testing
+				if (output && output->type == OutputType::SYNTH) {
+					// For synth, try to trigger a note directly
+					SoundInstrument* soundInstrument = (SoundInstrument*)output;
+					if (soundInstrument) {
+						// Basic note trigger - just for testing
+						// TODO: Implement proper note generation using the SequencerClip model
+					}
+				}
+			}
+		}
 	}
 
 	// We already incremented / decremented noteRowsNumTicksBehindClip and ticksTilNextNoteRowEvent, in the call to

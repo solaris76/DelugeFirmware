@@ -224,6 +224,7 @@ public:
 	// Clip type conversion methods
 	void convertInstrumentClipToSequencerClip(InstrumentClip* instrumentClip);
 	void convertSequencerClipToInstrumentClip(SequencerClip* sequencerClip);
+	void convertSequencerClipToInstrumentClip(SequencerClip* sequencerClip, OutputType newOutputType);
 	Sound* getSoundForNoteRow(NoteRow* noteRow, ParamManagerForTimeline** getParamManager);
 	void someAuditioningHasEnded(bool recalculateLastAuditionedNoteOnScreen);
 	bool getAffectEntire() override;

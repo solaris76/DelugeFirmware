@@ -2067,10 +2067,16 @@ void View::drawOutputNameFromDetails(OutputType outputType, int32_t channel, int
 
 		// Create display text with clip type information
 		char displayText[32];
-		if (clip && clip->type == ClipType::SEQUENCER) {
+		InstrumentClip* instrumentClip = nullptr;
+		if (clip && clip->type == ClipType::INSTRUMENT) {
+			instrumentClip = static_cast<InstrumentClip*>(clip);
+		}
+
+		if ((clip && clip->type == ClipType::SEQUENCER) || (instrumentClip && instrumentClip->inGenerativeMode)) {
 			// Show "SYNTH: SEQ" or "MIDI: SEQ" etc.
 			snprintf(displayText, sizeof(displayText), "%s: SEQ", outputTypeText);
-		} else {
+		}
+		else {
 			// Show "SYNTH: STEP" or "MIDI: STEP" etc. (default step sequencer)
 			snprintf(displayText, sizeof(displayText), "%s: STEP", outputTypeText);
 		}

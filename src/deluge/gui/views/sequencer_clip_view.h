@@ -63,7 +63,8 @@ public:
 
 protected:
 	// Common helper methods for all sequencer views
-	SequencerClip* getCurrentSequencerClip();
+	SequencerClip* getCurrentSequencerClip();   // Legacy - not used with new approach
+	InstrumentClip* getCurrentInstrumentClip(); // New approach - work with InstrumentClip in generative mode
 	void renderPlayhead(RGB image[][kDisplayWidth + kSideBarWidth]);
 	void handlePadPress(int32_t x, int32_t y, int32_t velocity);
 

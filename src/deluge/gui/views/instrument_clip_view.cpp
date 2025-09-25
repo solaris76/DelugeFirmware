@@ -518,7 +518,8 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 			}
 
-			handleInstrumentChange(OutputType::KIT);
+			// KIT tracks should not toggle to sequencer mode - they have their own drum logic
+			changeOutputType(OutputType::KIT);
 		}
 	}
 
@@ -547,17 +548,7 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 			}
 
 			if (currentUIMode == UI_MODE_NONE) {
-				changeOutputType(OutputType::MIDI_OUT);
-
-				// Drop out of scale mode if the clip is now routed to MIDI transpose,
-				// and the transposer is set to chromatic.
-				InstrumentClip* clip = getCurrentInstrumentClip();
-				if (clip->output->type == OutputType::MIDI_OUT
-				    && MIDITranspose::controlMethod == MIDITransposeControlMethod::CHROMATIC
-				    && ((NonAudioInstrument*)clip->output)->getChannel() == MIDI_CHANNEL_TRANSPOSE) {
-					exitScaleMode();
-					clip->inScaleMode = false;
-				}
+				handleInstrumentChange(OutputType::MIDI_OUT);
 			}
 			else if (currentUIMode == UI_MODE_ADDING_DRUM_NOTEROW || currentUIMode == UI_MODE_AUDITIONING) {
 				createDrumForAuditionedNoteRow(DrumType::MIDI);
@@ -572,7 +563,7 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 			}
 
 			if (currentUIMode == UI_MODE_NONE) {
-				changeOutputType(OutputType::CV);
+				handleInstrumentChange(OutputType::CV);
 			}
 			else if (currentUIMode == UI_MODE_ADDING_DRUM_NOTEROW || currentUIMode == UI_MODE_AUDITIONING) {
 				createDrumForAuditionedNoteRow(DrumType::GATE);
@@ -943,18 +934,33 @@ bool InstrumentClipView::handleInstrumentChange(OutputType outputType) {
 		            == RuntimeFeatureStateToggle::On);
 	}
 
-	// Check if we're already on the same output type - if so, toggle clip type
+	// Check if we're already on the same output type - if so, toggle view mode
 	OutputType currentOutputType = getCurrentOutputType();
 	if (currentOutputType == outputType) {
-		Clip* currentClip = getCurrentClip();
-		if (currentClip->type == ClipType::INSTRUMENT) {
-			// Toggle to SequencerClip
-			convertInstrumentClipToSequencerClip(static_cast<InstrumentClip*>(currentClip));
-			return true;
+		// Allow generative mode for SYNTH, MIDI, and CV tracks
+		if (outputType == OutputType::SYNTH || outputType == OutputType::MIDI_OUT || outputType == OutputType::CV) {
+			// Simple approach: just toggle the view without converting clips
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip) {
+				// Toggle generative mode flag
+				clip->inGenerativeMode = !clip->inGenerativeMode;
+
+				// Switch to appropriate view
+				if (clip->inGenerativeMode) {
+					// Switch to generative view
+					changeRootUI(&randomSequencerClipView);
+					uiNeedsRendering(&randomSequencerClipView, 0xFFFFFFFF, 0);
+				}
+				else {
+					// Switch back to step view
+					changeRootUI(&instrumentClipView);
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
+				}
+				return true;
+			}
 		}
-		else if (currentClip->type == ClipType::SEQUENCER) {
-			// Toggle back to InstrumentClip
-			convertSequencerClipToInstrumentClip(static_cast<SequencerClip*>(currentClip));
+		else {
+			// For KIT tracks, just stay in step mode (normal Deluge behavior)
 			return true;
 		}
 	}
@@ -7761,27 +7767,74 @@ void InstrumentClipView::blinkSelectedNoteRow(int32_t whichMainRows) {
 }
 
 void InstrumentClipView::convertInstrumentClipToSequencerClip(InstrumentClip* instrumentClip) {
-	if (!instrumentClip)
+	if (!instrumentClip || !currentSong)
 		return;
 
 	actionLogger.deleteAllLogs(); // Can't undo past this!
 
+	// Extra safety check - make sure we're not already converting
+	static bool converting = false;
+	if (converting) {
+		return; // Prevent recursive calls
+	}
+	converting = true;
+
 	// Get the clip index in the session
 	int32_t clipIndex = currentSong->sessionClips.getIndexForClip(instrumentClip);
 	if (clipIndex == -1) {
-		display->displayPopup("Error: Clip not found");
+		converting = false;
 		return;
 	}
 
-	// Create new SequencerClip
-	SequencerClip* sequencerClip = new SequencerClip(currentSong);
-	if (!sequencerClip)
+	// Create new SequencerClip with extra safety
+	SequencerClip* sequencerClip = nullptr;
+	try {
+		sequencerClip = new SequencerClip(currentSong);
+	} catch (...) {
+		converting = false;
 		return;
+	}
+
+	if (!sequencerClip) {
+		converting = false;
+		return;
+	}
 
 	// Copy basic properties
 	sequencerClip->copyBasicsFrom(instrumentClip);
+
 	sequencerClip->output = instrumentClip->output;
 	sequencerClip->colourOffset = instrumentClip->colourOffset;
+
+	// For SequencerClip, set up a fresh parameter manager instead of copying note-specific data
+	// This avoids E410 errors when the original clip has complex note row parameter collections
+	if (sequencerClip->output->type == OutputType::SYNTH) {
+		Error error = sequencerClip->paramManager.setupUnpatched();
+		if (error != Error::NONE) {
+			delete sequencerClip;
+			converting = false;
+			return;
+		}
+		// Initialize global parameters
+		GlobalEffectableForClip::initParams(&sequencerClip->paramManager);
+	}
+	else if (sequencerClip->output->type == OutputType::MIDI_OUT) {
+		Error error = sequencerClip->paramManager.setupMIDI();
+		if (error != Error::NONE) {
+			delete sequencerClip;
+			converting = false;
+			return;
+		}
+	}
+	else if (sequencerClip->output->type == OutputType::CV) {
+		Error error = sequencerClip->paramManager.setupUnpatched();
+		if (error != Error::NONE) {
+			delete sequencerClip;
+			converting = false;
+			return;
+		}
+		GlobalEffectableForClip::initParams(&sequencerClip->paramManager);
+	}
 
 	// Set default sequencer settings
 	sequencerClip->getSettings().sequencerType = SequencerType::RANDOM;
@@ -7796,45 +7849,120 @@ void InstrumentClipView::convertInstrumentClipToSequencerClip(InstrumentClip* in
 
 	// Update the UI
 	view.setActiveModControllableTimelineCounter(sequencerClip);
-	display->displayPopup("Converted to SequencerClip");
 
-	// Switch to the sequencer clip view
-	sessionView.transitionToViewForClip(sequencerClip);
+	// Switch directly to the generative sequencer view (no animation needed since we're already in clip view)
+	changeRootUI(&randomSequencerClipView); // Using this as the single generative sequencer view for now
+
+	// Force UI re-rendering to show the colored pads
+	uiNeedsRendering(&randomSequencerClipView, 0xFFFFFFFF, 0);
+
+	converting = false;
 }
 
 void InstrumentClipView::convertSequencerClipToInstrumentClip(SequencerClip* sequencerClip) {
-	if (!sequencerClip)
+	if (!sequencerClip || !currentSong)
 		return;
 
 	actionLogger.deleteAllLogs(); // Can't undo past this!
 
+	// Extra safety check - make sure we're not already converting
+	static bool converting = false;
+	if (converting) {
+		return; // Prevent recursive calls
+	}
+	converting = true;
+
 	// Get the clip index in the session
 	int32_t clipIndex = currentSong->sessionClips.getIndexForClip(sequencerClip);
 	if (clipIndex == -1) {
-		display->displayPopup("Error: Clip not found");
+		converting = false;
 		return;
 	}
 
-	// Create new InstrumentClip
-	InstrumentClip* instrumentClip = new InstrumentClip();
-	if (!instrumentClip)
+	// Create new InstrumentClip with extra safety
+	InstrumentClip* instrumentClip = nullptr;
+	try {
+		instrumentClip = new InstrumentClip();
+	} catch (...) {
+		converting = false;
 		return;
+	}
+
+	if (!instrumentClip) {
+		converting = false;
+		return;
+	}
 
 	// Copy basic properties
 	instrumentClip->copyBasicsFrom(sequencerClip);
+
 	instrumentClip->output = sequencerClip->output;
 	instrumentClip->colourOffset = sequencerClip->colourOffset;
 
+	// CRITICAL: Copy parameter managers to avoid E412 error
+	Error error = instrumentClip->paramManager.cloneParamCollectionsFrom(&sequencerClip->paramManager, false);
+	if (error != Error::NONE) {
+		delete instrumentClip;
+		converting = false;
+		return;
+	}
+
 	// Set default instrument clip settings
 	instrumentClip->inScaleMode = false; // Default scale mode
+
+	// Special handling for MIDI and CV clips - set up parameter managers properly
+	if (instrumentClip->output->type == OutputType::MIDI_OUT) {
+		// For MIDI clips, we need to set up the parameter manager correctly
+		// Use the same logic as InstrumentClip::setNonAudioInstrument()
+		if (!instrumentClip->paramManager.containsAnyMainParamCollections()) {
+			Error midiError = instrumentClip->paramManager.setupMIDI();
+			if (midiError != Error::NONE) {
+				delete instrumentClip;
+				converting = false;
+				return;
+			}
+		}
+
+		// Check for transpose mode and force out of scale mode if needed
+		if (MIDITranspose::controlMethod == MIDITransposeControlMethod::CHROMATIC
+		    && ((NonAudioInstrument*)instrumentClip->output)->getChannel() == MIDI_CHANNEL_TRANSPOSE) {
+			instrumentClip->inScaleMode = false;
+		}
+	}
+	else if (instrumentClip->output->type == OutputType::CV) {
+		// For CV clips, ensure parameter manager is set up correctly
+		if (!instrumentClip->paramManager.containsAnyMainParamCollections()) {
+			Error cvError = instrumentClip->paramManager.setupUnpatched();
+			if (cvError != Error::NONE) {
+				delete instrumentClip;
+				converting = false;
+				return;
+			}
+		}
+	}
 
 	// Replace the clip in the song structure
 	currentSong->swapClips(instrumentClip, sequencerClip, clipIndex);
 
 	// Update the UI
 	view.setActiveModControllableTimelineCounter(instrumentClip);
-	display->displayPopup("Converted to InstrumentClip");
 
-	// Switch back to the instrument clip view
-	sessionView.transitionToViewForClip(instrumentClip);
+	// Switch directly back to the instrument clip view (no animation needed since we're already in clip view)
+	changeRootUI(&instrumentClipView);
+
+	// Force UI re-rendering to show the step sequencer pads
+	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
+
+	converting = false;
+}
+
+void InstrumentClipView::convertSequencerClipToInstrumentClip(SequencerClip* sequencerClip, OutputType newOutputType) {
+	// First convert to InstrumentClip
+	convertSequencerClipToInstrumentClip(sequencerClip);
+
+	// Then change output type if different
+	InstrumentClip* instrumentClip = getCurrentInstrumentClip();
+	if (instrumentClip && instrumentClip->output->type != newOutputType) {
+		changeOutputType(newOutputType);
+	}
 }
