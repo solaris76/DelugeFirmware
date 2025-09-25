@@ -39,6 +39,7 @@
 #include "gui/ui_timer_manager.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
+#include "gui/views/random_sequencer_clip_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/timeline_view.h"
 #include "gui/views/view.h"
@@ -59,6 +60,7 @@
 #include "model/action/action_logger.h"
 #include "model/clip/clip.h"
 #include "model/clip/instrument_clip.h"
+#include "model/clip/sequencer_clip.h"
 #include "model/consequence/consequence_instrument_clip_multiply.h"
 #include "model/consequence/consequence_note_array_change.h"
 #include "model/consequence/consequence_note_row_horizontal_shift.h"
@@ -939,6 +941,22 @@ bool InstrumentClipView::handleInstrumentChange(OutputType outputType) {
 		is_fm = Buttons::isButtonPressed(deluge::hid::button::MOD7)
 		        && (runtimeFeatureSettings.get(RuntimeFeatureSettingType::EnableDX7Engine)
 		            == RuntimeFeatureStateToggle::On);
+	}
+
+	// Check if we're already on the same output type - if so, toggle clip type
+	OutputType currentOutputType = getCurrentOutputType();
+	if (currentOutputType == outputType) {
+		Clip* currentClip = getCurrentClip();
+		if (currentClip->type == ClipType::INSTRUMENT) {
+			// Toggle to SequencerClip
+			convertInstrumentClipToSequencerClip(static_cast<InstrumentClip*>(currentClip));
+			return true;
+		}
+		else if (currentClip->type == ClipType::SEQUENCER) {
+			// Toggle back to InstrumentClip
+			convertSequencerClipToInstrumentClip(static_cast<SequencerClip*>(currentClip));
+			return true;
+		}
 	}
 
 	if (!isMIDIorCV && (is_fm || Buttons::isShiftButtonPressed())) {
@@ -7740,4 +7758,83 @@ void InstrumentClipView::blinkSelectedNoteRow(int32_t whichMainRows) {
 	noteRowFlashOn = !noteRowFlashOn;
 	uiNeedsRendering(getRootUI(), whichMainRows, 0xFFFFFFFF);
 	uiTimerManager.setTimer(TimerName::NOTE_ROW_BLINK, 180);
+}
+
+void InstrumentClipView::convertInstrumentClipToSequencerClip(InstrumentClip* instrumentClip) {
+	if (!instrumentClip)
+		return;
+
+	actionLogger.deleteAllLogs(); // Can't undo past this!
+
+	// Get the clip index in the session
+	int32_t clipIndex = currentSong->sessionClips.getIndexForClip(instrumentClip);
+	if (clipIndex == -1) {
+		display->displayPopup("Error: Clip not found");
+		return;
+	}
+
+	// Create new SequencerClip
+	SequencerClip* sequencerClip = new SequencerClip(currentSong);
+	if (!sequencerClip)
+		return;
+
+	// Copy basic properties
+	sequencerClip->copyBasicsFrom(instrumentClip);
+	sequencerClip->output = instrumentClip->output;
+	sequencerClip->colourOffset = instrumentClip->colourOffset;
+
+	// Set default sequencer settings
+	sequencerClip->getSettings().sequencerType = SequencerType::RANDOM;
+	sequencerClip->getSettings().density = 50;
+	sequencerClip->getSettings().velocityMin = 64;
+	sequencerClip->getSettings().velocityMax = 127;
+	sequencerClip->getSettings().octaveRange = 2;
+	sequencerClip->getSettings().patternLength = 8;
+
+	// Replace the clip in the song structure
+	currentSong->swapClips(sequencerClip, instrumentClip, clipIndex);
+
+	// Update the UI
+	view.setActiveModControllableTimelineCounter(sequencerClip);
+	display->displayPopup("Converted to SequencerClip");
+
+	// Switch to the sequencer clip view
+	sessionView.transitionToViewForClip(sequencerClip);
+}
+
+void InstrumentClipView::convertSequencerClipToInstrumentClip(SequencerClip* sequencerClip) {
+	if (!sequencerClip)
+		return;
+
+	actionLogger.deleteAllLogs(); // Can't undo past this!
+
+	// Get the clip index in the session
+	int32_t clipIndex = currentSong->sessionClips.getIndexForClip(sequencerClip);
+	if (clipIndex == -1) {
+		display->displayPopup("Error: Clip not found");
+		return;
+	}
+
+	// Create new InstrumentClip
+	InstrumentClip* instrumentClip = new InstrumentClip();
+	if (!instrumentClip)
+		return;
+
+	// Copy basic properties
+	instrumentClip->copyBasicsFrom(sequencerClip);
+	instrumentClip->output = sequencerClip->output;
+	instrumentClip->colourOffset = sequencerClip->colourOffset;
+
+	// Set default instrument clip settings
+	instrumentClip->inScaleMode = false; // Default scale mode
+
+	// Replace the clip in the song structure
+	currentSong->swapClips(instrumentClip, sequencerClip, clipIndex);
+
+	// Update the UI
+	view.setActiveModControllableTimelineCounter(instrumentClip);
+	display->displayPopup("Converted to InstrumentClip");
+
+	// Switch back to the instrument clip view
+	sessionView.transitionToViewForClip(instrumentClip);
 }

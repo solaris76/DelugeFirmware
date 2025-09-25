@@ -20,8 +20,8 @@
 #include "gui/views/clip_view.h"
 #include "hid/button.h"
 #include "model/clip/clip_minder.h"
-#include <cstdint>
 #include <array>
+#include <cstdint>
 
 class SequencerClip;
 
@@ -66,10 +66,10 @@ protected:
 	SequencerClip* getCurrentSequencerClip();
 	void renderPlayhead(RGB image[][kDisplayWidth + kSideBarWidth]);
 	void handlePadPress(int32_t x, int32_t y, int32_t velocity);
-	
+
 	uint32_t lastRenderTime_;
 	bool needsRendering_;
-	
+
 	// Virtual methods to be implemented by specific sequencer views
 	virtual void renderSequencerControls(RGB image[][kDisplayWidth + kSideBarWidth]) = 0;
 	virtual void handleEncoderTurn(int32_t offset) = 0;

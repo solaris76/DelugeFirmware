@@ -28,6 +28,7 @@
 #include "util/d_string.h"
 
 class InstrumentClip;
+class SequencerClip;
 class NoteRow;
 class Note;
 class Editor;
@@ -219,6 +220,10 @@ public:
 	void drawNoteCode(uint8_t yDisplay);
 	bool createNewInstrument(OutputType instrumentType, bool is_fm = false);
 	bool changeOutputType(OutputType newOutputType);
+
+	// Clip type conversion methods
+	void convertInstrumentClipToSequencerClip(InstrumentClip* instrumentClip);
+	void convertSequencerClipToInstrumentClip(SequencerClip* sequencerClip);
 	Sound* getSoundForNoteRow(NoteRow* noteRow, ParamManagerForTimeline** getParamManager);
 	void someAuditioningHasEnded(bool recalculateLastAuditionedNoteOnScreen);
 	bool getAffectEntire() override;
