@@ -16,17 +16,17 @@
  */
 
 #include "sequencer_clip.h"
-#include "model/song/song.h"
-#include "model/model_stack.h"
+#include "gui/l10n/l10n.h"
 #include "model/action/action_logger.h"
+#include "model/instrument/cv_instrument.h"
 #include "model/instrument/melodic_instrument.h"
 #include "model/instrument/midi_instrument.h"
-#include "model/instrument/cv_instrument.h"
+#include "model/model_stack.h"
+#include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "storage/storage_manager.h"
-#include "gui/l10n/l10n.h"
-#include <cstdlib>
 #include <array>
+#include <cstdlib>
 
 SequencerClip::SequencerClip(Song* song) : Clip(ClipType::SEQUENCER) {
 	// Initialize with default generative settings
@@ -34,7 +34,7 @@ SequencerClip::SequencerClip(Song* song) : Clip(ClipType::SEQUENCER) {
 	settings_.patternLength = 8;
 	settings_.currentStep = 0;
 	settings_.clockDivision = 4; // 16th notes
-	settings_.density = 50; // 50% probability
+	settings_.density = 50;      // 50% probability
 	settings_.velocityMin = 64;
 	settings_.velocityMax = 127;
 	settings_.octaveRange = 2;
@@ -97,7 +97,8 @@ void SequencerClip::incrementPos(ModelStackWithTimelineCounter* modelStack, int3
 	sequencerNumTicksBehindClip += numTicks;
 }
 
-bool SequencerClip::shiftHorizontally(ModelStackWithTimelineCounter* modelStack, int32_t amount, bool shiftAutomation, bool shiftSequenceAndMPE) {
+bool SequencerClip::shiftHorizontally(ModelStackWithTimelineCounter* modelStack, int32_t amount, bool shiftAutomation,
+                                      bool shiftSequenceAndMPE) {
 	// TODO: Implement horizontal shifting
 	return false;
 }
@@ -107,23 +108,24 @@ bool SequencerClip::isEmpty(bool displayPopup) {
 	return false;
 }
 
-bool SequencerClip::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth], uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
+bool SequencerClip::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+                                  uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
 	// Simple sidebar rendering - just show pattern type indicator
 	if (image) {
 		RGB color = RGB{64, 64, 64}; // Default gray
 		switch (settings_.sequencerType) {
-			case SequencerType::RANDOM:
-				color = RGB{255, 0, 0}; // Red
-				break;
-			case SequencerType::PULSE:
-				color = RGB{0, 255, 0}; // Green
-				break;
-			case SequencerType::EUCLIDEAN_ENHANCED:
-				color = RGB{0, 0, 255}; // Blue
-				break;
-			case SequencerType::ARPEGGIATOR:
-				color = RGB{255, 255, 0}; // Yellow
-				break;
+		case SequencerType::RANDOM:
+			color = RGB{255, 0, 0}; // Red
+			break;
+		case SequencerType::PULSE:
+			color = RGB{0, 255, 0}; // Green
+			break;
+		case SequencerType::EUCLIDEAN_ENHANCED:
+			color = RGB{0, 0, 255}; // Blue
+			break;
+		case SequencerType::ARPEGGIATOR:
+			color = RGB{255, 255, 0}; // Yellow
+			break;
 		}
 
 		// Fill sidebar with pattern color
@@ -142,7 +144,10 @@ Error SequencerClip::claimOutput(ModelStackWithTimelineCounter* modelStack) {
 	return Error::NONE;
 }
 
-void SequencerClip::detachFromOutput(ModelStackWithTimelineCounter* modelStack, bool shouldRememberDrumName, bool shouldDeleteEmptyNoteRowsAtEndOfList, bool shouldRetainLinksToSounds, bool keepNoteRowsWithMIDIInput, bool shouldGrabMidiCommands, bool shouldBackUpExpressionParamsToo) {
+void SequencerClip::detachFromOutput(ModelStackWithTimelineCounter* modelStack, bool shouldRememberDrumName,
+                                     bool shouldDeleteEmptyNoteRowsAtEndOfList, bool shouldRetainLinksToSounds,
+                                     bool keepNoteRowsWithMIDIInput, bool shouldGrabMidiCommands,
+                                     bool shouldBackUpExpressionParamsToo) {
 	output = nullptr;
 }
 
@@ -150,8 +155,8 @@ Clip* SequencerClip::cloneAsNewOverdub(ModelStackWithTimelineCounter* modelStack
 	return nullptr; // TODO: Implement
 }
 
-
-void SequencerClip::clear(Action* action, ModelStackWithTimelineCounter* modelStack, bool clearAutomation, bool clearSequenceAndMPE) {
+void SequencerClip::clear(Action* action, ModelStackWithTimelineCounter* modelStack, bool clearAutomation,
+                          bool clearSequenceAndMPE) {
 	// Reset sequencer to default state
 	settings_ = SequencerSettings{};
 	settings_.currentStep = 0;
@@ -177,7 +182,9 @@ bool SequencerClip::wantsToBeginLinearRecording(Song* song) {
 	return false; // Sequencers don't do linear recording
 }
 
-void SequencerClip::quantizeLengthForArrangementRecording(ModelStackWithTimelineCounter* modelStack, int32_t lengthSoFar, uint32_t timeRemainder, int32_t suggestedLength, int32_t alternativeLongerLength) {
+void SequencerClip::quantizeLengthForArrangementRecording(ModelStackWithTimelineCounter* modelStack,
+                                                          int32_t lengthSoFar, uint32_t timeRemainder,
+                                                          int32_t suggestedLength, int32_t alternativeLongerLength) {
 	// TODO: Implement quantization
 }
 
@@ -193,7 +200,8 @@ bool SequencerClip::cloneOutput(ModelStackWithTimelineCounter* modelStack) {
 	return false; // TODO: Implement
 }
 
-void SequencerClip::finishLinearRecording(ModelStackWithTimelineCounter* modelStack, Clip* nextPendingLoop, int32_t buttonLatencyForTempolessRecord) {
+void SequencerClip::finishLinearRecording(ModelStackWithTimelineCounter* modelStack, Clip* nextPendingLoop,
+                                          int32_t buttonLatencyForTempolessRecord) {
 	// Sequencer clips don't do linear recording
 }
 
@@ -216,14 +224,14 @@ void SequencerClip::setSequencerType(SequencerType type) {
 void SequencerClip::processCurrentStep() {
 	// Simple pattern generation
 	switch (settings_.sequencerType) {
-		case SequencerType::RANDOM:
-			generateRandomPattern();
-			break;
-		case SequencerType::PULSE:
-		case SequencerType::EUCLIDEAN_ENHANCED:
-		case SequencerType::ARPEGGIATOR:
-			// TODO: Implement other pattern types
-			break;
+	case SequencerType::RANDOM:
+		generateRandomPattern();
+		break;
+	case SequencerType::PULSE:
+	case SequencerType::EUCLIDEAN_ENHANCED:
+	case SequencerType::ARPEGGIATOR:
+		// TODO: Implement other pattern types
+		break;
 	}
 }
 
@@ -253,7 +261,6 @@ void SequencerClip::resetGenerativeSequencer() {
 	ticksTilNextSequencerEvent = 0;
 	sequencerNumTicksBehindClip = 0;
 }
-
 
 // Step Management
 void SequencerClip::setStepActive(uint32_t step, bool active) {
@@ -318,9 +325,7 @@ void SequencerClip::sendNoteOn(uint32_t note, uint32_t velocity) {
 	}
 
 	// Only send to melodic instruments (synth, MIDI, CV)
-	if (output->type == OutputType::SYNTH ||
-	    output->type == OutputType::MIDI_OUT ||
-	    output->type == OutputType::CV) {
+	if (output->type == OutputType::SYNTH || output->type == OutputType::MIDI_OUT || output->type == OutputType::CV) {
 
 		// Follow InstrumentClip pattern for note sending
 		// Create a minimal ModelStack for note sending
@@ -328,15 +333,15 @@ void SequencerClip::sendNoteOn(uint32_t note, uint32_t velocity) {
 		ModelStack* modelStack = setupModelStackWithSong(modelStackMemory, currentSong);
 		ModelStackWithTimelineCounter* modelStackWithTimelineCounter = modelStack->addTimelineCounter(this);
 
-		// Create model stack with the output and param manager
+		// Create model stack with the output (no param manager needed for sequencer)
 		ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
-		    modelStackWithTimelineCounter->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &paramManager);
+		    modelStackWithTimelineCounter->addOtherTwoThingsButNoNoteRow(output->toModControllable(), nullptr);
 
 		// Send the note using the proper MelodicInstrument interface
 		MelodicInstrument* melodicOutput = static_cast<MelodicInstrument*>(output);
 		int16_t zeroMPEValues[kNumExpressionDimensions] = {0}; // No MPE for now
 		melodicOutput->sendNote(modelStackWithThreeMainThings, true, static_cast<int32_t>(note), zeroMPEValues,
-		                       MIDI_CHANNEL_NONE, static_cast<uint8_t>(velocity), 0, 0);
+		                        MIDI_CHANNEL_NONE, static_cast<uint8_t>(velocity), 0, 0);
 	}
 }
 

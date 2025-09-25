@@ -23,15 +23,14 @@
 
 class Song;
 class ModelStackWithTimelineCounter;
-class ParamManagerForTimeline;
 class Output;
 
 // Generative Sequencer Types
 enum class SequencerType {
-	RANDOM,       // Random probability-based generative patterns (start simple!)
-	PULSE,        // Pulse-based generative sequencer (pulses per step)
+	RANDOM,             // Random probability-based generative patterns (start simple!)
+	PULSE,              // Pulse-based generative sequencer (pulses per step)
 	EUCLIDEAN_ENHANCED, // Enhanced euclidean with more parameters
-	ARPEGGIATOR,  // Generative arpeggiator patterns (leverage existing arp system)
+	ARPEGGIATOR,        // Generative arpeggiator patterns (leverage existing arp system)
 };
 
 // Generative Sequencer Engine Settings
@@ -39,43 +38,43 @@ struct SequencerSettings {
 	SequencerType sequencerType = SequencerType::RANDOM;
 
 	// Timing and Clock
-	uint32_t clockDivision = 4;        // 16th note timing by default
+	uint32_t clockDivision = 4; // 16th note timing by default
 	// Note: Global swing is handled by Song::swingAmount and Song::swingInterval
 	// We can add per-sequencer swing override if needed
 	uint32_t sequencerSwingOverride = 0; // 0 = use global swing, >0 = override amount
 
 	// Generative Pattern Parameters
-	uint32_t patternLength = 8;        // Number of steps in generative pattern
-	uint32_t currentStep = 0;          // Current step in pattern
+	uint32_t patternLength = 8; // Number of steps in generative pattern
+	uint32_t currentStep = 0;   // Current step in pattern
 
 	// Random Pattern Parameters
-	uint32_t density = 50;             // Probability of note generation (0-100)
-	uint32_t velocityMin = 64;         // Minimum velocity for generated notes
-	uint32_t velocityMax = 127;        // Maximum velocity for generated notes
-	uint32_t octaveRange = 2;          // Number of octaves to generate notes across
-	uint32_t gateLength = 50;          // Gate length as percentage of step (0-100)
+	uint32_t density = 50;      // Probability of note generation (0-100)
+	uint32_t velocityMin = 64;  // Minimum velocity for generated notes
+	uint32_t velocityMax = 127; // Maximum velocity for generated notes
+	uint32_t octaveRange = 2;   // Number of octaves to generate notes across
+	uint32_t gateLength = 50;   // Gate length as percentage of step (0-100)
 
 	// Pulse Pattern Parameters
-	uint32_t pulseCount = 4;           // Number of pulses per pattern
-	uint32_t pulseRotation = 0;        // Rotation offset for pulse pattern
+	uint32_t pulseCount = 4;    // Number of pulses per pattern
+	uint32_t pulseRotation = 0; // Rotation offset for pulse pattern
 
 	// Euclidean Enhanced Parameters
-	uint32_t euclideanHits = 4;        // Number of hits in euclidean pattern
-	uint32_t euclideanSteps = 8;       // Number of steps in euclidean pattern
-	uint32_t euclideanRotation = 0;    // Rotation offset
+	uint32_t euclideanHits = 4;          // Number of hits in euclidean pattern
+	uint32_t euclideanSteps = 8;         // Number of steps in euclidean pattern
+	uint32_t euclideanRotation = 0;      // Rotation offset
 	uint32_t euclideanProbability = 100; // Probability per hit (0-100)
 
 	// Arpeggiator Parameters
-	uint32_t arpOctaves = 1;           // Number of octaves to arpeggiate
-	uint32_t arpDirection = 0;         // 0=up, 1=down, 2=up-down, 3=random
+	uint32_t arpOctaves = 1;   // Number of octaves to arpeggiate
+	uint32_t arpDirection = 0; // 0=up, 1=down, 2=up-down, 3=random
 };
 
 // Individual step data for sequencer patterns
 struct SequencerStep {
-	bool active = false;               // Whether this step is active
-	uint32_t velocity = 100;           // Velocity for this step
-	uint32_t noteOffset = 0;           // Note offset from root (in semitones)
-	uint32_t probability = 100;        // Probability this step will trigger (0-100)
+	bool active = false;        // Whether this step is active
+	uint32_t velocity = 100;    // Velocity for this step
+	uint32_t noteOffset = 0;    // Note offset from root (in semitones)
+	uint32_t probability = 100; // Probability this step will trigger (0-100)
 };
 
 class SequencerClip final : public Clip {
@@ -90,22 +89,22 @@ public:
 	void resumePlayback(ModelStackWithTimelineCounter* modelStack, bool mayMakeSound = true) override;
 	void processCurrentPos(ModelStackWithTimelineCounter* modelStack, uint32_t ticksSinceLast) override;
 	void incrementPos(ModelStackWithTimelineCounter* modelStack, int32_t numTicks) override;
-	bool shiftHorizontally(ModelStackWithTimelineCounter* modelStack, int32_t amount, bool shiftAutomation, bool shiftSequenceAndMPE) override;
+	bool shiftHorizontally(ModelStackWithTimelineCounter* modelStack, int32_t amount, bool shiftAutomation,
+	                       bool shiftSequenceAndMPE) override;
 
 	// Required Clip interface methods
 	bool isEmpty(bool displayPopup = true) override;
 	bool renderSidebar(uint32_t whichRows = 0, RGB image[][kDisplayWidth + kSideBarWidth] = nullptr,
 	                   uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth] = nullptr) override;
 	Error claimOutput(ModelStackWithTimelineCounter* modelStack) override;
-	void finishLinearRecording(ModelStackWithTimelineCounter* modelStack, Clip* nextPendingLoop = nullptr, int32_t buttonLatencyForTempolessRecord = 0) override;
+	void finishLinearRecording(ModelStackWithTimelineCounter* modelStack, Clip* nextPendingLoop = nullptr,
+	                           int32_t buttonLatencyForTempolessRecord = 0) override;
 	Error beginLinearRecording(ModelStackWithTimelineCounter* modelStack, int32_t buttonPressLatency) override;
 	bool getCurrentlyRecordingLinearly() override;
 	bool currentlyScrollableAndZoomable() override;
 	void detachFromOutput(ModelStackWithTimelineCounter* modelStack, bool shouldRememberDrumName,
-	                      bool shouldDeleteEmptyNoteRowsAtEndOfList = false,
-	                      bool shouldRetainLinksToSounds = false,
-	                      bool keepNoteRowsWithMIDIInput = true,
-	                      bool shouldGrabMidiCommands = false,
+	                      bool shouldDeleteEmptyNoteRowsAtEndOfList = false, bool shouldRetainLinksToSounds = false,
+	                      bool keepNoteRowsWithMIDIInput = true, bool shouldGrabMidiCommands = false,
 	                      bool shouldBackUpExpressionParamsToo = true) override;
 	Clip* cloneAsNewOverdub(ModelStackWithTimelineCounter* modelStack, OverDubType newOverdubNature) override;
 	void clear(Action* action, ModelStackWithTimelineCounter* modelStack, bool clearAutomation,
@@ -154,15 +153,12 @@ public:
 private:
 	// Core sequencer state
 	SequencerSettings settings_;
-	std::array<SequencerStep, 16> steps_;  // Support up to 16 steps
+	std::array<SequencerStep, 16> steps_; // Support up to 16 steps
 	bool sequencerActive_ = false;
 
 	// Timing state (following InstrumentClip pattern)
 	uint32_t ticksTilNextSequencerEvent = 0;
 	uint32_t sequencerNumTicksBehindClip = 0;
-
-	// ParamManager for automation
-	ParamManagerForTimeline paramManager;
 
 	// Internal pattern generation methods
 	void processCurrentStep();
