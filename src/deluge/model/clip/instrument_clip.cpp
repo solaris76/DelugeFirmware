@@ -30,6 +30,7 @@
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
 #include "model/clip/clip_instance.h"
+#include "model/clip/sequencer_clip.h"
 #include "model/consequence/consequence_note_row_mute.h"
 #include "model/consequence/consequence_scale_add_note.h"
 #include "model/drum/drum_name.h"
@@ -698,33 +699,56 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 		return; // Is this in case it's created a new Clip or something?
 	}
 
-	// Handle generative mode - generate random notes at 16th note intervals
+	// Handle generative mode - generate multiple notes based on time elapsed
 	if (inGenerativeMode && playbackHandler.isEitherClockActive()) {
-		static uint32_t generativeTickCounter = 0;
-		generativeTickCounter += ticksSinceLast;
+		static uint32_t generativeTickAccumulator = 0;
+		static int32_t lastGeneratedNote = -1;
 
-		// Calculate 16th note interval - use a simple fixed interval for now
-		uint32_t sixteenthNoteInterval = 6; // Simple timing for testing
+		// Add the time that has passed since last call
+		generativeTickAccumulator += ticksSinceLast;
 
-		if (generativeTickCounter >= sixteenthNoteInterval) {
-			generativeTickCounter = 0;
+		// Calculate how many 16th notes should have happened in this time
+		uint32_t sixteenthNoteLength = modelStack->song->getSixteenthNoteLength();
+		uint32_t notesToGenerate = generativeTickAccumulator / sixteenthNoteLength;
 
-			// 50% chance to generate a note (density control)
-			if ((getRandom255() % 100) < 50) {
-				// Generate a random note in a reasonable range
-				int32_t randomNote = 60 + (getRandom255() % 13) - 6; // C4 +/- half octave
+		// Generate all the notes that should have happened
+		for (uint32_t n = 0; n < notesToGenerate; n++) {
+			// Turn off previous note first
+			if (lastGeneratedNote >= 0) {
+				if (output
+				    && (output->type == OutputType::SYNTH || output->type == OutputType::MIDI_OUT
+				        || output->type == OutputType::CV)) {
+					ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+					    modelStack->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &paramManager);
 
-				// Simple note triggering for testing
-				if (output && output->type == OutputType::SYNTH) {
-					// For synth, try to trigger a note directly
-					SoundInstrument* soundInstrument = (SoundInstrument*)output;
-					if (soundInstrument) {
-						// Basic note trigger - just for testing
-						// TODO: Implement proper note generation using the SequencerClip model
-					}
+					int16_t zeroMPEValues[kNumExpressionDimensions] = {0};
+					((MelodicInstrument*)output)
+					    ->sendNote(modelStackWithThreeMainThings, false, lastGeneratedNote, zeroMPEValues,
+					               MIDI_CHANNEL_NONE, 64, 0, 0, 0);
 				}
+				lastGeneratedNote = -1;
+			}
+
+			// Generate a random note in a reasonable range
+			int32_t randomNote = 60 + (getRandom255() % 13) - 6; // C4 +/- half octave
+
+			// Send proper note-on using MelodicInstrument interface
+			if (output
+			    && (output->type == OutputType::SYNTH || output->type == OutputType::MIDI_OUT
+			        || output->type == OutputType::CV)) {
+				ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+				    modelStack->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &paramManager);
+
+				int16_t zeroMPEValues[kNumExpressionDimensions] = {0};
+				((MelodicInstrument*)output)
+				    ->sendNote(modelStackWithThreeMainThings, true, randomNote, zeroMPEValues, MIDI_CHANNEL_NONE, 100,
+				               0, 0, 0);
+				lastGeneratedNote = randomNote; // Remember for note off
 			}
 		}
+
+		// Keep track of remaining time
+		generativeTickAccumulator = generativeTickAccumulator % sixteenthNoteLength;
 	}
 
 	// We already incremented / decremented noteRowsNumTicksBehindClip and ticksTilNextNoteRowEvent, in the call to

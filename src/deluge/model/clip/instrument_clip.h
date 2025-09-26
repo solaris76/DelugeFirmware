@@ -24,6 +24,7 @@
 #include "modulation/arpeggiator.h"
 
 class Song;
+class SequencerClip;
 
 class NoteRow;
 class InstrumentClip;

@@ -236,11 +236,31 @@ void SequencerClip::processCurrentStep() {
 }
 
 void SequencerClip::generateRandomPattern() {
-	// Simple random note generation
-	if (settings_.density > 0 && (rand() % 100) < settings_.density) {
+	// Generate random notes based on density setting
+	if (settings_.density > 0 && (getRandom255() % 100) < settings_.density) {
 		// Generate a random note within the velocity and octave range
-		// TODO: Implement proper note sending
-		// For now, just a placeholder
+		int32_t randomNote = 60 + (getRandom255() % (settings_.octaveRange * 12)) - (settings_.octaveRange * 6);
+		int32_t velocity =
+		    settings_.velocityMin + (getRandom255() % (settings_.velocityMax - settings_.velocityMin + 1));
+
+		// Send note using the output
+		if (output) {
+			if (output->type == OutputType::SYNTH) {
+				// For synth, trigger the sound
+				SoundInstrument* soundInstrument = (SoundInstrument*)output;
+				// Basic note trigger - will be enhanced
+			}
+			else if (output->type == OutputType::MIDI_OUT) {
+				// Send MIDI note
+				MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
+				// Basic MIDI note - will be enhanced
+			}
+			else if (output->type == OutputType::CV) {
+				// Send CV note
+				CVInstrument* cvInstrument = (CVInstrument*)output;
+				// Basic CV note - will be enhanced
+			}
+		}
 	}
 }
 

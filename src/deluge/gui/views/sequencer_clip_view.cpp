@@ -77,8 +77,13 @@ void SequencerClipView::tellMatrixDriverWhichRowsContainSomethingZoomable() {
 ActionResult SequencerClipView::buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
 	using namespace deluge::hid::button;
 
+	// Scale mode button - use exact same logic as instrument clip view
+	if (b == SCALE_MODE && currentUIMode != UI_MODE_HOLDING_LOAD_BUTTON) {
+		return instrumentClipView.handleScaleButtonAction(on, inCardRoutine);
+	}
+
 	// Handle SYNTH button - simple flag toggle approach (no clip conversion!)
-	if (b == SYNTH && on && currentUIMode == UI_MODE_NONE) {
+	else if (b == SYNTH && on && currentUIMode == UI_MODE_NONE) {
 		if (inCardRoutine) {
 			return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 		}
