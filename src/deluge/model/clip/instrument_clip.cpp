@@ -699,44 +699,7 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 		return; // Is this in case it's created a new Clip or something?
 	}
 
-	// Handle generative mode - simple test to understand timing
-	if (inGenerativeMode && playbackHandler.isEitherClockActive()) {
-		static int32_t lastGeneratedNote = -1;
-
-		// Turn off previous note first (if any)
-		if (lastGeneratedNote >= 0) {
-			if (output
-			    && (output->type == OutputType::SYNTH || output->type == OutputType::MIDI_OUT
-			        || output->type == OutputType::CV)) {
-				ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
-				    modelStack->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &paramManager);
-
-				int16_t zeroMPEValues[kNumExpressionDimensions] = {0};
-				((MelodicInstrument*)output)
-				    ->sendNote(modelStackWithThreeMainThings, false, lastGeneratedNote, zeroMPEValues,
-				               MIDI_CHANNEL_NONE, 64, 0, 0, 0);
-			}
-			lastGeneratedNote = -1;
-		}
-
-		// Generate ONE note every time processCurrentPos is called (maximum frequency test)
-		// Generate a random note in a reasonable range
-		int32_t randomNote = 60 + (getRandom255() % 13) - 6; // C4 +/- half octave
-
-		// Send proper note-on using MelodicInstrument interface
-		if (output
-		    && (output->type == OutputType::SYNTH || output->type == OutputType::MIDI_OUT
-		        || output->type == OutputType::CV)) {
-			ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
-			    modelStack->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &paramManager);
-
-			int16_t zeroMPEValues[kNumExpressionDimensions] = {0};
-			((MelodicInstrument*)output)
-			    ->sendNote(modelStackWithThreeMainThings, true, randomNote, zeroMPEValues, MIDI_CHANNEL_NONE, 100, 0, 0,
-			               0);
-			lastGeneratedNote = randomNote; // Remember for note off
-		}
-	}
+	// Generative mode logic moved to renderOutput methods for proper high-frequency timing
 
 	// We already incremented / decremented noteRowsNumTicksBehindClip and ticksTilNextNoteRowEvent, in the call to
 	// incrementPos().
