@@ -870,11 +870,13 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 		}
 	}
 
-	// Row 1 - Sequence length (works independently of rhythm)
+	// Row 1 - Sequence length - Fixed menu values with parameter conversion
 	if (y == 1 && x < kDisplayWidth) {
-		int32_t newLength = x + 1;
+		// Fixed sequence length menu values spread evenly from 0 to 50 across 16 pads
+		int32_t sequenceMenuValues[] = {0, 3, 6, 10, 13, 16, 20, 23, 26, 30, 33, 36, 40, 43, 46, 50};
+		int32_t sequenceMenuValue = sequenceMenuValues[x];
 
-		// Use parameter system to properly notify OLED menus
+		// Use parameter system like the working implementations
 		UI* originalUI = getCurrentUI();
 		if (soundEditor.setup(getCurrentInstrumentClip(), nullptr, 0)) {
 			char modelStackMemory[MODEL_STACK_MAX_SIZE];
@@ -882,13 +884,17 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 			ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_SEQUENCE_LENGTH);
 
 			if (modelStackWithParam && modelStackWithParam->autoParam) {
-				int32_t finalValue = computeFinalValueForUnsignedMenuItem(newLength);
+				int32_t finalValue = computeFinalValueForUnsignedMenuItem(sequenceMenuValue);
 				modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
 			}
 			originalUI->focusRegained();
 		}
 
-		display->displayPopup(("Seq Length: " + std::to_string(newLength)).c_str());
+		if (sequenceMenuValue == 0) {
+			display->displayPopup("Seq: OFF");
+		} else {
+			display->displayPopup(("Seq: " + std::to_string(sequenceMenuValue)).c_str());
+		}
 		controlsChanged = true;
 		return true;
 	}
@@ -897,11 +903,13 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 
 	// Row 3 - Performance controls
 	if (y == 3) {
-		// Gate length (0-7)
+		// Gate length (0-7) - Fixed menu values with parameter conversion
 		if (x >= 0 && x < 8) {
-			int32_t gateIndex = x + 1;
+			// Fixed gate menu values spread evenly from 0 to 50
+			int32_t gateMenuValues[] = {0, 7, 14, 21, 28, 36, 43, 50};
+			int32_t gateMenuValue = gateMenuValues[x];
 
-			// Use parameter system to properly notify OLED menus
+			// Use parameter system like the working implementations
 			UI* originalUI = getCurrentUI();
 			if (soundEditor.setup(getCurrentInstrumentClip(), nullptr, 0)) {
 				char modelStackMemory[MODEL_STACK_MAX_SIZE];
@@ -909,22 +917,24 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 				ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
 
 				if (modelStackWithParam && modelStackWithParam->autoParam) {
-					int32_t finalValue = computeFinalValueForStandardMenuItem(gateIndex);
+					int32_t finalValue = computeFinalValueForStandardMenuItem(gateMenuValue);
 					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
 				}
 				originalUI->focusRegained();
 			}
 
-			display->displayPopup(("Gate: " + std::to_string((gateIndex * 100) / 8) + "%").c_str());
+			display->displayPopup(("Gate: " + std::to_string(gateMenuValue)).c_str());
 			controlsChanged = true;
 			return true;
 		}
 
-		// Velocity spread (8-13)
+		// Velocity spread (8-13) - Fixed menu values with parameter conversion
 		if (x >= 8 && x < 14) {
-			int32_t spreadIndex = x - 8 + 1;
+			// Fixed velocity spread menu values spread evenly from 0 to 50
+			int32_t spreadMenuValues[] = {0, 10, 20, 30, 40, 50};
+			int32_t spreadMenuValue = spreadMenuValues[x - 8];
 
-			// Use parameter system to properly notify OLED menus
+			// Use parameter system like the working implementations
 			UI* originalUI = getCurrentUI();
 			if (soundEditor.setup(getCurrentInstrumentClip(), nullptr, 0)) {
 				char modelStackMemory[MODEL_STACK_MAX_SIZE];
@@ -932,13 +942,13 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 				ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_SPREAD_VELOCITY);
 
 				if (modelStackWithParam && modelStackWithParam->autoParam) {
-					int32_t finalValue = computeFinalValueForUnsignedMenuItem(spreadIndex);
+					int32_t finalValue = computeFinalValueForUnsignedMenuItem(spreadMenuValue);
 					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
 				}
 				originalUI->focusRegained();
 			}
 
-			display->displayPopup(("Vel Spread: " + std::to_string((spreadIndex * 100) / 6) + "%").c_str());
+			display->displayPopup(("Vel Spread: " + std::to_string(spreadMenuValue)).c_str());
 			controlsChanged = true;
 			return true;
 		}
