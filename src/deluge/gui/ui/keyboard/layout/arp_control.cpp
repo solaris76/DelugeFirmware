@@ -287,12 +287,26 @@ void KeyboardLayoutArpControl::handleVerticalEncoder(int32_t offset) {
 				settings->syncLevel = (SyncLevel)(8 - currentSong->insideWorldTickMagnitude - currentSong->insideWorldTickMagnitudeOffsetFromBPM);
 			}
 
-			// Let sequence length work independently - don't auto-modify it
+			// Handle rhythm ON/OFF with different approaches
+			if (displayState.appliedRhythm > 0) {
+				// Rhythm ON: Use parameter system to notify OLED menus
+				UI* originalUI = getCurrentUI();
+				if (soundEditor.setup(clip, nullptr, 0)) {
+					char modelStackMemory[MODEL_STACK_MAX_SIZE];
+					ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+					ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_RHYTHM);
 
-			// CORRECT: Use parameter conversion like the arpeggiator expects
-			int32_t rhythmValue = (displayState.appliedRhythm > 0) ? displayState.appliedRhythm : 0;
-			settings->rhythm = computeFinalValueForUnsignedMenuItem(rhythmValue);
-			settings->flagForceArpRestart = true;
+					if (modelStackWithParam && modelStackWithParam->autoParam) {
+						int32_t finalValue = computeFinalValueForUnsignedMenuItem(displayState.appliedRhythm);
+						modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+					}
+					originalUI->focusRegained();
+				}
+			} else {
+				// Rhythm OFF: Force direct assignment to ensure it's actually 0
+				settings->rhythm = 0; // Force to 0 for "None" pattern
+				settings->flagForceArpRestart = true;
+			}
 		}
 	}
 
@@ -830,12 +844,27 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 				settings->syncLevel = (SyncLevel)(8 - currentSong->insideWorldTickMagnitude - currentSong->insideWorldTickMagnitudeOffsetFromBPM);
 			}
 
-			// Let sequence length work independently - don't auto-modify it
+			// Handle rhythm ON/OFF with different approaches
+			if (displayState.appliedRhythm > 0) {
+				// Rhythm ON: Use parameter system to notify OLED menus
+				UI* originalUI = getCurrentUI();
+				if (soundEditor.setup(getCurrentInstrumentClip(), nullptr, 0)) {
+					char modelStackMemory[MODEL_STACK_MAX_SIZE];
+					ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+					ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_RHYTHM);
 
-			// CORRECT: Use parameter conversion like the arpeggiator expects
-			int32_t rhythmValue = (displayState.appliedRhythm > 0) ? displayState.appliedRhythm : 0;
-			settings->rhythm = computeFinalValueForUnsignedMenuItem(rhythmValue);
-			settings->flagForceArpRestart = true;
+					if (modelStackWithParam && modelStackWithParam->autoParam) {
+						int32_t finalValue = computeFinalValueForUnsignedMenuItem(displayState.appliedRhythm);
+						modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+					}
+					originalUI->focusRegained();
+				}
+			} else {
+				// Rhythm OFF: Force direct assignment to ensure it's actually 0
+				ArpeggiatorSettings* settings = &getCurrentInstrumentClip()->arpSettings;
+				settings->rhythm = 0; // Force to 0 for "None" pattern
+				settings->flagForceArpRestart = true;
+			}
 			controlsChanged = true;
 			return true;
 		}
@@ -844,8 +873,21 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 	// Row 1 - Sequence length (works independently of rhythm)
 	if (y == 1 && x < kDisplayWidth) {
 		int32_t newLength = x + 1;
-		settings->sequenceLength = computeFinalValueForUnsignedMenuItem(newLength);
-		settings->flagForceArpRestart = true;
+
+		// Use parameter system to properly notify OLED menus
+		UI* originalUI = getCurrentUI();
+		if (soundEditor.setup(getCurrentInstrumentClip(), nullptr, 0)) {
+			char modelStackMemory[MODEL_STACK_MAX_SIZE];
+			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+			ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_SEQUENCE_LENGTH);
+
+			if (modelStackWithParam && modelStackWithParam->autoParam) {
+				int32_t finalValue = computeFinalValueForUnsignedMenuItem(newLength);
+				modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+			}
+			originalUI->focusRegained();
+		}
+
 		display->displayPopup(("Seq Length: " + std::to_string(newLength)).c_str());
 		controlsChanged = true;
 		return true;
@@ -858,8 +900,21 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 		// Gate length (0-7)
 		if (x >= 0 && x < 8) {
 			int32_t gateIndex = x + 1;
-			settings->gate = computeFinalValueForStandardMenuItem(gateIndex);
-			settings->flagForceArpRestart = true;
+
+			// Use parameter system to properly notify OLED menus
+			UI* originalUI = getCurrentUI();
+			if (soundEditor.setup(getCurrentInstrumentClip(), nullptr, 0)) {
+				char modelStackMemory[MODEL_STACK_MAX_SIZE];
+				ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+				ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
+
+				if (modelStackWithParam && modelStackWithParam->autoParam) {
+					int32_t finalValue = computeFinalValueForStandardMenuItem(gateIndex);
+					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+				}
+				originalUI->focusRegained();
+			}
+
 			display->displayPopup(("Gate: " + std::to_string((gateIndex * 100) / 8) + "%").c_str());
 			controlsChanged = true;
 			return true;
@@ -868,8 +923,21 @@ bool KeyboardLayoutArpControl::handleControlPad(int32_t x, int32_t y, Arpeggiato
 		// Velocity spread (8-13)
 		if (x >= 8 && x < 14) {
 			int32_t spreadIndex = x - 8 + 1;
-			settings->spreadVelocity = (spreadIndex * kMaxMenuValue) / 6;
-			settings->flagForceArpRestart = true;
+
+			// Use parameter system to properly notify OLED menus
+			UI* originalUI = getCurrentUI();
+			if (soundEditor.setup(getCurrentInstrumentClip(), nullptr, 0)) {
+				char modelStackMemory[MODEL_STACK_MAX_SIZE];
+				ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+				ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_SPREAD_VELOCITY);
+
+				if (modelStackWithParam && modelStackWithParam->autoParam) {
+					int32_t finalValue = computeFinalValueForUnsignedMenuItem(spreadIndex);
+					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+				}
+				originalUI->focusRegained();
+			}
+
 			display->displayPopup(("Vel Spread: " + std::to_string((spreadIndex * 100) / 6) + "%").c_str());
 			controlsChanged = true;
 			return true;
