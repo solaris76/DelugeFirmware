@@ -32,6 +32,9 @@
 #include "util/d_string.h"
 #include "model/sync.h"
 #include "gui/menu_item/sync_level.h"
+#include "gui/ui/sound_editor.h"
+#include "gui/menu_item/value_scaling.h"
+#include "modulation/params/param.h"
 
 namespace deluge::gui::ui::keyboard::layout {
 
@@ -326,12 +329,12 @@ void KeyboardLayoutArpControl::renderPads(RGB image[][kDisplayWidth + kSideBarWi
 	for (int32_t x = 0; x < 8; x++) {
 		image[3][x] = getGateColor(x);
 	}
-	
+
 	// Rhythm pattern visualization on pads x8-x13
 	for (int32_t x = 8; x < 14; x++) {
 		image[3][x] = getRhythmPatternColor(x - 8);
 	}
-	
+
 	image[3][14] = colours::red; // Down transpose
 	image[3][15] = colours::purple; // Up transpose
 
@@ -406,35 +409,49 @@ RGB KeyboardLayoutArpControl::getRhythmPatternColor(int32_t step) {
 		// Pattern 0 (all notes) - show all steps as dim white
 		return RGB::monochrome(32);
 	}
-	
+
 	// Clamp rhythm to valid range
 	int32_t rhythmIndex = std::clamp(displayState.currentRhythm, static_cast<int32_t>(0), static_cast<int32_t>(kMaxPresetArpRhythm));
-	
+
 	// Get the rhythm pattern
 	const ArpRhythm& pattern = arpRhythmPatterns[rhythmIndex];
-	
+
 	// Check if this step should be active
 	if (step < pattern.length && pattern.steps[step]) {
 		// Bright white for active steps, dimmer if not applied
 		if (displayState.appliedRhythm == displayState.currentRhythm) {
-			return RGB::monochrome(255); // Bright white when applied
+			return RGB::monochrome(128); // Bright white when applied
 		} else {
-			return RGB::monochrome(128); // Dimmer white when not applied
+			return RGB::monochrome(60); // Dimmer white when not applied
 		}
 	} else {
-		return RGB::monochrome(32); // Dim white for inactive steps
+		return RGB::monochrome(0); // Dim white for inactive steps
 	}
 }
 
 void KeyboardLayoutArpControl::applyRhythmToArpSettings() {
-	ArpeggiatorSettings* settings = getArpSettings();
-	if (!settings) return;
-	
-	// Apply the rhythm setting to arp settings
-	settings->rhythm = displayState.appliedRhythm;
-	
-	// Force arpeggiator to restart with new rhythm
-	settings->flagForceArpRestart = true;
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip) return;
+
+	// Use the same approach as the keyboard screen for proper parameter setting
+	UI* originalUI = getCurrentUI();
+
+	// Set up sound editor context like the official menu
+	if (soundEditor.setup(clip, nullptr, 0)) {
+		// Now we're in sound editor context - use the official approach
+		char modelStackMemory[MODEL_STACK_MAX_SIZE];
+		ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+		ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_RHYTHM);
+
+		if (modelStackWithParam && modelStackWithParam->autoParam) {
+			// Use appliedRhythm for the actual parameter value
+			int32_t finalValue = computeFinalValueForUnsignedMenuItem(displayState.appliedRhythm);
+			modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+		}
+
+		// Exit sound editor context back to original UI
+		originalUI->focusRegained();
+	}
 }
 
 
