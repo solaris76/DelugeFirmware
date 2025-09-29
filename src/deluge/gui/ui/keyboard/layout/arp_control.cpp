@@ -46,9 +46,9 @@ void KeyboardLayoutArpControl::evaluatePads(PressedPad presses[kMaxNumKeyboardPa
 	ArpeggiatorSettings* settings = getArpSettings();
 	if (!settings) return;
 
-	// Process all pad presses - simple multi-touch support
+	// Process pad presses - only handle pads within kDisplayWidth (0-15)
 	for (int32_t i = 0; i < kMaxNumKeyboardPadPresses; i++) {
-		if (presses[i].active) {
+		if (presses[i].active && presses[i].x < kDisplayWidth) {
 			int32_t x = presses[i].x;
 			int32_t y = presses[i].y;
 			uint8_t velocity = 127; // Default velocity
