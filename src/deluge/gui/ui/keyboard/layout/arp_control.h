@@ -93,13 +93,13 @@ private:
 	RGB getRhythmColor(int32_t rhythm, int32_t currentRhythm);
 
 	/// Get color for sequence length display
-	RGB getSequenceLengthColor(int32_t length, int32_t currentLength);
+	RGB getSequenceLengthColor(int32_t length);
 
 	/// Get color for velocity spread display
-	RGB getVelocitySpreadColor(int32_t spread, int32_t currentSpread);
+	RGB getVelocitySpreadColor(int32_t spread);
 
 	/// Get color for gate display
-	RGB getGateColor(int32_t gate, int32_t currentGate);
+	RGB getGateColor(int32_t gate);
 
 	/// Get color for keyboard notes
 	RGB getKeyboardColor(int32_t x, int32_t y);
@@ -129,11 +129,14 @@ private:
 	int32_t keyboardScrollOffset = 0; // Keyboard transpose offset
 	int32_t currentRhythm = 1; // Currently selected rhythm pattern
 	int32_t appliedRhythm = 0; // Currently applied rhythm (0 = off)
+	int32_t lastTouchedGatePad = -1; // Track last touched gate pad for LED feedback
+	int32_t lastTouchedVelocityPad = 0; // Track last touched velocity pad for LED feedback (default to pad 0)
+	int32_t lastTouchedSequenceLengthPad = 0; // Track last touched sequence length pad for LED feedback (default to pad 0)
 
 	// Individual pad values for tweaking
 	int32_t sequenceLengthValues[8] = {0, 10, 20, 25, 35, 40, 45, 50}; // Each pad has its own value
 	int32_t velocitySpreadValues[8] = {0, 10, 20, 25, 35, 40, 45, 50}; // Each pad has its own value
-	int32_t gateValues[8] = {0, 10, 20, 25, 35, 40, 45, 50}; // Each pad has its own value
+	int32_t gateValues[8] = {1, 10, 20, 25, 35, 40, 45, 50}; // Each pad has its own value
 
 public:
 	// Public display state for keyboard screen access

@@ -30,6 +30,8 @@
 #include "modulation/arpeggiator.h"
 #include "modulation/arpeggiator_rhythms.h"
 #include "util/d_string.h"
+#include "model/sync.h"
+#include "gui/menu_item/sync_level.h"
 
 namespace deluge::gui::ui::keyboard::layout {
 
@@ -144,6 +146,9 @@ void KeyboardLayoutArpControl::handleRhythm(int32_t x, ArpeggiatorSettings* sett
 }
 
 void KeyboardLayoutArpControl::handleSequenceLength(int32_t x, ArpeggiatorSettings* settings) {
+	// Track the last touched sequence length pad for LED feedback
+	lastTouchedSequenceLengthPad = x;
+
 	// Direct sequence length control - each pad has its own value
 	int32_t newLength = sequenceLengthValues[x];
 
@@ -170,13 +175,21 @@ void KeyboardLayoutArpControl::handleSequenceLength(int32_t x, ArpeggiatorSettin
 		}
 	}
 
-	display->displayPopup(("Seq Length: " + std::to_string(newLength)).c_str());
+	// Display "OFF" for value 0, otherwise show the value
+	if (newLength == 0) {
+		display->displayPopup("Seq Length: OFF");
+	} else {
+		display->displayPopup(("Seq Length: " + std::to_string(newLength)).c_str());
+	}
 
 	// Force UI update
 	keyboardScreen.requestMainPadsRendering();
 }
 
 void KeyboardLayoutArpControl::handleVelocitySpread(int32_t x, ArpeggiatorSettings* settings) {
+	// Track the last touched velocity pad for LED feedback
+	lastTouchedVelocityPad = x;
+
 	// Direct velocity spread control - each pad has its own value
 	int32_t newVelocity = velocitySpreadValues[x];
 
@@ -203,13 +216,21 @@ void KeyboardLayoutArpControl::handleVelocitySpread(int32_t x, ArpeggiatorSettin
 		}
 	}
 
-	display->displayPopup(("Velocity: " + std::to_string(newVelocity)).c_str());
+	// Display "OFF" for value 0, otherwise show the value
+	if (newVelocity == 0) {
+		display->displayPopup("Velocity: OFF");
+	} else {
+		display->displayPopup(("Velocity: " + std::to_string(newVelocity)).c_str());
+	}
 
 	// Force UI update
 	keyboardScreen.requestMainPadsRendering();
 }
 
 void KeyboardLayoutArpControl::handleGate(int32_t x, ArpeggiatorSettings* settings) {
+	// Track the last touched gate pad for LED feedback
+	lastTouchedGatePad = x;
+
 	// Direct gate control - each pad has its own value
 	int32_t newGate = gateValues[x];
 
@@ -285,7 +306,7 @@ void KeyboardLayoutArpControl::renderPads(RGB image[][kDisplayWidth + kSideBarWi
 
 	// Row 1: Sequence length (8 pads wide)
 	for (int32_t x = 0; x < 8; x++) {
-		image[1][x] = getSequenceLengthColor(x, settings->sequenceLength);
+		image[1][x] = getSequenceLengthColor(x);
 	}
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
 		// Unused pads are black
@@ -294,7 +315,7 @@ void KeyboardLayoutArpControl::renderPads(RGB image[][kDisplayWidth + kSideBarWi
 
 	// Row 2: Velocity spread
 	for (int32_t x = 0; x < 8; x++) {
-		image[2][x] = getVelocitySpreadColor(x, settings->spreadVelocity);
+		image[2][x] = getVelocitySpreadColor(x);
 	}
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
 		// Unused pads are black
@@ -303,7 +324,7 @@ void KeyboardLayoutArpControl::renderPads(RGB image[][kDisplayWidth + kSideBarWi
 
 	// Row 3: Gate and transpose
 	for (int32_t x = 0; x < 8; x++) {
-		image[3][x] = getGateColor(x, settings->gate);
+		image[3][x] = getGateColor(x);
 	}
 	for (int32_t x = 8; x < 14; x++) {
 		// Unused pads are black
@@ -314,7 +335,7 @@ void KeyboardLayoutArpControl::renderPads(RGB image[][kDisplayWidth + kSideBarWi
 
 	// Rows 4-7: Keyboard (stop at y=7, leave y=8-15 for control columns)
 	for (int32_t y = 4; y < 8; y++) {
-		for (int32_t x = 0; x < kDisplayWidth; x++) {
+		for (int32_t x = 0; x < 15; x++) {
 			image[y][x] = getKeyboardColor(x, y);
 		}
 	}
@@ -350,22 +371,31 @@ RGB KeyboardLayoutArpControl::getRhythmColor(int32_t rhythm, int32_t currentRhyt
 	return (rhythm == currentRhythm) ? colours::yellow : colours::black;
 }
 
-RGB KeyboardLayoutArpControl::getSequenceLengthColor(int32_t length, int32_t currentLength) {
-	// Convert current value to display format
-	int32_t currentLengthIndex = computeCurrentValueForStandardMenuItem(currentLength);
-	return (sequenceLengthValues[length] == currentLengthIndex) ? colours::orange : colours::orange.adjust(32, 3);
+RGB KeyboardLayoutArpControl::getSequenceLengthColor(int32_t length) {
+	// Highlight the last touched sequence length pad, dim all others
+	if (lastTouchedSequenceLengthPad == length) {
+		return colours::orange; // Bright orange for last touched pad
+	} else {
+		return colours::orange.adjust(32, 3); // Dim orange for other pads
+	}
 }
 
-RGB KeyboardLayoutArpControl::getVelocitySpreadColor(int32_t spread, int32_t currentSpread) {
-	// Convert current value to display format
-	int32_t currentSpreadIndex = computeCurrentValueForStandardMenuItem(currentSpread);
-	return (velocitySpreadValues[spread] == currentSpreadIndex) ? colours::cyan : colours::cyan.adjust(32, 3);
+RGB KeyboardLayoutArpControl::getVelocitySpreadColor(int32_t spread) {
+	// Highlight the last touched velocity pad, dim all others
+	if (lastTouchedVelocityPad == spread) {
+		return colours::cyan; // Bright cyan for last touched pad
+	} else {
+		return colours::cyan.adjust(32, 3); // Dim cyan for other pads
+	}
 }
 
-RGB KeyboardLayoutArpControl::getGateColor(int32_t gate, int32_t currentGate) {
-	// Convert current value to display format
-	int32_t currentGateIndex = computeCurrentValueForStandardMenuItem(currentGate);
-	return (gateValues[gate] == currentGateIndex) ? colours::green : colours::green.adjust(32, 3);
+RGB KeyboardLayoutArpControl::getGateColor(int32_t gate) {
+	// Highlight the last touched gate pad, dim all others
+	if (lastTouchedGatePad == gate) {
+		return colours::green; // Bright green for last touched pad
+	} else {
+		return colours::green.adjust(32, 3); // Dim green for other pads
+	}
 }
 
 RGB KeyboardLayoutArpControl::getKeyboardColor(int32_t x, int32_t y) {
@@ -384,21 +414,25 @@ RGB KeyboardLayoutArpControl::getKeyboardColor(int32_t x, int32_t y) {
 		}
 	}
 
-	// Root note highlighting
-	if (noteWithinOctave == 0) {
-		// Root note - bright red if pressed, dim red if not
-		return isPressed ? colours::red : colours::red.adjust(127, 2);
-	}
+	// Get color source using getNoteColour function
+	RGB colourSource = getNoteColour(note);
 
-	// Scale notes - check if note is in current scale
-	NoteSet& scaleNotes = getScaleNotes();
-	if (scaleNotes.has(noteWithinOctave)) {
-		// Scale note - bright white if pressed, dim white if not
-		return isPressed ? colours::white : colours::white.adjust(127, 2);
+	// Full brightness and colour for active root note
+	if (noteWithinOctave == 0 && isPressed) {
+		return colourSource.adjust(255, 1);
 	}
-
-	// Non-scale note - very dim
-	return colours::white.adjust(32, 3);
+	// Full colour but less brightness for inactive root note
+	else if (noteWithinOctave == 0) {
+		return colourSource.adjust(255, 2);
+	}
+	// Toned down colour but high brightness for active scale note
+	else if (isPressed) {
+		return colourSource.adjust(127, 3);
+	}
+	// Dimly white for inactive scale notes
+	else {
+		return RGB::monochrome(1);
+	}
 }
 
 // Essential functions
@@ -431,21 +465,26 @@ void KeyboardLayoutArpControl::handleHorizontalEncoder(int32_t offset, bool shif
 	ArpeggiatorSettings* settings = getArpSettings();
 	if (!settings) return;
 
-	// Get current rate in display format
-	int32_t currentRate = computeCurrentValueForStandardMenuItem(settings->rate);
-	int32_t newRate = currentRate + offset;
+	// Get current sync value from arp settings
+	deluge::gui::menu_item::SyncLevel syncLevel;
+	int32_t currentSyncValue = syncLevel.syncTypeAndLevelToMenuOption(settings->syncType, settings->syncLevel);
+	int32_t newSyncValue = currentSyncValue + offset;
 
-	// Clamp to valid range
-	if (newRate < 0) newRate = 0;
-	if (newRate > 50) newRate = 50;
+	// Clamp to valid sync range (0 to NUM_SYNC_VALUES-1)
+	if (newSyncValue < 0) newSyncValue = 0;
+	if (newSyncValue >= NUM_SYNC_VALUES) newSyncValue = NUM_SYNC_VALUES - 1;
 
-	// Convert back to internal format
-	settings->rate = computeFinalValueForStandardMenuItem(newRate);
+	// Update arp settings with new sync values
+	settings->syncType = syncValueToSyncType(newSyncValue);
+	settings->syncLevel = syncValueToSyncLevel(newSyncValue);
 
 	// Force arpeggiator to restart with new rate
 	settings->flagForceArpRestart = true;
 
-	display->displayPopup(("Arp Rate: " + std::to_string(newRate)).c_str());
+	// Display proper note name using sync value
+	DEF_STACK_STRING_BUF(buffer, 20);
+	syncValueToString(newSyncValue, buffer, currentSong->getInputTickMagnitude());
+	display->displayPopup(buffer.c_str());
 }
 
 void KeyboardLayoutArpControl::precalculate() {
