@@ -22,12 +22,10 @@
 
 // Forward declarations
 class ArpeggiatorSettings;
-class Arpeggiator;
 
 namespace deluge::gui::ui::keyboard::layout {
 
-/// Arpeggiator control keyboard layout that visualizes and controls arpeggiator patterns
-/// Phase 1: Minimal extension - visualize existing arpeggiator state
+/// Clean, simple arpeggiator control keyboard layout
 class KeyboardLayoutArpControl : public ColumnControlsKeyboard {
 public:
 	KeyboardLayoutArpControl() = default;
@@ -45,8 +43,11 @@ public:
 	bool supportsInstrument() override { return true; }
 	bool supportsKit() override { return false; }
 
-	/// Update animation and check if display needs refreshing
+	/// Update animation - called by keyboard screen
 	void updateAnimation();
+
+	/// Update display for both OLED and 7-segment
+	void updateDisplay();
 
 	/// Direct pad LED update for real-time animation
 	void updatePadLEDsDirect();
@@ -54,76 +55,92 @@ public:
 	/// Update playback progress bar on top row
 	void updatePlaybackProgressBar();
 
-	/// Update display for both OLED and 7-segment
-	void updateDisplay();
-
-
-	// Display state - public so keyboard screen can access for Y encoder press
-	struct {
-		int32_t currentRhythm = 1; // Currently selected rhythm pattern (for preview)
-		int32_t appliedRhythm = 0; // Actually applied rhythm (0=OFF, 1-50=ON)
-		int32_t lastRhythmStep = -1;
-		ArpPreset currentPreset = ArpPreset::OFF;
-		ArpOctaveMode currentOctaveMode = ArpOctaveMode::UP;
-		uint8_t currentOctaves = 1;
-		bool needsRefresh = true;
-		bool wasPlaying = false;
-
-		// Simple keyboard state for 4-row keyboard
-		int32_t keyboardScrollOffset = 0; // Default position (C2 base + 0 offset = C2 start)
-		int32_t keyboardRowInterval = 4; // 4 semitones per row (chromatic keyboard)
-	} displayState;
-
 private:
-	/// Get the current arpeggiator settings from the active clip
+	/// Get arpeggiator settings from current clip
 	ArpeggiatorSettings* getArpSettings();
 
-	/// Get the current arpeggiator instance from the active instrument
-	Arpeggiator* getArpeggiator();
+	/// Handle arp mode control (top row, pads 0-2)
+	void handleArpMode(int32_t x, ArpeggiatorSettings* settings);
 
-	/// Visualize the current rhythm pattern on the main pads
-	void renderRhythmPattern(RGB image[][kDisplayWidth + kSideBarWidth]);
+	/// Handle octave control (top row, pads 4-11)
+	void handleOctaves(int32_t x, ArpeggiatorSettings* settings);
 
-	/// Show current arpeggiator parameters in the top rows
-	void renderParameterDisplay(RGB image[][kDisplayWidth + kSideBarWidth]);
+	/// Handle rhythm control (top row, pads 12-14)
+	void handleRhythm(int32_t x, ArpeggiatorSettings* settings);
 
-	/// Show the current step position if arp is playing
-	void renderCurrentStep(RGB image[][kDisplayWidth + kSideBarWidth]);
+	/// Handle sequence length control (row 1, pads 0-15)
+	void handleSequenceLength(int32_t x, ArpeggiatorSettings* settings);
 
-	/// Render keyboard in rows 4-7 (adapted from IN-KEY layout)
-	void renderKeyboard(RGB image[][kDisplayWidth + kSideBarWidth]);
+	/// Handle velocity spread control (row 2, pads 0-7)
+	void handleVelocitySpread(int32_t x, ArpeggiatorSettings* settings);
 
-	/// Get color for a rhythm step based on its state
-	RGB getStepColor(bool isActive, bool isCurrent, uint8_t velocity = 64);
+	/// Handle gate control (row 3, pads 0-7)
+	void handleGate(int32_t x, ArpeggiatorSettings* settings);
 
-	/// Get current step index in the rhythm pattern (returns -1 if not playing)
-	int32_t getCurrentRhythmStep();
+	/// Handle transpose control (row 3, pads 14-15)
+	void handleTranspose(int32_t x);
+
+	/// Handle keyboard notes (rows 4-7)
+	void handleKeyboard(int32_t x, int32_t y, uint8_t velocity);
+
+	/// Get color for arp mode display
+	RGB getArpModeColor(ArpeggiatorSettings* settings);
+
+	/// Get color for octave display
+	RGB getOctaveColor(int32_t octave, int32_t currentOctaves);
+
+	/// Get color for rhythm display
+	RGB getRhythmColor(int32_t rhythm, int32_t currentRhythm);
+
+	/// Get color for sequence length display
+	RGB getSequenceLengthColor(int32_t length, int32_t currentLength);
+
+	/// Get color for velocity spread display
+	RGB getVelocitySpreadColor(int32_t spread, int32_t currentSpread);
+
+	/// Get color for gate display
+	RGB getGateColor(int32_t gate, int32_t currentGate);
+
+	/// Get color for keyboard notes
+	RGB getKeyboardColor(int32_t x, int32_t y);
 
 	/// Convert arpeggiator preset enum to display string
 	char const* getArpPresetDisplayName(ArpPreset preset);
 
-	/// Convert octave mode enum to display string
-	char const* getOctaveModeDisplayName(ArpOctaveMode mode);
+	/// Simple keyboard helper functions
+	inline uint16_t noteFromCoords(int32_t x, int32_t y) {
+		return noteFromPadIndex(padIndexFromCoords(x, y));
+	}
 
-	/// Keyboard helper functions (adapted from IN-KEY layout)
-	inline uint16_t noteFromCoords(int32_t x, int32_t y) { return noteFromPadIndex(padIndexFromCoords(x, y)); }
 	inline uint16_t padIndexFromCoords(int32_t x, int32_t y) {
-		return x + y * displayState.keyboardRowInterval;
+		return getState().inKey.scrollOffset + x + y * getState().inKey.rowInterval;
 	}
+
 	inline uint16_t noteFromPadIndex(uint16_t padIndex) {
-		// Simple chromatic mapping starting at C2 by default, with transpose offset
-		return padIndex + displayState.keyboardScrollOffset + 36; // Base at C2 (MIDI note 36)
+		NoteSet& scaleNotes = getScaleNotes();
+		uint8_t scaleNoteCount = getScaleNoteCount();
+
+		uint8_t octave = padIndex / scaleNoteCount;
+		uint8_t octaveNoteIndex = padIndex % scaleNoteCount;
+		return octave * kOctaveSize + getRootNote() + scaleNotes[octaveNoteIndex];
 	}
 
-	/// Check if arpeggiator settings have changed
-	bool hasArpSettingsChanged();
+	// Simple state tracking
+	int32_t keyboardScrollOffset = 0; // Keyboard transpose offset
+	int32_t currentRhythm = 1; // Currently selected rhythm pattern
+	int32_t appliedRhythm = 0; // Currently applied rhythm (0 = off)
 
-	/// Helper function to update arpeggiator and refresh UI efficiently
-	void updateArpAndRefreshUI(ArpeggiatorSettings* settings, const char* popupMessage);
+	// Individual pad values for tweaking
+	int32_t sequenceLengthValues[8] = {0, 10, 20, 25, 35, 40, 45, 50}; // Each pad has its own value
+	int32_t velocitySpreadValues[8] = {0, 10, 20, 25, 35, 40, 45, 50}; // Each pad has its own value
+	int32_t gateValues[8] = {0, 10, 20, 25, 35, 40, 45, 50}; // Each pad has its own value
 
-	/// Optimized control pad handler - returns true if control was handled
-	bool handleControlPad(int32_t x, int32_t y, ArpeggiatorSettings* settings, bool& controlsChanged);
-
+public:
+	// Public display state for keyboard screen access
+	struct {
+		int32_t currentRhythm = 1;
+		int32_t appliedRhythm = 0;
+	} displayState;
 };
 
-}; // namespace deluge::gui::ui::keyboard::layout
+} // namespace deluge::gui::ui::keyboard::layout
