@@ -55,15 +55,12 @@ void KeyboardLayoutArpControl::evaluatePads(PressedPad presses[kMaxNumKeyboardPa
 
 			// Handle control pads first
 			if (y == 0) {
-				// Top row: Arp mode, octaves, rhythm
+				// Top row: Arp mode, octaves
 				if (x >= 0 && x < 3) {
 					handleArpMode(x, settings);
 				}
 				else if (x >= 4 && x < 12) {
 					handleOctaves(x, settings);
-				}
-				else if (x >= 12 && x < 15) {
-					handleRhythm(x, settings);
 				}
 			}
 			else if (y == 1) {
@@ -134,19 +131,6 @@ void KeyboardLayoutArpControl::handleOctaves(int32_t x, ArpeggiatorSettings* set
 	keyboardScreen.requestMainPadsRendering();
 }
 
-void KeyboardLayoutArpControl::handleRhythm(int32_t x, ArpeggiatorSettings* settings) {
-	// Simple rhythm toggle
-	if (displayState.appliedRhythm == 0) {
-		displayState.appliedRhythm = displayState.currentRhythm;
-		display->displayPopup("Rhythm ON");
-	} else {
-		displayState.appliedRhythm = 0;
-		display->displayPopup("Rhythm OFF");
-	}
-
-	// Force UI update
-	keyboardScreen.requestMainPadsRendering();
-}
 
 void KeyboardLayoutArpControl::handleSequenceLength(int32_t x, ArpeggiatorSettings* settings) {
 	// Track the last touched sequence length pad for LED feedback
@@ -287,7 +271,7 @@ void KeyboardLayoutArpControl::renderPads(RGB image[][kDisplayWidth + kSideBarWi
 	ArpeggiatorSettings* settings = getArpSettings();
 	if (!settings) return;
 
-	// Top row: Arp mode, octaves, rhythm
+	// Top row: Arp mode, octaves
 	for (int32_t x = 0; x < kDisplayWidth; x++) {
 		if (x >= 0 && x < 3) {
 			// Arp mode display
@@ -297,10 +281,6 @@ void KeyboardLayoutArpControl::renderPads(RGB image[][kDisplayWidth + kSideBarWi
 			// Octave display
 			image[0][x] = getOctaveColor(x - 4, settings->numOctaves);
 		}
-		else if (x >= 12 && x < 15) {
-			// Rhythm display
-			image[0][x] = getRhythmColor(x - 12, displayState.appliedRhythm);
-	}
 		else {
 			// Unused pads are black
 			image[0][x] = colours::black;
@@ -372,9 +352,6 @@ RGB KeyboardLayoutArpControl::getOctaveColor(int32_t octave, int32_t currentOcta
 	return (octave < currentOctaves) ? colours::blue : RGB(0, 0, 40);
 }
 
-RGB KeyboardLayoutArpControl::getRhythmColor(int32_t rhythm, int32_t currentRhythm) {
-	return (rhythm == currentRhythm) ? colours::yellow : colours::black;
-}
 
 RGB KeyboardLayoutArpControl::getSequenceLengthColor(int32_t length) {
 	// Highlight the last touched sequence length pad, dim all others

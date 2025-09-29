@@ -65,8 +65,6 @@ private:
 	/// Handle octave control (top row, pads 4-11)
 	void handleOctaves(int32_t x, ArpeggiatorSettings* settings);
 
-	/// Handle rhythm control (top row, pads 12-14)
-	void handleRhythm(int32_t x, ArpeggiatorSettings* settings);
 
 	/// Handle sequence length control (row 1, pads 0-15)
 	void handleSequenceLength(int32_t x, ArpeggiatorSettings* settings);
@@ -89,8 +87,6 @@ private:
 	/// Get color for octave display
 	RGB getOctaveColor(int32_t octave, int32_t currentOctaves);
 
-	/// Get color for rhythm display
-	RGB getRhythmColor(int32_t rhythm, int32_t currentRhythm);
 
 	/// Get color for sequence length display
 	RGB getSequenceLengthColor(int32_t length);
