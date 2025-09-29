@@ -88,11 +88,14 @@ void KeyboardLayoutArpControl::evaluatePads(PressedPad presses[kMaxNumKeyboardPa
 	}
 
 	// Update display
-			if (display->haveOLED()) {
-				renderUIsForOled();
-			}
-			keyboardScreen.requestMainPadsRendering();
-		}
+	if (display->haveOLED()) {
+		renderUIsForOled();
+	}
+	keyboardScreen.requestMainPadsRendering();
+
+	// Handle column controls (columns 16 & 17) - should be called last
+	ColumnControlsKeyboard::evaluatePads(presses);
+}
 
 void KeyboardLayoutArpControl::handleArpMode(int32_t x, ArpeggiatorSettings* settings) {
 	// Cycle through all arp presets
@@ -500,6 +503,14 @@ void KeyboardLayoutArpControl::handleVerticalEncoder(int32_t offset) {
 		}
 	}
 	display->displayPopup(buffer.c_str());
+
+	// Update OLED display to show the rhythm pattern
+	if (display->haveOLED()) {
+		renderUIsForOled();
+	}
+
+	// Update pads to show the rhythm pattern visualization
+	keyboardScreen.requestMainPadsRendering();
 }
 
 void KeyboardLayoutArpControl::handleHorizontalEncoder(int32_t offset, bool shiftEnabled, PressedPad presses[kMaxNumKeyboardPadPresses], bool encoderPressed) {
