@@ -322,14 +322,16 @@ void KeyboardLayoutArpControl::renderPads(RGB image[][kDisplayWidth + kSideBarWi
 		image[2][x] = colours::black;
 	}
 
-	// Row 3: Gate and transpose
+	// Row 3: Gate and rhythm visualization
 	for (int32_t x = 0; x < 8; x++) {
 		image[3][x] = getGateColor(x);
 	}
+	
+	// Rhythm pattern visualization on pads x8-x13
 	for (int32_t x = 8; x < 14; x++) {
-		// Unused pads are black
-		image[3][x] = colours::black;
+		image[3][x] = getRhythmPatternColor(x - 8);
 	}
+	
 	image[3][14] = colours::red; // Down transpose
 	image[3][15] = colours::purple; // Up transpose
 
@@ -398,6 +400,44 @@ RGB KeyboardLayoutArpControl::getGateColor(int32_t gate) {
 	}
 }
 
+RGB KeyboardLayoutArpControl::getRhythmPatternColor(int32_t step) {
+	// Show the currently selected rhythm pattern (not necessarily applied)
+	if (displayState.currentRhythm == 0) {
+		// Pattern 0 (all notes) - show all steps as dim white
+		return RGB::monochrome(32);
+	}
+	
+	// Clamp rhythm to valid range
+	int32_t rhythmIndex = std::clamp(displayState.currentRhythm, static_cast<int32_t>(0), static_cast<int32_t>(kMaxPresetArpRhythm));
+	
+	// Get the rhythm pattern
+	const ArpRhythm& pattern = arpRhythmPatterns[rhythmIndex];
+	
+	// Check if this step should be active
+	if (step < pattern.length && pattern.steps[step]) {
+		// Bright white for active steps, dimmer if not applied
+		if (displayState.appliedRhythm == displayState.currentRhythm) {
+			return RGB::monochrome(255); // Bright white when applied
+		} else {
+			return RGB::monochrome(128); // Dimmer white when not applied
+		}
+	} else {
+		return RGB::monochrome(32); // Dim white for inactive steps
+	}
+}
+
+void KeyboardLayoutArpControl::applyRhythmToArpSettings() {
+	ArpeggiatorSettings* settings = getArpSettings();
+	if (!settings) return;
+	
+	// Apply the rhythm setting to arp settings
+	settings->rhythm = displayState.appliedRhythm;
+	
+	// Force arpeggiator to restart with new rhythm
+	settings->flagForceArpRestart = true;
+}
+
+
 RGB KeyboardLayoutArpControl::getKeyboardColor(int32_t x, int32_t y) {
 	// Get the note for this pad position
 	auto note = noteFromCoords(x, y);
@@ -443,7 +483,7 @@ ArpeggiatorSettings* KeyboardLayoutArpControl::getArpSettings() {
 }
 
 void KeyboardLayoutArpControl::handleVerticalEncoder(int32_t offset) {
-	// Simple rhythm scrolling
+	// Scroll through rhythm patterns (but don't apply until encoder is pressed)
 	if (offset > 0) {
 		displayState.currentRhythm++;
 		if (displayState.currentRhythm > 50) displayState.currentRhythm = 1;
@@ -452,12 +492,20 @@ void KeyboardLayoutArpControl::handleVerticalEncoder(int32_t offset) {
 		if (displayState.currentRhythm < 1) displayState.currentRhythm = 50;
 	}
 
-	// If rhythm is on, apply immediately
-	if (displayState.appliedRhythm > 0) {
-		displayState.appliedRhythm = displayState.currentRhythm;
+	// Display rhythm pattern name and status
+	DEF_STACK_STRING_BUF(buffer, 30);
+	if (displayState.currentRhythm == 0) {
+		buffer.append("Rhythm: None");
+	} else {
+		buffer.append("Rhythm: ");
+		buffer.append(arpRhythmPatternNames[displayState.currentRhythm]);
+		if (displayState.appliedRhythm == 0) {
+			buffer.append(" (OFF)");
+		} else {
+			buffer.append(" (ON)");
+		}
 	}
-
-	display->displayPopup(("Rhythm: " + std::to_string(displayState.currentRhythm)).c_str());
+	display->displayPopup(buffer.c_str());
 }
 
 void KeyboardLayoutArpControl::handleHorizontalEncoder(int32_t offset, bool shiftEnabled, PressedPad presses[kMaxNumKeyboardPadPresses], bool encoderPressed) {

@@ -101,6 +101,12 @@ private:
 	/// Get color for gate display
 	RGB getGateColor(int32_t gate);
 
+	/// Get color for rhythm pattern visualization
+	RGB getRhythmPatternColor(int32_t step);
+
+	/// Apply current rhythm setting to arp settings
+	void applyRhythmToArpSettings();
+
 	/// Get color for keyboard notes
 	RGB getKeyboardColor(int32_t x, int32_t y);
 
