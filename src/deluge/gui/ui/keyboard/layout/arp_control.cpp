@@ -514,6 +514,11 @@ void KeyboardLayoutArpControl::handleVerticalEncoder(int32_t offset) {
 }
 
 void KeyboardLayoutArpControl::handleHorizontalEncoder(int32_t offset, bool shiftEnabled, PressedPad presses[kMaxNumKeyboardPadPresses], bool encoderPressed) {
+	// Check if column controls are handling the encoder
+	if (horizontalEncoderHandledByColumns(offset, shiftEnabled)) {
+		return;
+	}
+
 	// Arp rate control
 	ArpeggiatorSettings* settings = getArpSettings();
 	if (!settings) return;
