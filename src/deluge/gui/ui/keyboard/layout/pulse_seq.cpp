@@ -410,7 +410,10 @@ void KeyboardLayoutPulseSeq::generateNote() {
     uint8_t scaleNoteCount = getScaleNoteCount();
     
     // Get note from stage's noteIndex and octave
-    int32_t note = getRootNote() + scaleNotes[currentStageData.noteIndex % scaleNoteCount] 
+    // Start from C1 (MIDI note 24) as base octave for full range access
+    // With octave range -2 to +3, gives: C-2 (0) to C4 (60)
+    constexpr int32_t kBaseOctave = 24; // C1
+    int32_t note = kBaseOctave + getRootNote() + scaleNotes[currentStageData.noteIndex % scaleNoteCount] 
                    + (currentStageData.octave * kOctaveSize);
 
     // Clamp note to valid range
