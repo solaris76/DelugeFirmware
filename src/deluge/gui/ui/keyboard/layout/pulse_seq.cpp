@@ -141,13 +141,12 @@ void KeyboardLayoutPulseSeq::updateAnimation() {
                 return;
             }
 
-            // Use the arpeggiator's sync-based timing system
+            // Use the arpeggiator's sync-based timing system for accurate 16th notes
             uint32_t clipCurrentPos = clip->getLivePos();
+            
+            // Use syncLevel = 3 for 16th notes (192 ticks per beat)
+            // This is the same timing the arpeggiator uses
             uint32_t ticksPerPeriod = 3 << (9 - arpSettings->syncLevel);
-
-            // Slow down the sequencer to make it more musical
-            // Use a much slower timing - 8x slower than arpeggiator
-            ticksPerPeriod = ticksPerPeriod * 8;
 
             // Check if we're at the start of a new period
             int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
