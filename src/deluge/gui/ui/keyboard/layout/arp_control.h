@@ -18,6 +18,7 @@
 #pragma once
 
 #include "gui/ui/keyboard/layout/column_controls.h"
+#include "modulation/arpeggiator.h"
 #include "gui/l10n/strings.h"
 
 // Forward declarations

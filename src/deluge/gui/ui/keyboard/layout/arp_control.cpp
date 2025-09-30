@@ -113,7 +113,7 @@ void KeyboardLayoutArpControl::handleArpMode(int32_t x, ArpeggiatorSettings* set
 	settings->flagForceArpRestart = true;
 
 	// Show mode name in popup
-	const char* modeName = getArpPresetDisplayName(settings->preset);
+	const char* modeName = KeyboardLayoutArpControl::getArpPresetDisplayName(settings->preset);
 	display->displayPopup(modeName);
 
 	// Force UI update
@@ -140,27 +140,38 @@ void KeyboardLayoutArpControl::handleSequenceLength(int32_t x, ArpeggiatorSettin
 	// Direct sequence length control - each pad has its own value
 	int32_t newLength = sequenceLengthValues[x];
 
-	// Write to unpatched param system like the menu does
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (clip) {
-		UI* originalUI = getCurrentUI();
+	// Check output type to determine which approach to use
+	OutputType outputType = getCurrentOutputType();
 
-		// Set up sound editor context like the official menu
-		if (soundEditor.setup(clip, nullptr, 0)) {
-			// Now we're in sound editor context - use the official approach
-			char modelStackMemory[MODEL_STACK_MAX_SIZE];
-			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-			ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_SEQUENCE_LENGTH);
+	if (outputType == OutputType::SYNTH) {
+		// Use soundEditor.setup() for synth tracks (works properly)
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (clip) {
+			UI* originalUI = getCurrentUI();
 
-			if (modelStackWithParam && modelStackWithParam->autoParam) {
-				// Use signed scaling like the menu system
-				int32_t finalValue = computeFinalValueForStandardMenuItem(newLength);
-				modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+			// Set up sound editor context like the official menu
+			if (soundEditor.setup(clip, nullptr, 0)) {
+				// Now we're in sound editor context - use the official approach
+				char modelStackMemory[MODEL_STACK_MAX_SIZE];
+				ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+				ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_SEQUENCE_LENGTH);
+
+				if (modelStackWithParam && modelStackWithParam->autoParam) {
+					// Use signed scaling like the menu system
+					int32_t finalValue = computeFinalValueForStandardMenuItem(newLength);
+					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+				}
+
+				// Exit sound editor context back to original UI
+				originalUI->focusRegained();
 			}
-
-			// Exit sound editor context back to original UI
-			originalUI->focusRegained();
 		}
+	}
+	else {
+		// Use direct parameter setting for CV/MIDI tracks (avoids crash)
+		// Use proper value scaling like the official menu system
+		int32_t scaledValue = computeFinalValueForUnsignedMenuItem(newLength);
+		settings->sequenceLength = scaledValue;
 	}
 
 	// Display "OFF" for value 0, otherwise show the value
@@ -172,6 +183,7 @@ void KeyboardLayoutArpControl::handleSequenceLength(int32_t x, ArpeggiatorSettin
 
 	// Force UI update
 	keyboardScreen.requestMainPadsRendering();
+
 }
 
 void KeyboardLayoutArpControl::handleVelocitySpread(int32_t x, ArpeggiatorSettings* settings) {
@@ -181,27 +193,39 @@ void KeyboardLayoutArpControl::handleVelocitySpread(int32_t x, ArpeggiatorSettin
 	// Direct velocity spread control - each pad has its own value
 	int32_t newVelocity = velocitySpreadValues[x];
 
-	// Write to unpatched param system like the menu does
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (clip) {
-		UI* originalUI = getCurrentUI();
+	// Check output type to determine which approach to use
+	OutputType outputType = getCurrentOutputType();
 
-		// Set up sound editor context like the official menu
-		if (soundEditor.setup(clip, nullptr, 0)) {
-			// Now we're in sound editor context - use the official approach
-			char modelStackMemory[MODEL_STACK_MAX_SIZE];
-			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-			ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_SPREAD_VELOCITY);
+	if (outputType == OutputType::SYNTH) {
+		// Use soundEditor.setup() for synth tracks (works properly)
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (clip) {
+			UI* originalUI = getCurrentUI();
 
-			if (modelStackWithParam && modelStackWithParam->autoParam) {
-				// Use signed scaling like the menu system
-				int32_t finalValue = computeFinalValueForStandardMenuItem(newVelocity);
-				modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+			// Set up sound editor context like the official menu
+			if (soundEditor.setup(clip, nullptr, 0)) {
+				// Now we're in sound editor context - use the official approach
+				char modelStackMemory[MODEL_STACK_MAX_SIZE];
+				ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+				ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_SPREAD_VELOCITY);
+
+				if (modelStackWithParam && modelStackWithParam->autoParam) {
+					// Use signed scaling like the menu system
+					int32_t finalValue = computeFinalValueForStandardMenuItem(newVelocity);
+					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+				}
+
+				// Exit sound editor context back to original UI
+				originalUI->focusRegained();
 			}
-
-			// Exit sound editor context back to original UI
-			originalUI->focusRegained();
 		}
+	}
+	else {
+		// For MIDI/CV tracks, spreadVelocity is in the randomizer menu, not the main arp menu
+		// Use direct parameter setting for CV/MIDI tracks (avoids crash)
+		// Use proper value scaling like the official menu system
+		int32_t scaledValue = computeFinalValueForStandardMenuItem(newVelocity);
+		settings->spreadVelocity = scaledValue;
 	}
 
 	// Display "OFF" for value 0, otherwise show the value
@@ -213,6 +237,7 @@ void KeyboardLayoutArpControl::handleVelocitySpread(int32_t x, ArpeggiatorSettin
 
 	// Force UI update
 	keyboardScreen.requestMainPadsRendering();
+
 }
 
 void KeyboardLayoutArpControl::handleGate(int32_t x, ArpeggiatorSettings* settings) {
@@ -222,33 +247,45 @@ void KeyboardLayoutArpControl::handleGate(int32_t x, ArpeggiatorSettings* settin
 	// Direct gate control - each pad has its own value
 	int32_t newGate = gateValues[x];
 
-	// Write to unpatched param system like the menu does
-	InstrumentClip* clip = getCurrentInstrumentClip();
+	// Check output type to determine which approach to use
+	OutputType outputType = getCurrentOutputType();
+
+	if (outputType == OutputType::SYNTH) {
+		// Use soundEditor.setup() for synth tracks (works properly)
+		InstrumentClip* clip = getCurrentInstrumentClip();
 		if (clip) {
-		UI* originalUI = getCurrentUI();
+			UI* originalUI = getCurrentUI();
 
-		// Set up sound editor context like the official menu
-		if (soundEditor.setup(clip, nullptr, 0)) {
-			// Now we're in sound editor context - use the official approach
-			char modelStackMemory[MODEL_STACK_MAX_SIZE];
-			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-			ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
+			// Set up sound editor context like the official menu
+			if (soundEditor.setup(clip, nullptr, 0)) {
+				// Now we're in sound editor context - use the official approach
+				char modelStackMemory[MODEL_STACK_MAX_SIZE];
+				ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+				ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
 
-			if (modelStackWithParam && modelStackWithParam->autoParam) {
-				// Use absolute value (0-50) without scaling
-				int32_t finalValue = computeFinalValueForStandardMenuItem(newGate);
-				modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+				if (modelStackWithParam && modelStackWithParam->autoParam) {
+					// Use absolute value (0-50) without scaling
+					int32_t finalValue = computeFinalValueForStandardMenuItem(newGate);
+					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+				}
+
+				// Exit sound editor context back to original UI
+				originalUI->focusRegained();
 			}
-
-			// Exit sound editor context back to original UI
-			originalUI->focusRegained();
 		}
+	}
+	else {
+		// Use direct parameter setting for CV/MIDI tracks (avoids crash)
+		// Use proper value scaling like the official menu system
+		int32_t scaledValue = computeFinalValueForStandardMenuItem(newGate);
+		settings->gate = scaledValue;
 	}
 
 	display->displayPopup(("Gate: " + std::to_string(newGate)).c_str());
 
 	// Force UI update
 	keyboardScreen.requestMainPadsRendering();
+
 }
 
 void KeyboardLayoutArpControl::handleTranspose(int32_t x) {
@@ -408,28 +445,44 @@ RGB KeyboardLayoutArpControl::getRhythmPatternColor(int32_t step) {
 }
 
 void KeyboardLayoutArpControl::applyRhythmToArpSettings() {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip) return;
+	ArpeggiatorSettings* settings = getArpSettings();
+	if (!settings) return;
 
-	// Use the same approach as the keyboard screen for proper parameter setting
-	UI* originalUI = getCurrentUI();
+	// Check output type to determine which approach to use
+	OutputType outputType = getCurrentOutputType();
 
-	// Set up sound editor context like the official menu
-	if (soundEditor.setup(clip, nullptr, 0)) {
-		// Now we're in sound editor context - use the official approach
-		char modelStackMemory[MODEL_STACK_MAX_SIZE];
-		ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-		ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_RHYTHM);
+	if (outputType == OutputType::SYNTH) {
+		// Use soundEditor.setup() for synth tracks (works properly)
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (!clip) return;
 
-		if (modelStackWithParam && modelStackWithParam->autoParam) {
-			// Use appliedRhythm for the actual parameter value
-			int32_t finalValue = computeFinalValueForUnsignedMenuItem(displayState.appliedRhythm);
-			modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+		// Use the same approach as the keyboard screen for proper parameter setting
+		UI* originalUI = getCurrentUI();
+
+		// Set up sound editor context like the official menu
+		if (soundEditor.setup(clip, nullptr, 0)) {
+			// Now we're in sound editor context - use the official approach
+			char modelStackMemory[MODEL_STACK_MAX_SIZE];
+			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+			ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_RHYTHM);
+
+			if (modelStackWithParam && modelStackWithParam->autoParam) {
+				// Use appliedRhythm for the actual parameter value
+				int32_t finalValue = computeFinalValueForUnsignedMenuItem(displayState.appliedRhythm);
+				modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+			}
+
+			// Exit sound editor context back to original UI
+			originalUI->focusRegained();
 		}
-
-		// Exit sound editor context back to original UI
-		originalUI->focusRegained();
 	}
+	else {
+		// Use direct parameter setting for CV/MIDI tracks (avoids crash)
+		// Use proper value scaling like the official menu system
+		int32_t scaledValue = computeFinalValueForUnsignedMenuItem(displayState.appliedRhythm);
+		settings->rhythm = scaledValue;
+	}
+
 }
 
 
@@ -512,6 +565,7 @@ void KeyboardLayoutArpControl::handleVerticalEncoder(int32_t offset) {
 }
 
 void KeyboardLayoutArpControl::handleHorizontalEncoder(int32_t offset, bool shiftEnabled, PressedPad presses[kMaxNumKeyboardPadPresses], bool encoderPressed) {
+
 	// Check if column controls are handling the encoder
 	if (horizontalEncoderHandledByColumns(offset, shiftEnabled)) {
 		return;
@@ -521,27 +575,30 @@ void KeyboardLayoutArpControl::handleHorizontalEncoder(int32_t offset, bool shif
 	ArpeggiatorSettings* settings = getArpSettings();
 	if (!settings) return;
 
-	// Normal horizontal: change arp preset (not rate)
-	int32_t newPreset = static_cast<int32_t>(settings->preset) + offset;
-	newPreset = std::clamp(newPreset, static_cast<int32_t>(0), static_cast<int32_t>(ArpPreset::CUSTOM));
-	settings->preset = static_cast<ArpPreset>(newPreset);
+	// Only change preset if offset is non-zero (avoid display refresh on select encoder)
+	if (offset != 0) {
+		// Normal horizontal: change arp preset (not rate)
+		int32_t newPreset = static_cast<int32_t>(settings->preset) + offset;
+		newPreset = std::clamp(newPreset, static_cast<int32_t>(0), static_cast<int32_t>(ArpPreset::CUSTOM));
+		settings->preset = static_cast<ArpPreset>(newPreset);
 
-	// Update settings from preset to enable arpeggiator
-	settings->updateSettingsFromCurrentPreset();
+		// Update settings from preset to enable arpeggiator
+		settings->updateSettingsFromCurrentPreset();
 
-	// Force arpeggiator to restart so it picks up the new preset immediately
-	settings->flagForceArpRestart = true;
+		// Force arpeggiator to restart so it picks up the new preset immediately
+		settings->flagForceArpRestart = true;
 
-	display->displayPopup(getArpPresetDisplayName(settings->preset));
+		display->displayPopup(KeyboardLayoutArpControl::getArpPresetDisplayName(settings->preset));
 
-	// Display update: Handle both OLED and 7-segment
-	if (display->haveOLED()) {
-		renderUIsForOled();
+		// Display update: Handle both OLED and 7-segment
+		if (display->haveOLED()) {
+			renderUIsForOled();
+		}
+		// 7-segment display is already handled by displayPopup()
+
+		// Pad update: Only because arp status changed
+		keyboardScreen.requestMainPadsRendering();
 	}
-	// 7-segment display is already handled by displayPopup()
-
-	// Pad update: Only because arp status changed
-	keyboardScreen.requestMainPadsRendering();
 }
 
 void KeyboardLayoutArpControl::precalculate() {
