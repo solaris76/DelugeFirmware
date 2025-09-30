@@ -75,6 +75,16 @@ private:
 	/// Handle pulse count adjustment for a specific stage
 	void handlePulseCount(int32_t stage, int32_t position);
 
+	/// Pulse sequencer engine methods
+	void updateSequencer();
+	void resetSequencerState();
+	void advanceStage();
+	bool isDelugePlaying() const;
+	void generateNote();
+	void updateVisualFeedback();
+	void triggerGatePadFlash(int32_t stage, int32_t pulsePosition);
+	bool isGatePadFlashing() const;
+
 	/// Get gate type color for a specific stage
 	RGB getGateTypeColor(int32_t stage) const;
 
@@ -112,6 +122,22 @@ private:
 		int32_t gateLineOffset = 0; // 0-3, maps to Y positions 4-7 (bottom left is y0 x0)
 	} displayState;
 
+	// Pulse sequencer engine state
+	struct {
+		bool isPlaying = false;
+		int32_t currentStage = 0;        // 0-7 (stages 1-8)
+		int32_t currentPulseInStage = 0; // 0 to pulseCount-1
+		int32_t stageStartTime = 0;      // When current stage started
+		bool gateCurrentlyActive = false;
+		uint32_t gatePos = 0;
+
+		// Visual feedback state
+		bool gatePadFlashing = false;
+		uint32_t flashStartTime = 0;
+		uint32_t flashDuration = 100; // Flash duration in milliseconds
+		int32_t flashPosition = 0;    // Position across the gate pad (0-7)
+	} sequencerState;
+
 	// Stage data (8 stages, one per column)
 	struct StageData {
 		GateType gateType = GateType::OFF;
@@ -121,6 +147,14 @@ private:
 	};
 
 	StageData stages[8];
+
+	// Performance controls (for future implementation)
+	struct {
+		int32_t transpose = 0;    // Pre-scale transpose
+		int32_t octave = 0;       // Octave shift
+		int32_t clockRate = 1;    // Clock rate multiplier
+		int32_t numStages = 8;    // Number of active stages (1-8)
+	} performanceControls;
 };
 
 }; // namespace deluge::gui::ui::keyboard::layout
