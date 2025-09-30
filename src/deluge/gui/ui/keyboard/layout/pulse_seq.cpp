@@ -23,6 +23,7 @@
 #include "io/debug/print.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/melodic_instrument.h"
+#include "model/instrument/kit.h"
 #include "gui/menu_item/value_scaling.h"
 #include "model/model_stack.h"
 #include "model/scale/note_set.h"
@@ -64,6 +65,7 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			else if (y == gateLineY + 3 && x < 8) {
 				handleOctaveAdjustment(x, 1); // Octave up
 			}
+			// Rhythm pattern selection removed - patterns are auto-generated from gate type and pulse count
 			// Pulse count pads (below gate line)
 			else if (y < gateLineY && x < 8) {
 				handlePulseCount(x, gateLineY - 1 - y);
@@ -78,7 +80,8 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 void KeyboardLayoutPulseSeq::handleVerticalEncoder(int32_t offset) {
 	// Scroll the gate line to reveal pulse count pads below
 	int32_t newOffset = displayState.gateLineOffset + offset;
-	newOffset = std::clamp(newOffset, static_cast<int32_t>(0), static_cast<int32_t>(3)); // 0-3 maps to y4-y7
+	if (newOffset < 0) newOffset = 0;
+	if (newOffset > 3) newOffset = 3; // 0-3 maps to y4-y7
 
 	if (newOffset != displayState.gateLineOffset) {
 		displayState.gateLineOffset = newOffset;
@@ -128,65 +131,77 @@ void KeyboardLayoutPulseSeq::updateAnimation() {
     if (isCurrentlyPlaying) {
         updateSequencer();
 
-        // Use the arpeggiator's rate settings for timing
+        // Use the arpeggiator's timing system
         InstrumentClip* clip = getCurrentInstrumentClip();
         if (clip) {
             ArpeggiatorSettings* arpSettings = &clip->arpSettings;
 
-            // Don't run if arp rate is 0 (off)
-            if (arpSettings->rate == 0) {
+            // Only run when arpeggiator is OFF (so it doesn't interfere with our sequencer)
+            if (arpSettings->mode != ArpMode::OFF) {
                 return;
             }
 
-            // Use the playback handler's internal tick count for proper timing
-            uint32_t currentTickCount = playbackHandler.getCurrentInternalTickCount();
-
-            // Use the arpeggiator's sync-based timing system (simplified - no sync type)
-            // ticksPerPeriod = 3 << (9 - syncLevel)
+            // Use the arpeggiator's sync-based timing system
+            uint32_t clipCurrentPos = clip->getLivePos();
             uint32_t ticksPerPeriod = 3 << (9 - arpSettings->syncLevel);
 
-            // Slow down the sequencer by dividing the sync rate (make it 16x slower)
-            ticksPerPeriod = ticksPerPeriod * 16;
+            // Slow down the sequencer to make it more musical
+            // Use a much slower timing - 8x slower than arpeggiator
+            ticksPerPeriod = ticksPerPeriod * 8;
 
-            // Check if we're at the start of a new period using proper timing
-            static uint32_t lastTickCount = 0;
-            if (currentTickCount != lastTickCount && (currentTickCount % ticksPerPeriod == 0)) {
-                lastTickCount = currentTickCount;
+            // Check if we're at the start of a new period
+            int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
+
+            if (howFarIntoPeriod == 0) {
                 StageData& currentStageData = stages[sequencerState.currentStage];
 
                 // Increment pulse counter for this stage
                 sequencerState.currentPulseInStage++;
+                sequencerState.currentPatternPosition++;
+
+                // Check if we should play a note based on rhythm pattern
+                bool shouldPlayNote = evaluateRhythmPattern(sequencerState.currentStage, sequencerState.currentPulseInStage - 1);
 
                 // Handle different gate types
-                switch (currentStageData.gateType) {
-                    case GateType::SINGLE:
-                        // One note on stage entry, wait for next stage if longer
-                        if (sequencerState.currentPulseInStage == 1) {
+                if (shouldPlayNote) {
+                    switch (currentStageData.gateType) {
+                        case GateType::SINGLE:
+                            // One note on stage entry, wait for next stage if longer
+                            if (sequencerState.currentPulseInStage == 1) {
+                                generateNote();
+                            }
+                            break;
+
+                        case GateType::MULTIPLE:
+                            // Play the stage note multiple times in time with arp rate
                             generateNote();
-                        }
-                        break;
+                            break;
 
-                    case GateType::MULTIPLE:
-                        // Play the stage note multiple times in time with arp rate
-                        generateNote();
-                        break;
+                        case GateType::HELD:
+                            // One sustained note for duration of the stage
+                            if (sequencerState.currentPulseInStage == 1) {
+                                generateNote();
+                            }
+                            break;
 
-                    case GateType::HELD:
-                        // One sustained note for duration of the stage
-                        if (sequencerState.currentPulseInStage == 1) {
-                            generateNote();
-                        }
-                        break;
-
-                    case GateType::OFF:
-                        // No note, just like a rest
-                        break;
+                        case GateType::OFF:
+                            // No note, just like a rest
+                            break;
+                    }
                 }
 
                 // Check if we've completed the required number of pulses for this stage
                 if (sequencerState.currentPulseInStage >= currentStageData.pulseCount) {
                     advanceStage();
                 }
+
+                // Check if we've completed the entire pattern (all stages)
+                if (sequencerState.currentPatternPosition >= sequencerState.totalPatternLength) {
+                    resetToPatternStart();
+                }
+
+                // Force display refresh to show pad changes
+                keyboardScreen.requestMainPadsRendering();
             }
         }
     }
@@ -350,6 +365,10 @@ void KeyboardLayoutPulseSeq::resetSequencerState() {
 	sequencerState.gateCurrentlyActive = false;
 	sequencerState.gatePos = 0;
 
+	// Reset pattern state
+	sequencerState.totalPatternLength = calculateTotalPatternLength();
+	sequencerState.currentPatternPosition = 0;
+
 	// Reset visual feedback state
 	sequencerState.gatePadFlashing = false;
 	sequencerState.flashStartTime = 0;
@@ -371,91 +390,92 @@ bool KeyboardLayoutPulseSeq::isDelugePlaying() const {
 }
 
 void KeyboardLayoutPulseSeq::generateNote() {
-	// Get current stage data
-	StageData& currentStageData = stages[sequencerState.currentStage];
+    // Get current stage data
+    StageData& currentStageData = stages[sequencerState.currentStage];
 
-	// Only generate notes for non-OFF gate types
-	if (currentStageData.gateType == GateType::OFF) {
-		return; // No note generation for rest
-	}
+    // Only generate notes for non-OFF gate types
+    if (currentStageData.gateType == GateType::OFF) {
+        return; // No note generation for rest
+    }
 
-	// For testing, just send C4 (note 72) to avoid any low note issues
-	int32_t note = 72; // C4
+    // For testing, just send C4 (note 72) to avoid any low note issues
+    int32_t note = 72; // C4
 
-	// Generate the note using the instrument's noteOn method
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || !clip->output) {
-		return;
-	}
+    // Generate the note using the instrument's noteOn method
+    InstrumentClip* clip = getCurrentInstrumentClip();
+    if (!clip || !clip->output) {
+        return;
+    }
 
-	// Clamp note to valid range
-	note = std::clamp(note, (int32_t)0, (int32_t)127);
+    // Clamp note to valid range
+    if (note < 0) note = 0;
+    if (note > 127) note = 127;
 
-	// Get default velocity and apply velocity spread like arpeggiator does
-	uint8_t baseVelocity = getDefaultVelocity();
+    // Get default velocity and apply velocity spread like arpeggiator does
+    uint8_t baseVelocity = getDefaultVelocity();
 
-	// Apply velocity spread from arp settings
-	if (!clip) {
-		return;
-	}
+    // Apply velocity spread from arp settings
+    if (!clip) {
+        return;
+    }
 
-	ArpeggiatorSettings* arpSettings = &clip->arpSettings;
+    ArpeggiatorSettings* arpSettings = &clip->arpSettings;
 
-	// Calculate velocity spread for current step (simplified version)
-	int32_t spreadVelocityForCurrentStep = 0;
-	if (arpSettings->spreadVelocity != 0) {
-		// Simple random spread calculation (simplified from arpeggiator)
-		uint32_t randomValue = getRandom255();
-		if (randomValue < (arpSettings->spreadVelocity >> 1)) {
-			spreadVelocityForCurrentStep = (randomValue % (arpSettings->spreadVelocity >> 1)) + 1;
-		}
-		else if (randomValue < arpSettings->spreadVelocity) {
-			spreadVelocityForCurrentStep = -((randomValue % (arpSettings->spreadVelocity >> 1)) + 1);
-		}
-	}
+    // Calculate velocity spread for current step (simplified version)
+    int32_t spreadVelocityForCurrentStep = 0;
+    if (arpSettings->spreadVelocity != 0) {
+        // Simple random spread calculation (simplified from arpeggiator)
+        uint32_t randomValue = getRandom255();
+        if (randomValue < (arpSettings->spreadVelocity >> 1)) {
+            spreadVelocityForCurrentStep = (randomValue % (arpSettings->spreadVelocity >> 1)) + 1;
+        }
+        else if (randomValue < arpSettings->spreadVelocity) {
+            spreadVelocityForCurrentStep = -((randomValue % (arpSettings->spreadVelocity >> 1)) + 1);
+        }
+    }
 
-	// Apply velocity spread calculation (same as arpeggiator)
-	uint8_t velocity = baseVelocity;
-	if (spreadVelocityForCurrentStep != 0) {
-		int32_t signedVelocity = (int32_t)velocity;
-		int32_t diff = 0;
-		if (spreadVelocityForCurrentStep < 0) {
-			// Reducing velocity
-			diff = -(q31_mult((-spreadVelocityForCurrentStep) << 24, signedVelocity - 1));
-		}
-		else {
-			// Increasing velocity
-			diff = (q31_mult(spreadVelocityForCurrentStep << 24, 127 - signedVelocity));
-		}
-		signedVelocity = signedVelocity + diff;
+    // Apply velocity spread calculation (same as arpeggiator)
+    uint8_t velocity = baseVelocity;
+    if (spreadVelocityForCurrentStep != 0) {
+        int32_t signedVelocity = (int32_t)velocity;
+        int32_t diff = 0;
+        if (spreadVelocityForCurrentStep < 0) {
+            // Reducing velocity
+            diff = -(q31_mult((-spreadVelocityForCurrentStep) << 24, signedVelocity - 1));
+        }
+        else {
+            // Increasing velocity
+            diff = (q31_mult(spreadVelocityForCurrentStep << 24, 127 - signedVelocity));
+        }
+        signedVelocity = signedVelocity + diff;
 
-		// Clamp to valid range
-		if (signedVelocity < 1) {
-			signedVelocity = 1;
-		}
-		else if (signedVelocity > 127) {
-			signedVelocity = 127;
-		}
-		velocity = (uint8_t)signedVelocity;
-	}
+        // Clamp to valid range
+        if (signedVelocity < 1) {
+            signedVelocity = 1;
+        }
+        else if (signedVelocity > 127) {
+            signedVelocity = 127;
+        }
+        velocity = (uint8_t)signedVelocity;
+    }
 
-	// Create a simple note-on event
-	MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
-	if (melodicInstrument) {
-		// Create a ModelStack for the note-on event using soundEditor
-		if (soundEditor.setup(clip, nullptr, 0)) {
-			char modelStackMemory[MODEL_STACK_MAX_SIZE];
-			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+    // Create a simple note-on event
+    MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
+    if (melodicInstrument) {
+        // Create a ModelStack for the note-on event using soundEditor
+        if (soundEditor.setup(clip, nullptr, 0)) {
+            char modelStackMemory[MODEL_STACK_MAX_SIZE];
+            ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
 
-			if (modelStack) {
-				// Calculate gate length from arp settings
-				uint32_t gateLength = computeFinalValueForStandardMenuItem(arpSettings->gate);
+            if (modelStack) {
+                // Calculate gate length from arp settings
+                uint32_t gateLength = computeFinalValueForStandardMenuItem(arpSettings->gate);
 
-				// Trigger a note-on event with gate length
-				melodicInstrument->sendNote(modelStack, true, note, nullptr, MIDI_CHANNEL_NONE, velocity, gateLength);
-			}
-		}
-	}
+                // Trigger a note-on event with gate length
+                melodicInstrument->sendNote(modelStack, true, note, nullptr, MIDI_CHANNEL_NONE, velocity, gateLength);
+            }
+        }
+    }
 }
 
 void KeyboardLayoutPulseSeq::updateVisualFeedback() {
@@ -523,6 +543,8 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 	}
 
+	// Rhythm pattern selection removed - patterns are auto-generated from gate type and pulse count
+
 	// Render pulse count display (below gate line, 7 pads with gradient on all 8 columns)
 	for (int32_t i = 0; i < 7; i++) {
 		if (gateLineY - 1 - i >= 0) {
@@ -580,7 +602,8 @@ void KeyboardLayoutPulseSeq::handleOctaveAdjustment(int32_t stage, int32_t direc
 
 	// Adjust octave with reasonable limits
 	int32_t newOctave = stages[stage].octave + direction;
-	newOctave = std::clamp(newOctave, static_cast<int32_t>(-2), static_cast<int32_t>(3)); // -2 to +3 octaves
+	if (newOctave < -2) newOctave = -2;
+	if (newOctave > 3) newOctave = 3; // -2 to +3 octaves
 
 	if (newOctave != stages[stage].octave) {
 		stages[stage].octave = newOctave;
@@ -598,6 +621,10 @@ void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 
 	if (newPulseCount != stages[stage].pulseCount) {
 		stages[stage].pulseCount = newPulseCount;
+
+		// Recalculate total pattern length when pulse counts change
+		sequencerState.totalPatternLength = calculateTotalPatternLength();
+
 		displayPulseCountPopup(stage);
 		displayState.needsRefresh = true;
 	}
@@ -656,6 +683,47 @@ RGB KeyboardLayoutPulseSeq::getPulseCountColor(int32_t stage, int32_t position) 
 		// Inactive pulse positions - black
 		return RGB{0, 0, 0};
 	}
+}
+
+bool KeyboardLayoutPulseSeq::evaluateRhythmPattern(int32_t stage, int32_t pulsePosition) {
+	StageData& stageData = stages[stage];
+
+	// Generate rhythm pattern based on gate type and pulse count
+	switch (stageData.gateType) {
+		case GateType::SINGLE:
+			// Single hit at the beginning, then rest for remaining pulses
+			return (pulsePosition == 0);
+
+		case GateType::MULTIPLE:
+			// Multiple hits for the pulse count, then rest
+			return (pulsePosition < stageData.pulseCount);
+
+		case GateType::HELD:
+			// One hit at the beginning, held for the pulse count duration
+			return (pulsePosition == 0);
+
+		case GateType::OFF:
+			// No hits - always rest
+			return false;
+
+		default:
+			return false;
+	}
+}
+
+int32_t KeyboardLayoutPulseSeq::calculateTotalPatternLength() const {
+	int32_t totalLength = 0;
+	for (int32_t i = 0; i < 8; i++) {
+		totalLength += stages[i].pulseCount;
+	}
+	return totalLength;
+}
+
+void KeyboardLayoutPulseSeq::resetToPatternStart() {
+	sequencerState.currentStage = 0;
+	sequencerState.currentPulseInStage = 0;
+	sequencerState.currentPatternPosition = 0;
+	sequencerState.totalPatternLength = calculateTotalPatternLength();
 }
 
 } // namespace deluge::gui::ui::keyboard::layout

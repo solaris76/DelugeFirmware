@@ -26,6 +26,7 @@ class Arpeggiator;
 
 namespace deluge::gui::ui::keyboard::layout {
 
+
 /// Pulse sequence keyboard layout for creating rhythmic pulse patterns
 class KeyboardLayoutPulseSeq : public ColumnControlsKeyboard {
 public:
@@ -75,6 +76,15 @@ private:
 	/// Handle pulse count adjustment for a specific stage
 	void handlePulseCount(int32_t stage, int32_t position);
 
+	/// Evaluate rhythm pattern to determine if note should play (auto-generated from gate type and pulse count)
+	bool evaluateRhythmPattern(int32_t stage, int32_t pulsePosition);
+
+	/// Calculate total pattern length based on all stage pulse counts
+	int32_t calculateTotalPatternLength() const;
+
+	/// Reset sequencer to start of pattern
+	void resetToPatternStart();
+
 	/// Pulse sequencer engine methods
 	void updateSequencer();
 	void resetSequencerState();
@@ -96,6 +106,7 @@ private:
 
 	/// Get pulse count color for a specific stage and position
 	RGB getPulseCountColor(int32_t stage, int32_t position) const;
+
 
 public:
 	// Gate types enum
@@ -130,6 +141,10 @@ private:
 		int32_t stageStartTime = 0;      // When current stage started
 		bool gateCurrentlyActive = false;
 		uint32_t gatePos = 0;
+
+		// Pattern state for variable-length patterns
+		int32_t totalPatternLength = 8;  // Total length of current pattern (8-56)
+		int32_t currentPatternPosition = 0; // Position within the full pattern (0 to totalPatternLength-1)
 
 		// Visual feedback state
 		bool gatePadFlashing = false;
