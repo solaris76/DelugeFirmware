@@ -145,7 +145,7 @@ void KeyboardLayoutPulseSeq::updateAnimation() {
             // Use global playback position instead of clip position (which loops)
             // This allows the pulse sequencer to have its own variable pattern length
             int64_t globalTickCount = playbackHandler.getCurrentInternalTickCount();
-            
+
             // Use syncLevel = 3 for 16th notes (192 ticks per beat)
             // This is the same timing the arpeggiator uses
             uint32_t ticksPerPeriod = 3 << (9 - arpSettings->syncLevel);
@@ -399,14 +399,19 @@ void KeyboardLayoutPulseSeq::generateNote() {
         return; // No note generation for rest
     }
 
-    // For testing, just send C4 (note 72) to avoid any low note issues
-    int32_t note = 72; // C4
-
     // Generate the note using the instrument's noteOn method
     InstrumentClip* clip = getCurrentInstrumentClip();
     if (!clip || !clip->output) {
         return;
     }
+
+    // Calculate note from scale
+    NoteSet& scaleNotes = getScaleNotes();
+    uint8_t scaleNoteCount = getScaleNoteCount();
+    
+    // Get note from stage's noteIndex and octave
+    int32_t note = getRootNote() + scaleNotes[currentStageData.noteIndex % scaleNoteCount] 
+                   + (currentStageData.octave * kOctaveSize);
 
     // Clamp note to valid range
     if (note < 0) note = 0;
