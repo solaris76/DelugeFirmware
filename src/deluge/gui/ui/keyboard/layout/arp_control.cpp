@@ -223,8 +223,8 @@ void KeyboardLayoutArpControl::handleVelocitySpread(int32_t x, ArpeggiatorSettin
 	else {
 		// For MIDI/CV tracks, spreadVelocity is in the randomizer menu, not the main arp menu
 		// Use direct parameter setting for CV/MIDI tracks (avoids crash)
-		// Use proper value scaling like the official menu system
-		int32_t scaledValue = computeFinalValueForStandardMenuItem(newVelocity);
+		// Use proper value scaling like the official menu system (unsigned scaling)
+		int32_t scaledValue = computeFinalValueForUnsignedMenuItem(newVelocity);
 		settings->spreadVelocity = scaledValue;
 	}
 
