@@ -142,14 +142,16 @@ void KeyboardLayoutPulseSeq::updateAnimation() {
             }
 
             // Use the arpeggiator's sync-based timing system for accurate 16th notes
-            uint32_t clipCurrentPos = clip->getLivePos();
+            // Use global playback position instead of clip position (which loops)
+            // This allows the pulse sequencer to have its own variable pattern length
+            int64_t globalTickCount = playbackHandler.getCurrentInternalTickCount();
             
             // Use syncLevel = 3 for 16th notes (192 ticks per beat)
             // This is the same timing the arpeggiator uses
             uint32_t ticksPerPeriod = 3 << (9 - arpSettings->syncLevel);
 
             // Check if we're at the start of a new period
-            int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
+            int32_t howFarIntoPeriod = globalTickCount % ticksPerPeriod;
 
             if (howFarIntoPeriod == 0) {
                 StageData& currentStageData = stages[sequencerState.currentStage];
