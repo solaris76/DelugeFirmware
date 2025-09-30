@@ -23,6 +23,7 @@
 
 namespace deluge::gui::ui::keyboard {
 
+
 constexpr int32_t kDefaultIsometricRowInterval = 5;
 struct KeyboardStateIsomorphic {
 	int32_t scrollOffset = (60 - (kDisplayHeight >> 2) * kDefaultIsometricRowInterval);
@@ -62,6 +63,7 @@ struct KeyboardStateChord {
 	int32_t scaleOffset = 0;
 	bool autoVoiceLeading = false;
 };
+
 /// Please note that saving and restoring currently needs to be added manually in instrument_clip.cpp and all layouts
 /// share one struct for storage
 struct KeyboardState {

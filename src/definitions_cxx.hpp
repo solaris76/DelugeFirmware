@@ -1040,7 +1040,7 @@ enum KeyboardLayoutType : uint8_t {
 	KeyboardLayoutTypeChordLibrary,
 	KeyboardLayoutTypeDrums,
 	KeyboardLayoutTypeGenerative,
-	KeyboardLayoutTypePulseSequencer,
+	KeyboardLayoutTypePulseSeq,
 	KeyboardLayoutTypeNorns,
 	KeyboardLayoutTypeMaxElement // Keep as boundary
 };

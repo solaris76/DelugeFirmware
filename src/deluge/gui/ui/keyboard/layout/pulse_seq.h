@@ -26,12 +26,11 @@ class Arpeggiator;
 
 namespace deluge::gui::ui::keyboard::layout {
 
-/// Pulse sequencer keyboard layout that generates rhythmic pulses and patterns
-/// Based on arp control but focused on pulse generation and rhythm creation
-class KeyboardLayoutPulseSequencer : public ColumnControlsKeyboard {
+/// Pulse sequence keyboard layout for creating rhythmic pulse patterns
+class KeyboardLayoutPulseSeq : public ColumnControlsKeyboard {
 public:
-	KeyboardLayoutPulseSequencer() = default;
-	~KeyboardLayoutPulseSequencer() override = default;
+	KeyboardLayoutPulseSeq() = default;
+	~KeyboardLayoutPulseSeq() override = default;
 
 	void evaluatePads(PressedPad presses[kMaxNumKeyboardPadPresses]) override;
 	void handleVerticalEncoder(int32_t offset) override;
@@ -51,9 +50,6 @@ public:
 	/// Direct pad LED update for real-time animation
 	void updatePadLEDsDirect();
 
-	/// Update playback progress bar on top row
-	void updatePlaybackProgressBar();
-
 	/// Update display for both OLED and 7-segment
 	void updateDisplay();
 
@@ -64,40 +60,67 @@ private:
 	/// Get the current arpeggiator instance from the active instrument
 	Arpeggiator* getArpeggiator();
 
-	/// Visualize the current rhythm pattern on the main pads
-	void renderRhythmPattern(RGB image[][kDisplayWidth + kSideBarWidth]);
+	/// Get the current gate line Y position (constrained to y4-y7)
+	int32_t getGateLineY() const;
 
-	/// Show current arpeggiator parameters in the top rows
-	void renderParameterDisplay(RGB image[][kDisplayWidth + kSideBarWidth]);
+	/// Handle gate type cycling for a specific stage
+	void handleGateType(int32_t stage);
 
-	/// Show the current step position if arp is playing
-	void renderCurrentStep(RGB image[][kDisplayWidth + kSideBarWidth]);
+	/// Handle note selection for a specific stage
+	void handleNoteSelection(int32_t stage);
 
-	/// Get color for a rhythm step based on its state
-	RGB getStepColor(bool isActive, bool isCurrent, uint8_t velocity = 64);
+	/// Handle octave adjustment for a specific stage
+	void handleOctaveAdjustment(int32_t stage, int32_t direction);
 
-	/// Get current step index in the rhythm pattern (returns -1 if not playing)
-	int32_t getCurrentRhythmStep();
+	/// Handle pulse count adjustment for a specific stage
+	void handlePulseCount(int32_t stage, int32_t position);
 
-	/// Convert arpeggiator preset enum to display string
-	char const* getArpPresetDisplayName(ArpPreset preset);
+	/// Get gate type color for a specific stage
+	RGB getGateTypeColor(int32_t stage) const;
 
-	/// Convert octave mode enum to display string
-	char const* getOctaveModeDisplayName(ArpOctaveMode mode);
+	/// Get note selection color for a specific stage
+	RGB getNoteSelectionColor(int32_t stage) const;
 
-	/// Check if arpeggiator settings have changed
-	bool hasArpSettingsChanged();
+	/// Get octave control color
+	RGB getOctaveControlColor() const;
 
+	/// Get pulse count color for a specific stage and position
+	RGB getPulseCountColor(int32_t stage, int32_t position) const;
+
+public:
+	// Gate types enum
+	enum class GateType : int32_t {
+		OFF = 0,
+		SINGLE = 1,
+		MULTIPLE = 2,
+		HELD = 3
+	};
+
+	// OLED display helpers
+	void displayGateTypePopup(int32_t stage);
+	void displayNotePopup(int32_t stage);
+	void displayOctavePopup(int32_t stage, int32_t direction);
+	void displayPulseCountPopup(int32_t stage);
+	const char* getGateTypeName(GateType type) const;
+	const char* getNoteName(int32_t noteIndex, int32_t octave);
+
+private:
 	// Display state
 	struct {
-		int32_t currentRhythm = 0;
-		int32_t lastRhythmStep = -1;
-		ArpPreset currentPreset = ArpPreset::OFF;
-		ArpOctaveMode currentOctaveMode = ArpOctaveMode::UP;
-		uint8_t currentOctaves = 1;
 		bool needsRefresh = true;
 		bool wasPlaying = false;
+		int32_t gateLineOffset = 0; // 0-3, maps to Y positions 4-7 (bottom left is y0 x0)
 	} displayState;
+
+	// Stage data (8 stages, one per column)
+	struct StageData {
+		GateType gateType = GateType::OFF;
+		int32_t noteIndex = 0; // Index in current scale
+		int32_t octave = 0; // Octave offset from base
+		int32_t pulseCount = 1; // 1-7, default is 1
+	};
+
+	StageData stages[8];
 };
 
 }; // namespace deluge::gui::ui::keyboard::layout
