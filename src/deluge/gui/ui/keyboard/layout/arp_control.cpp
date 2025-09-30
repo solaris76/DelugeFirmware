@@ -30,8 +30,6 @@
 #include "modulation/arpeggiator.h"
 #include "modulation/arpeggiator_rhythms.h"
 #include "util/d_string.h"
-#include "model/sync.h"
-#include "gui/menu_item/sync_level.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/menu_item/value_scaling.h"
 #include "modulation/params/param.h"
@@ -519,30 +517,31 @@ void KeyboardLayoutArpControl::handleHorizontalEncoder(int32_t offset, bool shif
 		return;
 	}
 
-	// Arp rate control
+	// Arp preset control (like pulse_sequencer.cpp)
 	ArpeggiatorSettings* settings = getArpSettings();
 	if (!settings) return;
 
-	// Get current sync value from arp settings
-	deluge::gui::menu_item::SyncLevel syncLevel;
-	int32_t currentSyncValue = syncLevel.syncTypeAndLevelToMenuOption(settings->syncType, settings->syncLevel);
-	int32_t newSyncValue = currentSyncValue + offset;
+	// Normal horizontal: change arp preset (not rate)
+	int32_t newPreset = static_cast<int32_t>(settings->preset) + offset;
+	newPreset = std::clamp(newPreset, static_cast<int32_t>(0), static_cast<int32_t>(ArpPreset::CUSTOM));
+	settings->preset = static_cast<ArpPreset>(newPreset);
 
-	// Clamp to valid sync range (0 to NUM_SYNC_VALUES-1)
-	if (newSyncValue < 0) newSyncValue = 0;
-	if (newSyncValue >= NUM_SYNC_VALUES) newSyncValue = NUM_SYNC_VALUES - 1;
+	// Update settings from preset to enable arpeggiator
+	settings->updateSettingsFromCurrentPreset();
 
-	// Update arp settings with new sync values
-	settings->syncType = syncValueToSyncType(newSyncValue);
-	settings->syncLevel = syncValueToSyncLevel(newSyncValue);
-
-	// Force arpeggiator to restart with new rate
+	// Force arpeggiator to restart so it picks up the new preset immediately
 	settings->flagForceArpRestart = true;
 
-	// Display proper note name using sync value
-	DEF_STACK_STRING_BUF(buffer, 20);
-	syncValueToString(newSyncValue, buffer, currentSong->getInputTickMagnitude());
-	display->displayPopup(buffer.c_str());
+	display->displayPopup(getArpPresetDisplayName(settings->preset));
+
+	// Display update: Handle both OLED and 7-segment
+	if (display->haveOLED()) {
+		renderUIsForOled();
+	}
+	// 7-segment display is already handled by displayPopup()
+
+	// Pad update: Only because arp status changed
+	keyboardScreen.requestMainPadsRendering();
 }
 
 void KeyboardLayoutArpControl::precalculate() {
