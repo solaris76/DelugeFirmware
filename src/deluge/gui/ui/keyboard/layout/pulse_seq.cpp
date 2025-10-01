@@ -103,16 +103,9 @@ void KeyboardLayoutPulseSeq::precalculate() {
 	// For now, we don't need to pre-calculate anything
 }
 
-void KeyboardLayoutPulseSeq::updateAnimation() {
-    // Call the swung tick handler with the current musical tick
-    // lastSwungTickActioned is the synchronized musical tick counter
-    if (isDelugePlaying()) {
-        handleSwungTick(playbackHandler.lastSwungTickActioned);
-    }
-}
-
 void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
     // Called on every 32nd note from playback_handler - perfect musical timing!
+    // NOTE: This is only called when Deluge playback is ACTIVE (PLAY button pressed)
 
     InstrumentClip* clip = getCurrentInstrumentClip();
     if (!clip) return;
@@ -423,46 +416,6 @@ void KeyboardLayoutPulseSeq::generateNote() {
         return;
     }
 
-    ArpeggiatorSettings* arpSettings = &clip->arpSettings;
-
-    // Calculate velocity spread for current step (simplified version)
-    int32_t spreadVelocityForCurrentStep = 0;
-    if (arpSettings->spreadVelocity != 0) {
-        // Simple random spread calculation (simplified from arpeggiator)
-        uint32_t randomValue = getRandom255();
-        if (randomValue < (arpSettings->spreadVelocity >> 1)) {
-            spreadVelocityForCurrentStep = (randomValue % (arpSettings->spreadVelocity >> 1)) + 1;
-        }
-        else if (randomValue < arpSettings->spreadVelocity) {
-            spreadVelocityForCurrentStep = -((randomValue % (arpSettings->spreadVelocity >> 1)) + 1);
-        }
-    }
-
-    // Apply velocity spread calculation (same as arpeggiator)
-    uint8_t velocity = baseVelocity;
-    if (spreadVelocityForCurrentStep != 0) {
-        int32_t signedVelocity = (int32_t)velocity;
-        int32_t diff = 0;
-        if (spreadVelocityForCurrentStep < 0) {
-            // Reducing velocity
-            diff = -(q31_mult((-spreadVelocityForCurrentStep) << 24, signedVelocity - 1));
-        }
-        else {
-            // Increasing velocity
-            diff = (q31_mult(spreadVelocityForCurrentStep << 24, 127 - signedVelocity));
-        }
-        signedVelocity = signedVelocity + diff;
-
-        // Clamp to valid range
-        if (signedVelocity < 1) {
-            signedVelocity = 1;
-        }
-        else if (signedVelocity > 127) {
-            signedVelocity = 127;
-        }
-        velocity = (uint8_t)signedVelocity;
-    }
-
     // Create a simple note-on event
     MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
     if (melodicInstrument) {
@@ -473,6 +426,7 @@ void KeyboardLayoutPulseSeq::generateNote() {
 
             if (modelStack) {
                 // Calculate gate length from arp settings
+                ArpeggiatorSettings* arpSettings = &clip->arpSettings;
                 uint32_t gateLength = computeFinalValueForStandardMenuItem(arpSettings->gate);
 
                 // Trigger a note-on event with gate length
@@ -482,30 +436,8 @@ void KeyboardLayoutPulseSeq::generateNote() {
     }
 }
 
-void KeyboardLayoutPulseSeq::updateVisualFeedback() {
-	// Update visual feedback for the current stage and pulse
-	// Check if flash duration has expired
-	if (sequencerState.gatePadFlashing) {
-		uint32_t currentTime = AudioEngine::audioSampleTimer;
-		if (currentTime - sequencerState.flashStartTime >= sequencerState.flashDuration) {
-			sequencerState.gatePadFlashing = false;
-		}
-	}
 
-	// Mark that we need a refresh
-	displayState.needsRefresh = true;
-}
 
-void KeyboardLayoutPulseSeq::triggerGatePadFlash(int32_t stage, int32_t pulsePosition) {
-	sequencerState.gatePadFlashing = true;
-	sequencerState.flashStartTime = AudioEngine::audioSampleTimer;
-	sequencerState.flashPosition = pulsePosition;
-	displayState.needsRefresh = true;
-}
-
-bool KeyboardLayoutPulseSeq::isGatePadFlashing() const {
-	return sequencerState.gatePadFlashing;
-}
 
 void KeyboardLayoutPulseSeq::updateDisplay() {
 	// Force pad LED refresh using the correct method
@@ -637,11 +569,7 @@ void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 RGB KeyboardLayoutPulseSeq::getGateTypeColor(int32_t stage) const {
 	if (stage < 0 || stage >= 8) return RGB{0, 0, 0}; // Gate line only on first 8 columns
 
-	// Check if this stage is currently flashing
-	if (isGatePadFlashing() && sequencerState.currentStage == stage) {
-		// Flash white during note trigger
-		return RGB{255, 255, 255}; // White flash
-	}
+	// No flashing - just use gate type colors
 
 	// Normal gate type colors
 	switch (stages[stage].gateType) {
