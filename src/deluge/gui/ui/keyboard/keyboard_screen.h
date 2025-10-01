@@ -24,6 +24,7 @@
 #include "hid/button.h"
 #include "model/clip/instrument_clip_minder.h"
 #include "model/instrument/instrument.h"
+#include "modulation/arpeggiator.h"
 
 class ModelStack;
 class Instrument;
@@ -66,6 +67,9 @@ public:
 
 	/// Notify pulse sequencer of 16th note tick (called from playback handler)
 	void notifyPulseSeqTick(uint64_t currentTick);
+
+	/// Handle keyboard screen timing for all layouts that support it
+	int32_t doTickForwardForKeyboardScreen(int32_t currentPos, ArpReturnInstruction* instruction);
 
 	// ui
 	UIType getUIType() override { return UIType::KEYBOARD_SCREEN; }

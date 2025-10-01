@@ -1022,4 +1022,28 @@ void KeyboardScreen::notifyPulseSeqTick(uint64_t currentTick) {
 	}
 }
 
+int32_t KeyboardScreen::doTickForwardForKeyboardScreen(int32_t currentPos, ArpReturnInstruction* instruction) {
+	// Handle timing for all keyboard layouts that support it
+	KeyboardLayoutType currentLayoutType = getCurrentInstrumentClip()->keyboardState.currentLayout;
+
+	// Check if current layout supports timing
+	if (layout_list[currentLayoutType]->supportsTiming()) {
+		// Create our own instruction for the layout
+		ArpReturnInstruction layoutInstruction;
+
+		// Forward to layout's timing method
+		int32_t ticks = layout_list[currentLayoutType]->doTickForward(currentPos, false, &layoutInstruction);
+
+		// If the layout generated a note, copy it to the main instruction
+		if (layoutInstruction.arpNoteOn != nullptr) {
+			*instruction = layoutInstruction;
+		}
+
+		return ticks;
+	}
+
+	// No timing support
+	return 2147483647;
+}
+
 } // namespace deluge::gui::ui::keyboard

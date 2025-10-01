@@ -44,18 +44,16 @@ public:
 	l10n::String name() override { return l10n::String::STRING_FOR_KEYBOARD_LAYOUT_PULSE_SEQUENCER; }
 	bool supportsInstrument() override { return true; }
 	bool supportsKit() override { return false; }
+	bool supportsTiming() override { return true; }
 
-	/// Update animation and check if display needs refreshing
-	void updateAnimation();
+	/// Arpeggiator-style timing - returns ticks until next event
+	int32_t doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed, ArpReturnInstruction* instruction) override;
 
-	/// Handle swung tick - called from playback handler on musical ticks
+	/// Handle swung tick for timing
 	void handleSwungTick(uint64_t currentTick);
 
-	/// Direct pad LED update for real-time animation
-	void updatePadLEDsDirect();
-
-	/// Update display for both OLED and 7-segment
-	void updateDisplay();
+	/// Generate a note for the current stage
+	void generateNote();
 
 private:
 	/// Get the current arpeggiator settings from the active clip
@@ -63,6 +61,15 @@ private:
 
 	/// Get the current arpeggiator instance from the active instrument
 	Arpeggiator* getArpeggiator();
+
+	/// Generate note using ArpReturnInstruction
+	void switchNoteOn(ArpReturnInstruction* instruction);
+
+	/// Send note-off using ArpReturnInstruction
+	void switchAnyNoteOff(ArpReturnInstruction* instruction);
+
+	/// Calculate gate length in ticks
+	uint32_t calculateGateLength();
 
 	/// Get the current gate line Y position (constrained to y4-y7)
 	int32_t getGateLineY() const;
@@ -104,15 +111,8 @@ private:
 	void resetToPatternStart();
 
 	/// Pulse sequencer engine methods
-	void updateSequencer();
-	void resetSequencerState();
 	void advanceStage();
-	bool isDelugePlaying() const;
-	void generateNote();
-	void generateSimpleTestNote(); // TEST: Simple quarter note test function
-	void updateVisualFeedback();
-	void triggerGatePadFlash(int32_t stage, int32_t pulsePosition);
-	bool isGatePadFlashing() const;
+	void resetSequencerState();
 
 	/// Get gate type color for a specific stage
 	RGB getGateTypeColor(int32_t stage) const;
@@ -197,10 +197,9 @@ private:
 		uint32_t flashDuration = 100; // Flash duration in milliseconds
 		int32_t flashPosition = 0;    // Position across the gate pad (0-7)
 
-		// Note tracking for proper note-off handling
-		int32_t activeNote = -1; // Currently playing note (-1 = none)
-		uint64_t noteOnTick = 0; // Tick when note was triggered
-		uint32_t noteGateLength = 0; // Gate length for current note
+		// Note tracking for proper note-off handling (matches arpeggiator format)
+		std::array<int16_t, ARP_MAX_INSTRUCTION_NOTES> noteCodeCurrentlyOnPostArp = {ARP_NOTE_NONE};
+		std::array<uint8_t, ARP_MAX_INSTRUCTION_NOTES> outputMIDIChannelForNoteCurrentlyOnPostArp = {MIDI_CHANNEL_NONE};
 	} sequencerState;
 
 	// Stage data (8 stages, one per column)
@@ -214,11 +213,14 @@ private:
 
 	StageData stages[8];
 
+	// Arpeggiator-style note for the instruction system
+	ArpNote currentNote;
+
 	// Performance controls (for future implementation)
 	struct {
 		int32_t transpose = 0;    // Pre-scale transpose
 		int32_t octave = 0;       // Octave shift
-		int32_t clockDivider = 2; // Clock divider (1=32nd, 2=16th, 4=8th, 8=quarter, 16=half, 32=whole)
+		int32_t clockDivider = 1; // Clock divider (1=16th, 2=8th, 4=quarter, 8=half, 16=whole, 32=double)
 		int32_t numStages = 8;    // Number of active stages (1-8)
 		PlayOrder playOrder = PlayOrder::FORWARDS; // Stage play order
 		int32_t pingPongDirection = 1; // 1 = forwards, -1 = backwards (for ping pong)

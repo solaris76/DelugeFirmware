@@ -19,6 +19,7 @@
 #include "definitions.h"
 #include "definitions_cxx.hpp"
 #include "dsp_ng/core/types.hpp"
+#include "gui/ui/keyboard/keyboard_screen.h"
 #include "gui/views/view.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/audio_clip.h"
@@ -425,4 +426,28 @@ ModelStackWithAutoParam* AudioOutput::getModelStackWithParam(ModelStackWithTimel
 	}
 
 	return modelStackWithParam;
+}
+
+// Returns num ticks til next arp event
+int32_t AudioOutput::doTickForwardForArp(ModelStack* modelStack, int32_t currentPos) {
+	if (!activeClip) {
+		return 2147483647;
+	}
+
+	// Handle keyboard layout timing for layouts that support it
+	extern deluge::gui::ui::keyboard::KeyboardScreen keyboardScreen;
+	ArpReturnInstruction layoutInstruction;
+	int32_t layoutTicks = keyboardScreen.doTickForwardForKeyboardScreen(currentPos, &layoutInstruction);
+
+	if (layoutTicks != 2147483647) {
+		// Process layout instruction for audio tracks
+		if (layoutInstruction.arpNoteOn != nullptr) {
+			// For audio tracks, we could trigger sample playback or other audio events
+			// This would need custom implementation based on the specific audio track behavior
+			// For now, just return the timing
+		}
+		return layoutTicks;
+	}
+
+	return 2147483647; // No timing support
 }

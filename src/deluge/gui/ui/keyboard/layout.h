@@ -26,6 +26,7 @@
 #include "model/note/note_row.h"
 #include "model/scale/note_set.h"
 #include "model/song/song.h"
+#include "modulation/arpeggiator.h"
 
 constexpr uint8_t kMaxNumKeyboardPadPresses = 10;
 
@@ -76,6 +77,15 @@ public:
 	virtual bool supportsInstrument() { return false; }
 	virtual bool supportsKit() { return false; }
 	virtual RequiredScaleMode requiredScaleMode() { return RequiredScaleMode::Undefined; }
+	
+	/// Check if this layout supports timing-based note generation
+	virtual bool supportsTiming() { return false; }
+	
+	/// Handle timing-based note generation (similar to arpeggiator)
+	/// Returns ticks until next event, or 2147483647 if no timing support
+	virtual int32_t doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed, ArpReturnInstruction* instruction) { 
+		return 2147483647; 
+	}
 
 	virtual NotesState& getNotesState() { return currentNotesState; }
 

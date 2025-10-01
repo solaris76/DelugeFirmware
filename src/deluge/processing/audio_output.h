@@ -79,6 +79,7 @@ public:
 	                                    ModelStackWithTimelineCounter* modelStack) override {
 		ModControllableAudio::offerReceivedCCToLearnedParamsForClip(cable, channel, ccNumber, value, modelStack);
 	}
+	int32_t doTickForwardForArp(ModelStack* modelStack, int32_t currentPos) override;
 	bool offerReceivedPitchBendToLearnedParams(MIDICable& cable, uint8_t channel, uint8_t data1, uint8_t data2,
 	                                           ModelStackWithTimelineCounter* modelStack) override {
 		return ModControllableAudio::offerReceivedPitchBendToLearnedParams(cable, channel, data1, data2, modelStack);

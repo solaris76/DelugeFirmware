@@ -18,6 +18,7 @@
 #include "model/instrument/non_audio_instrument.h"
 #include "definitions_cxx.hpp"
 #include "dsp_ng/core/types.hpp"
+#include "gui/ui/keyboard/keyboard_screen.h"
 #include "model/clip/instrument_clip.h"
 #include "model/model_stack.h"
 #include "modulation/arpeggiator.h"
@@ -186,6 +187,21 @@ int32_t NonAudioInstrument::doTickForwardForArp(ModelStack* modelStack, int32_t 
 
 	int32_t ticksTilNextArpEvent = arpeggiator.doTickForward(&((InstrumentClip*)activeClip)->arpSettings, &instruction,
 	                                                         currentPos, activeClip->currentlyPlayingReversed);
+
+	// Handle keyboard layout timing for layouts that support it
+	extern deluge::gui::ui::keyboard::KeyboardScreen keyboardScreen;
+	ArpReturnInstruction layoutInstruction;
+	int32_t layoutTicks = keyboardScreen.doTickForwardForKeyboardScreen(currentPos, &layoutInstruction);
+
+	if (layoutTicks != 2147483647) {
+		// Use the shorter timing
+		ticksTilNextArpEvent = std::min(ticksTilNextArpEvent, layoutTicks);
+
+		// If layout generated a note, use it instead of arpeggiator
+		if (layoutInstruction.arpNoteOn != nullptr) {
+			instruction = layoutInstruction;
+		}
+	}
 
 	for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
 		if (instruction.glideNoteCodeOffPostArp[n] == ARP_NOTE_NONE) {

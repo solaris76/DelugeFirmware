@@ -18,6 +18,7 @@
 #include "playback/mode/session.h"
 #include "definitions_cxx.hpp"
 #include "gui/ui/audio_recorder.h"
+#include "gui/ui/keyboard/keyboard_screen.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
@@ -2470,6 +2471,9 @@ void Session::doTickForward(int32_t posIncrement) {
 		}
 
 		int32_t ticksTilNextArpEvent = thisOutput->doTickForwardForArp(modelStack, posForArp);
+
+		// Pulse sequencer timing is now handled within the instrument's doTickForwardForArp method
+
 		playbackHandler.swungTicksTilNextEvent = std::min(ticksTilNextArpEvent, playbackHandler.swungTicksTilNextEvent);
 	}
 

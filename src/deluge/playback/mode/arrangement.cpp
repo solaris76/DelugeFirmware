@@ -18,6 +18,7 @@
 #include "playback/mode/arrangement.h"
 #include "definitions_cxx.hpp"
 #include "gui/ui/audio_recorder.h"
+#include "gui/ui/keyboard/keyboard_screen.h"
 #include "gui/ui/ui.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/performance_view.h"
@@ -309,6 +310,9 @@ justDoArp:
 			}
 
 			int32_t ticksTilNextArpEvent = output->doTickForwardForArp(modelStack, posForArp);
+
+			// Pulse sequencer timing is now handled within the instrument's doTickForwardForArp method
+
 			nearestArpTickTime = std::min(ticksTilNextArpEvent, nearestArpTickTime);
 		}
 	}

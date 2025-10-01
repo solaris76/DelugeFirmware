@@ -18,6 +18,7 @@
 #include "model/instrument/kit.h"
 #include "definitions_cxx.hpp"
 #include "dsp_ng/core/types.hpp"
+#include "gui/ui/keyboard/keyboard_screen.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
 #include "gui/views/automation_view.h"
@@ -1200,6 +1201,21 @@ int32_t Kit::doTickForwardForArp(ModelStack* modelStack, int32_t currentPos) {
 	}
 
 	ticksTilNextArpEvent = std::min(ticksTilNextArpEvent, ticksTilNextKitArpEvent);
+
+	// Handle keyboard layout timing for layouts that support it
+	extern deluge::gui::ui::keyboard::KeyboardScreen keyboardScreen;
+	ArpReturnInstruction layoutInstruction;
+	int32_t layoutTicks = keyboardScreen.doTickForwardForKeyboardScreen(currentPos, &layoutInstruction);
+
+	if (layoutTicks != 2147483647) {
+		// Use the shorter timing
+		ticksTilNextArpEvent = std::min(ticksTilNextArpEvent, layoutTicks);
+
+		// If layout generated a note, use it instead of arpeggiator
+		if (layoutInstruction.arpNoteOn != nullptr) {
+			kitInstruction = layoutInstruction;
+		}
+	}
 
 	for (int32_t i = 0; i < ((InstrumentClip*)activeClip)->noteRows.getNumElements(); i++) {
 		NoteRow* thisNoteRow = ((InstrumentClip*)activeClip)->noteRows.getElement(i);
