@@ -382,6 +382,9 @@ void KeyboardLayoutPulseSeq::generateNote() {
     // Get current stage data
     StageData& currentStageData = stages[sequencerState.currentStage];
 
+    // Flash the current gate pad to show sequencer is running
+    keyboardScreen.requestMainPadsRendering();
+
     // Only generate notes for non-OFF gate types
     if (currentStageData.gateType == GateType::OFF) {
         return; // No note generation for rest
@@ -408,13 +411,8 @@ void KeyboardLayoutPulseSeq::generateNote() {
     if (note < 0) note = 0;
     if (note > 127) note = 127;
 
-    // Get default velocity and apply velocity spread like arpeggiator does
-    uint8_t baseVelocity = getDefaultVelocity();
-
-    // Apply velocity spread from arp settings
-    if (!clip) {
-        return;
-    }
+    // Get default velocity
+    uint8_t velocity = getDefaultVelocity();
 
     // Create a simple note-on event
     MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
