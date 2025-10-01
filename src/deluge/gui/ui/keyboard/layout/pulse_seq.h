@@ -47,7 +47,7 @@ public:
 
 	/// Update animation and check if display needs refreshing
 	void updateAnimation();
-	
+
 	/// Handle swung tick - called from playback handler on musical ticks
 	void handleSwungTick(uint64_t currentTick);
 

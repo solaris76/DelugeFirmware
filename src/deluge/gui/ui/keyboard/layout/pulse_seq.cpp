@@ -112,36 +112,72 @@ void KeyboardLayoutPulseSeq::updateAnimation() {
 }
 
 void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
-    // Called on EVERY swung tick
-
-    static int32_t callCount = 0;
-    callCount++;
-
-    // Only print every 100 calls to avoid spam
-    if (callCount % 100 == 0) {
-        InstrumentClip* clip = getCurrentInstrumentClip();
-        if (clip) {
-            ArpeggiatorSettings* arpSettings = &clip->arpSettings;
-            uint32_t ticksPer16thNote = 3 << (9 - arpSettings->syncLevel);
-            D_PRINTLN("Called %d times. syncLevel=%d, ticksPer16th=%u, tick=%lld",
-                      callCount, arpSettings->syncLevel, ticksPer16thNote, currentTick);
-        }
-    }
+    // Called on every 32nd note from playback_handler - perfect musical timing!
 
     InstrumentClip* clip = getCurrentInstrumentClip();
     if (!clip) return;
 
     ArpeggiatorSettings* arpSettings = &clip->arpSettings;
 
-    // Use quarter note length directly (simplest possible test)
-    uint32_t ticksPerQuarterNote = currentSong->getQuarterNoteLength();
+    // Only run when arpeggiator is OFF
+    if (arpSettings->mode != ArpMode::OFF) {
+        return;
+    }
 
-    // Check if we're on a quarter note boundary
-    static uint64_t lastQuarterNoteTick = 0;
-    if ((currentTick % ticksPerQuarterNote) == 0 && currentTick != lastQuarterNoteTick) {
-        lastQuarterNoteTick = currentTick;
-        D_PRINTLN("*** QUARTER NOTE at tick %lld ***", currentTick);
-        generateSimpleTestNote();
+    // Divide 32nd notes down to 16th notes (every 2nd call)
+    static int32_t counter32ndNotes = 0;
+    counter32ndNotes++;
+
+    if (counter32ndNotes >= 2) {
+        counter32ndNotes = 0;
+
+        // Now we're on 16th notes - run the full pulse sequencer logic
+        StageData& currentStageData = stages[sequencerState.currentStage];
+
+        // Increment pulse counter for this stage
+        sequencerState.currentPulseInStage++;
+        sequencerState.currentPatternPosition++;
+
+        // Check if we should play a note based on rhythm pattern
+        bool shouldPlayNote = evaluateRhythmPattern(sequencerState.currentStage, sequencerState.currentPulseInStage - 1);
+
+        // Handle different gate types
+        if (shouldPlayNote) {
+            switch (currentStageData.gateType) {
+                case GateType::SINGLE:
+                    // One note on stage entry
+                    if (sequencerState.currentPulseInStage == 1) {
+                        generateNote();
+                    }
+                    break;
+
+                case GateType::MULTIPLE:
+                    // Play note on each pulse
+                    generateNote();
+                    break;
+
+                case GateType::HELD:
+                    // One sustained note for duration of the stage
+                    if (sequencerState.currentPulseInStage == 1) {
+                        generateNote();
+                    }
+                    break;
+
+                case GateType::OFF:
+                    // Rest - no note
+                    break;
+            }
+        }
+
+        // Check if we've completed the required number of pulses for this stage
+        if (sequencerState.currentPulseInStage >= currentStageData.pulseCount) {
+            advanceStage();
+        }
+
+        // Check if we've completed the entire pattern (all stages)
+        if (sequencerState.currentPatternPosition >= sequencerState.totalPatternLength) {
+            resetToPatternStart();
+        }
     }
 }
 
