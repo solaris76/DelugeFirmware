@@ -116,25 +116,31 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 }
 
 void KeyboardLayoutPulseSeq::handleVerticalEncoder(int32_t offset) {
-	// If a note pad is being held, adjust that stage's note instead of scrolling
+	// If a note pad is being held, adjust that stage's accumulator instead of scrolling
 	if (heldNotePad >= 0 && heldNotePad < 8) {
-		// Get current scale notes
-		NoteSet& noteSet = getScaleNotes();
-		int32_t numNotes = getScaleNoteCount();
+		// Adjust accumulator value (-7 to +7)
+		int32_t newAccumulator = stages[heldNotePad].accumulator + offset;
 
-		if (numNotes > 0) {
-			// Adjust note index up or down
-			int32_t newNoteIndex = stages[heldNotePad].noteIndex + offset;
+		// Clamp to range -7 to +7
+		if (newAccumulator < -7) newAccumulator = -7;
+		if (newAccumulator > 7) newAccumulator = 7;
 
-			// Wrap around the scale
-			while (newNoteIndex < 0) newNoteIndex += numNotes;
-			while (newNoteIndex >= numNotes) newNoteIndex -= numNotes;
+		if (stages[heldNotePad].accumulator != newAccumulator) {
+			stages[heldNotePad].accumulator = newAccumulator;
 
-			if (stages[heldNotePad].noteIndex != newNoteIndex) {
-				stages[heldNotePad].noteIndex = newNoteIndex;
-				displayNotePopup(heldNotePad);
-				displayState.needsRefresh = true;
+			// Show accumulator popup
+			if (display->haveOLED()) {
+				char text[30];
+				strcpy(text, "Accumulator: ");
+				if (newAccumulator >= 0) {
+					strcat(text, "+");
+				}
+				intToString(newAccumulator, text + strlen(text));
+				display->displayPopup(text);
+				uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 			}
+
+			displayState.needsRefresh = true;
 		}
 	}
 	else {
@@ -589,7 +595,15 @@ void KeyboardLayoutPulseSeq::generateNote() {
     // Start from C1 (MIDI note 24) as base octave for full range access
     // With octave range -2 to +3, gives: C-2 (0) to C4 (60)
     constexpr int32_t kBaseOctave = 24; // C1
-    int32_t note = kBaseOctave + getRootNote() + scaleNotes[currentStageData.noteIndex % scaleNoteCount]
+
+    // Calculate base note index with accumulator applied
+    int32_t noteIndexWithAccumulator = currentStageData.noteIndex + currentStageData.accumulator;
+
+    // Wrap around the scale if needed
+    while (noteIndexWithAccumulator < 0) noteIndexWithAccumulator += scaleNoteCount;
+    while (noteIndexWithAccumulator >= scaleNoteCount) noteIndexWithAccumulator -= scaleNoteCount;
+
+    int32_t note = kBaseOctave + getRootNote() + scaleNotes[noteIndexWithAccumulator]
                    + (currentStageData.octave * kOctaveSize)
                    + performanceControls.transpose  // Apply transpose (within scale)
                    + (performanceControls.octave * kOctaveSize); // Apply global octave shift
@@ -641,7 +655,10 @@ void KeyboardLayoutPulseSeq::updateDisplay() {
 	// Force pad LED refresh using the correct method
 	keyboardScreen.requestMainPadsRendering();
 	if (display->haveOLED()) {
-		renderUIsForOled();
+		// Only render UI if no popup is active to avoid interfering with our popups
+		if (!display->hasPopup()) {
+			renderUIsForOled();
+		}
 	}
 }
 
@@ -657,16 +674,7 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 	// Render gate line (x0-x7)
 	for (int32_t x = 0; x < 8; x++) {
-		// Dim columns that are beyond the active stage count
-		if (x >= performanceControls.numStages) {
-			// Dim the entire column (y0-y7) for disabled stages
-			for (int32_t y = 0; y < kDisplayHeight; y++) {
-				image[y][x] = RGB{20, 20, 20}; // Very dim for disabled columns
-			}
-		}
-		else {
-			image[gateLineY][x] = getGateTypeColor(x);
-		}
+		image[gateLineY][x] = getGateTypeColor(x);
 	}
 
 	// Render note selection pads (above gate line) - 8 columns only
@@ -724,6 +732,14 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 	image[7][13] = getTransposeColor(1);  // Transpose +1
 	image[7][14] = getOctaveControlColor(-1); // Octave down
 	image[7][15] = getOctaveControlColor(1);  // Octave up
+
+	// Dim gate pads that are beyond the active stage count (x0-x7 only)
+	for (int32_t x = 0; x < 8; x++) {
+		if (x >= performanceControls.numStages) {
+			// Dim only the gate pad for disabled stages
+			image[gateLineY][x] = RGB{20, 20, 20}; // Very dim for disabled gate pads
+		}
+	}
 }
 
 ArpeggiatorSettings* KeyboardLayoutPulseSeq::getArpSettings() {
@@ -958,7 +974,7 @@ RGB KeyboardLayoutPulseSeq::getGateTypeColor(int32_t stage) const {
 	if (stage < 0 || stage >= 8) return RGB{0, 0, 0}; // Gate line only on first 8 columns
 
 	// Flash red when this stage is currently playing a note
-	if (sequencerState.activeNote >= 0 && sequencerState.currentStage == stage) {
+	if (sequencerState.activeNote >= 0 && sequencerState.currentStage == stage + 1) {
 		return RGB{255, 0, 0}; // Red flash
 	}
 
@@ -980,8 +996,11 @@ RGB KeyboardLayoutPulseSeq::getGateTypeColor(int32_t stage) const {
 RGB KeyboardLayoutPulseSeq::getGateControlColor(int32_t gateIndex) const {
 	if (gateIndex < 0 || gateIndex >= 8) return RGB{0, 0, 0};
 
-	// Light all pads to the left of the selected gate, black for others
-	if (lastTouchedGatePad >= 0 && gateIndex <= lastTouchedGatePad) {
+	// Default to gate index 3 (25) if no pad has been touched
+	int32_t selectedGate = (lastTouchedGatePad >= 0) ? lastTouchedGatePad : 3;
+
+	// Always light at least the first pad (minimum gate length 1)
+	if (gateIndex <= selectedGate || (selectedGate == 0 && gateIndex == 0)) {
 		return RGB{0, 255, 0}; // Bright green for selected and all pads to the left
 	}
 	else {
@@ -1002,30 +1021,39 @@ RGB KeyboardLayoutPulseSeq::getPlayOrderColor(int32_t playOrderIndex) const {
 }
 
 RGB KeyboardLayoutPulseSeq::getTransposeColor(int32_t direction) const {
-	// Show active state if transpose is not zero
+	// Only light the specific pad that was pressed
 	if (performanceControls.transpose != 0) {
-		return RGB{255, 128, 0}; // Orange when active
+		// Check if this is the direction that was pressed
+		if ((direction == -1 && performanceControls.transpose < 0) ||
+		    (direction == 1 && performanceControls.transpose > 0)) {
+			return RGB{255, 128, 0}; // Orange for the active direction
+		}
 	}
-	else {
-		return RGB{64, 32, 0}; // Dim orange when inactive
-	}
+	return RGB{64, 32, 0}; // Dim orange for inactive
 }
 
 RGB KeyboardLayoutPulseSeq::getOctaveControlColor(int32_t direction) const {
-	// Show active state if octave is not zero
+	// Only light the specific pad that was pressed
 	if (performanceControls.octave != 0) {
-		return RGB{255, 0, 255}; // Magenta when active
+		// Check if this is the direction that was pressed
+		if ((direction == -1 && performanceControls.octave < 0) ||
+		    (direction == 1 && performanceControls.octave > 0)) {
+			return RGB{255, 0, 255}; // Magenta for the active direction
+		}
 	}
-	else {
-		return RGB{64, 0, 64}; // Dim magenta when inactive
-	}
+	return RGB{64, 0, 64}; // Dim magenta for inactive
 }
 
 RGB KeyboardLayoutPulseSeq::getNoteSelectionColor(int32_t stage) const {
 	if (stage < 0 || stage >= 8) return RGB{0, 0, 0};
 
-	// Pink color for note selection
-	return RGB{255, 100, 150};
+	// Magenta when accumulator is non-zero, pink when zero
+	if (stages[stage].accumulator != 0) {
+		return RGB{255, 0, 255}; // Magenta for accumulator active
+	}
+	else {
+		return RGB{255, 100, 150}; // Pink for normal note selection
+	}
 }
 
 RGB KeyboardLayoutPulseSeq::getOctaveControlColor() const {

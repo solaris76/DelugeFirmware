@@ -209,6 +209,7 @@ private:
 		int32_t noteIndex = 0; // Index in current scale
 		int32_t octave = 0; // Octave offset from base
 		int32_t pulseCount = 1; // 1-7, default is 1
+		int32_t accumulator = 0; // -7 to +7, pitch accumulator for this stage
 	};
 
 	StageData stages[8];
