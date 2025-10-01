@@ -1008,9 +1008,10 @@ void KeyboardScreen::graphicsRoutine() {
 	if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypeGenerative) {
 		((layout::KeyboardLayoutArpControl*)layout_list[currentLayoutType])->updateAnimation();
 	}
-	else if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
-		((layout::KeyboardLayoutPulseSeq*)layout_list[currentLayoutType])->updateAnimation();
-	}
+	// Pulse sequencer timing now handled by playback_handler, not updateAnimation
+	// else if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
+	// 	((layout::KeyboardLayoutPulseSeq*)layout_list[currentLayoutType])->updateAnimation();
+	// }
 }
 
 void KeyboardScreen::notifyPulseSeqTick(uint64_t currentTick) {
