@@ -76,6 +76,21 @@ private:
 	/// Handle octave adjustment for a specific stage
 	void handleOctaveAdjustment(int32_t stage, int32_t direction);
 
+	/// Handle stage count change (performance control)
+	void handleStageCountChange(int32_t numStages);
+
+	/// Handle gate control (note length adjustment)
+	void handleGateControl(int32_t gateIndex);
+
+	/// Handle play order preset selection
+	void handlePlayOrderChange(int32_t playOrderIndex);
+
+	/// Handle transpose change
+	void handleTransposeChange(int32_t direction);
+
+	/// Handle octave change
+	void handleOctaveChange(int32_t direction);
+
 	/// Handle pulse count adjustment for a specific stage
 	void handlePulseCount(int32_t stage, int32_t position);
 
@@ -111,6 +126,18 @@ private:
 	/// Get pulse count color for a specific stage and position
 	RGB getPulseCountColor(int32_t stage, int32_t position) const;
 
+	/// Get gate control color for performance pad
+	RGB getGateControlColor(int32_t gateIndex) const;
+
+	/// Get play order preset color
+	RGB getPlayOrderColor(int32_t playOrderIndex) const;
+
+	/// Get transpose control color
+	RGB getTransposeColor(int32_t direction) const;
+
+	/// Get octave control color
+	RGB getOctaveControlColor(int32_t direction) const;
+
 
 public:
 	// Gate types enum
@@ -119,6 +146,14 @@ public:
 		SINGLE = 1,
 		MULTIPLE = 2,
 		HELD = 3
+	};
+
+	// Play order presets enum
+	enum class PlayOrder : int32_t {
+		FORWARDS = 0,    // 1,2,3,4,5,6,7,8
+		BACKWARDS = 1,   // 8,7,6,5,4,3,2,1
+		PING_PONG = 2,   // 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,2,3...
+		RANDOM = 3       // Random order each cycle
 	};
 
 	// OLED display helpers
@@ -136,6 +171,12 @@ private:
 		bool wasPlaying = false;
 		int32_t gateLineOffset = 0; // 0-3, maps to Y positions 4-7 (bottom left is y0 x0)
 	} displayState;
+
+	// Track which note pad is being held for encoder adjustment
+	int32_t heldNotePad = -1; // -1 = none, 0-7 = stage index
+
+	// Track which gate control pad was last touched for LED feedback
+	int32_t lastTouchedGatePad = -1; // -1 = none, 0-7 = gate index
 
 	// Pulse sequencer engine state
 	struct {
@@ -176,8 +217,10 @@ private:
 	struct {
 		int32_t transpose = 0;    // Pre-scale transpose
 		int32_t octave = 0;       // Octave shift
-		int32_t clockRate = 1;    // Clock rate multiplier
+		int32_t clockDivider = 2; // Clock divider (1=32nd, 2=16th, 4=8th, 8=quarter, 16=half, 32=whole)
 		int32_t numStages = 8;    // Number of active stages (1-8)
+		PlayOrder playOrder = PlayOrder::FORWARDS; // Stage play order
+		int32_t pingPongDirection = 1; // 1 = forwards, -1 = backwards (for ping pong)
 	} performanceControls;
 };
 

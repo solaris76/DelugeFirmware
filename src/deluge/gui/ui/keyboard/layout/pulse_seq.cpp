@@ -33,9 +33,11 @@
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound.h"
 #include "model/song/song.h"
+#include "gui/ui_timer_manager.h"
 #include <climits>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 
 namespace deluge::gui::ui::keyboard::layout {
 
@@ -44,11 +46,19 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 
 	int32_t gateLineY = getGateLineY();
 
+	// Reset held pad tracking
+	heldNotePad = -1;
+
 	for (int32_t idxPress = 0; idxPress < kMaxNumKeyboardPadPresses; ++idxPress) {
 		auto pressed = presses[idxPress];
 		if (pressed.active && pressed.x < kDisplayWidth) {
 			int32_t x = pressed.x;
 			int32_t y = pressed.y;
+
+			// Track if a note pad is being held (y = gateLineY + 1, x < 8)
+			if (y == gateLineY + 1 && x < 8) {
+				heldNotePad = x; // Store which stage's note pad is held
+			}
 
 			// Gate line (y0-y3, x0-x7) - bottom left is y0 x0
 			if (y == gateLineY && x < 8) {
@@ -70,6 +80,34 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			else if (y < gateLineY && x < 8) {
 				handlePulseCount(x, gateLineY - 1 - y);
 			}
+			// Performance controls on right side (x8-15)
+			// y4: Stage count control
+			else if (y == 4 && x >= 8 && x < kDisplayWidth) {
+				handleStageCountChange(x - 7); // 1-8
+			}
+			// y5: Gate control (note length)
+			else if (y == 5 && x >= 8 && x < kDisplayWidth) {
+				handleGateControl(x - 8); // 0-7
+			}
+			// y3: Play order presets
+			else if (y == 3 && x >= 8 && x < 12) {
+				handlePlayOrderChange(x - 8); // 0-3
+			}
+			// y7: Transpose and octave controls
+			else if (y == 7 && x >= 12 && x < kDisplayWidth) {
+				if (x == 12) {
+					handleTransposeChange(-1); // Transpose -1
+				}
+				else if (x == 13) {
+					handleTransposeChange(1); // Transpose +1
+				}
+				else if (x == 14) {
+					handleOctaveChange(-1); // Octave down
+				}
+				else if (x == 15) {
+					handleOctaveChange(1); // Octave up
+				}
+			}
 		}
 	}
 
@@ -78,14 +116,37 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 }
 
 void KeyboardLayoutPulseSeq::handleVerticalEncoder(int32_t offset) {
-	// Scroll the gate line to reveal pulse count pads below
-	int32_t newOffset = displayState.gateLineOffset + offset;
-	if (newOffset < 0) newOffset = 0;
-	if (newOffset > 3) newOffset = 3; // 0-3 maps to y4-y7
+	// If a note pad is being held, adjust that stage's note instead of scrolling
+	if (heldNotePad >= 0 && heldNotePad < 8) {
+		// Get current scale notes
+		NoteSet& noteSet = getScaleNotes();
+		int32_t numNotes = getScaleNoteCount();
 
-	if (newOffset != displayState.gateLineOffset) {
-		displayState.gateLineOffset = newOffset;
-		displayState.needsRefresh = true;
+		if (numNotes > 0) {
+			// Adjust note index up or down
+			int32_t newNoteIndex = stages[heldNotePad].noteIndex + offset;
+
+			// Wrap around the scale
+			while (newNoteIndex < 0) newNoteIndex += numNotes;
+			while (newNoteIndex >= numNotes) newNoteIndex -= numNotes;
+
+			if (stages[heldNotePad].noteIndex != newNoteIndex) {
+				stages[heldNotePad].noteIndex = newNoteIndex;
+				displayNotePopup(heldNotePad);
+				displayState.needsRefresh = true;
+			}
+		}
+	}
+	else {
+		// No pad held - scroll the gate line to reveal pulse count pads below
+		int32_t newOffset = displayState.gateLineOffset + offset;
+		if (newOffset < 0) newOffset = 0;
+		if (newOffset > 3) newOffset = 3; // 0-3 maps to y4-y7
+
+		if (newOffset != displayState.gateLineOffset) {
+			displayState.gateLineOffset = newOffset;
+			displayState.needsRefresh = true;
+		}
 	}
 }
 
@@ -95,7 +156,50 @@ void KeyboardLayoutPulseSeq::handleHorizontalEncoder(int32_t offset, bool shiftE
 		return;
 	}
 
-	// TODO: Implement horizontal encoder handling for pulse sequence
+	// Clock divider control: 1 (32nd) to 32 (whole note)
+	// Powers of 2: 1, 2, 4, 8, 16, 32
+	int32_t newDivider = performanceControls.clockDivider;
+
+	if (offset > 0) {
+		// Increase divider (slower tempo)
+		if (newDivider < 32) {
+			newDivider *= 2;
+		}
+	}
+	else if (offset < 0) {
+		// Decrease divider (faster tempo)
+		if (newDivider > 1) {
+			newDivider /= 2;
+		}
+	}
+
+	if (newDivider != performanceControls.clockDivider) {
+		performanceControls.clockDivider = newDivider;
+
+		// Show popup with clock divider name
+		if (display->haveOLED()) {
+			const char* dividerNames[] = {
+				"32nd Notes", "16th Notes", "8th Notes", "Quarter Notes", "Half Notes", "Whole Notes"
+			};
+			// Map divider to array index: 1->0, 2->1, 4->2, 8->3, 16->4, 32->5
+			int32_t nameIndex = 0;
+			int32_t tempDiv = newDivider;
+			while (tempDiv > 1) {
+				nameIndex++;
+				tempDiv /= 2;
+			}
+
+			char text[30];
+			strcpy(text, "Clock: ");
+			strcat(text, dividerNames[nameIndex]);
+			display->displayPopup(text);
+
+			// Set custom 2-second timeout for OLED
+			uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+		}
+
+		displayState.needsRefresh = true;
+	}
 }
 
 void KeyboardLayoutPulseSeq::precalculate() {
@@ -117,6 +221,32 @@ void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
         return;
     }
 
+    // Always reset to stage 1 pulse 1 when playback starts
+    // This ensures we start from the beginning every time PLAY is pressed
+    static bool hasReset = false;
+    if (!hasReset) {
+        // Reset sequencer to beginning on first tick after playback starts
+        sequencerState.currentStage = 0;
+        sequencerState.currentPulseInStage = 0;
+        sequencerState.currentPatternPosition = 0;
+        sequencerState.activeNote = -1; // Clear any active note
+        hasReset = true;
+    }
+
+    // Reset the flag when playback stops (so next PLAY will reset again)
+    // Note: This won't be called when stopped, but we need a way to detect stop
+    // We'll use a different approach - check if we're at the very first tick
+    static uint64_t lastTickProcessed = 0;
+    if (currentTick < lastTickProcessed) {
+        // Clock wrapped or playback restarted
+        hasReset = false;
+    }
+    // Also reset if there's a big gap (playback stopped and restarted)
+    else if (currentTick - lastTickProcessed > 1000000) {
+        hasReset = false;
+    }
+    lastTickProcessed = currentTick;
+
     // Check if we need to send note-off for currently playing note
     if (sequencerState.activeNote >= 0) {
         uint64_t ticksSinceNoteOn = currentTick - sequencerState.noteOnTick;
@@ -134,14 +264,15 @@ void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
                 }
             }
             sequencerState.activeNote = -1; // Mark note as off
+            keyboardScreen.requestMainPadsRendering(); // Refresh display when note ends
         }
     }
 
-    // Divide 32nd notes down to 16th notes (every 2nd call)
+    // Use clock divider to control sequencer speed
     static int32_t counter32ndNotes = 0;
     counter32ndNotes++;
 
-    if (counter32ndNotes >= 2) {
+    if (counter32ndNotes >= performanceControls.clockDivider) {
         counter32ndNotes = 0;
 
         // Now we're on 16th notes - run the full pulse sequencer logic
@@ -204,9 +335,9 @@ void KeyboardLayoutPulseSeq::displayGateTypePopup(int32_t stage) {
 
 	display->displayPopup(buffer);
 
-	// Force UI update
+	// Set custom 2-second timeout for OLED
 	if (display->haveOLED()) {
-		renderUIsForOled();
+		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 	}
 }
 
@@ -219,9 +350,9 @@ void KeyboardLayoutPulseSeq::displayNotePopup(int32_t stage) {
 
 	display->displayPopup(buffer);
 
-	// Force UI update
+	// Set custom 2-second timeout for OLED
 	if (display->haveOLED()) {
-		renderUIsForOled();
+		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 	}
 }
 
@@ -234,9 +365,9 @@ void KeyboardLayoutPulseSeq::displayOctavePopup(int32_t stage, int32_t direction
 
 	display->displayPopup(buffer);
 
-	// Force UI update
+	// Set custom 2-second timeout for OLED
 	if (display->haveOLED()) {
-		renderUIsForOled();
+		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 	}
 }
 
@@ -248,9 +379,9 @@ void KeyboardLayoutPulseSeq::displayPulseCountPopup(int32_t stage) {
 
 	display->displayPopup(buffer);
 
-	// Force UI update
+	// Set custom 2-second timeout for OLED
 	if (display->haveOLED()) {
-		renderUIsForOled();
+		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 	}
 }
 
@@ -354,12 +485,46 @@ void KeyboardLayoutPulseSeq::resetSequencerState() {
 }
 
 void KeyboardLayoutPulseSeq::advanceStage() {
-	sequencerState.currentStage++;
-	if (sequencerState.currentStage >= performanceControls.numStages) {
-		sequencerState.currentStage = 0; // Loop back to stage 1
+	// Advance to next stage based on play order
+	switch (performanceControls.playOrder) {
+		case PlayOrder::FORWARDS:
+			sequencerState.currentStage++;
+			if (sequencerState.currentStage >= performanceControls.numStages) {
+				sequencerState.currentStage = 0; // Loop back to stage 1
+			}
+			break;
+
+		case PlayOrder::BACKWARDS:
+			sequencerState.currentStage--;
+			if (sequencerState.currentStage < 0) {
+				sequencerState.currentStage = performanceControls.numStages - 1; // Loop to last stage
+			}
+			break;
+
+		case PlayOrder::PING_PONG:
+			// Move in current direction
+			sequencerState.currentStage += performanceControls.pingPongDirection;
+
+			// Check boundaries and reverse direction
+			if (sequencerState.currentStage >= performanceControls.numStages) {
+				sequencerState.currentStage = performanceControls.numStages - 1; // Go to last stage
+				performanceControls.pingPongDirection = -1; // Reverse direction
+			}
+			else if (sequencerState.currentStage < 0) {
+				sequencerState.currentStage = 0; // Go to first stage
+				performanceControls.pingPongDirection = 1; // Reverse direction
+			}
+			break;
+
+		case PlayOrder::RANDOM:
+			// Generate random stage within active range
+			sequencerState.currentStage = (rand() % performanceControls.numStages);
+			break;
 	}
-	sequencerState.currentPulseInStage = 0; // Reset pulse counter for new stage
-	sequencerState.stageStartTime = 0; // Reset stage start time
+
+	// Reset pulse counter for new stage
+	sequencerState.currentPulseInStage = 0;
+	sequencerState.stageStartTime = 0;
 }
 
 bool KeyboardLayoutPulseSeq::isDelugePlaying() const {
@@ -425,7 +590,9 @@ void KeyboardLayoutPulseSeq::generateNote() {
     // With octave range -2 to +3, gives: C-2 (0) to C4 (60)
     constexpr int32_t kBaseOctave = 24; // C1
     int32_t note = kBaseOctave + getRootNote() + scaleNotes[currentStageData.noteIndex % scaleNoteCount]
-                   + (currentStageData.octave * kOctaveSize);
+                   + (currentStageData.octave * kOctaveSize)
+                   + performanceControls.transpose  // Apply transpose (within scale)
+                   + (performanceControls.octave * kOctaveSize); // Apply global octave shift
 
     // Clamp note to valid range
     if (note < 0) note = 0;
@@ -490,7 +657,16 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 	// Render gate line (x0-x7)
 	for (int32_t x = 0; x < 8; x++) {
-		image[gateLineY][x] = getGateTypeColor(x);
+		// Dim columns that are beyond the active stage count
+		if (x >= performanceControls.numStages) {
+			// Dim the entire column (y0-y7) for disabled stages
+			for (int32_t y = 0; y < kDisplayHeight; y++) {
+				image[y][x] = RGB{20, 20, 20}; // Very dim for disabled columns
+			}
+		}
+		else {
+			image[gateLineY][x] = getGateTypeColor(x);
+		}
 	}
 
 	// Render note selection pads (above gate line) - 8 columns only
@@ -520,6 +696,34 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 			}
 		}
 	}
+
+	// Render performance controls on right side (x8-15)
+	// y4: Stage count control (1-8 stages) - bottom row
+	for (int32_t x = 8; x < kDisplayWidth; x++) {
+		int32_t stageNum = x - 7; // 1-8 (x8=stage1, x15=stage8)
+		if (stageNum <= performanceControls.numStages) {
+			image[4][x] = RGB{0, 100, 200}; // Blue (active stages)
+		}
+		else {
+			image[4][x] = RGB{0, 0, 0}; // Black (inactive stages)
+		}
+	}
+
+	// y5: Gate control (note length) - 8 pads
+	for (int32_t x = 8; x < kDisplayWidth; x++) {
+		image[5][x] = getGateControlColor(x - 8);
+	}
+
+	// y3: Play order presets - 4 pads (x8-11)
+	for (int32_t x = 8; x < 12; x++) {
+		image[3][x] = getPlayOrderColor(x - 8);
+	}
+
+	// y7: Transpose and octave controls - 4 pads (x12-15)
+	image[7][12] = getTransposeColor(-1); // Transpose -1
+	image[7][13] = getTransposeColor(1);  // Transpose +1
+	image[7][14] = getOctaveControlColor(-1); // Octave down
+	image[7][15] = getOctaveControlColor(1);  // Octave up
 }
 
 ArpeggiatorSettings* KeyboardLayoutPulseSeq::getArpSettings() {
@@ -579,6 +783,159 @@ void KeyboardLayoutPulseSeq::handleOctaveAdjustment(int32_t stage, int32_t direc
 	}
 }
 
+void KeyboardLayoutPulseSeq::handleStageCountChange(int32_t numStages) {
+	if (numStages < 1) numStages = 1;
+	if (numStages > 8) numStages = 8;
+
+	if (performanceControls.numStages != numStages) {
+		performanceControls.numStages = numStages;
+
+		// If current stage is beyond new limit, loop back to start
+		if (sequencerState.currentStage >= numStages) {
+			sequencerState.currentStage = 0;
+			sequencerState.currentPulseInStage = 0;
+		}
+
+		// Show popup
+		if (display->haveOLED()) {
+			char text[30];
+			strcpy(text, "Stages: ");
+			intToString(numStages, text + strlen(text));
+			display->popupText(text);
+		}
+
+		displayState.needsRefresh = true;
+	}
+}
+
+void KeyboardLayoutPulseSeq::handleGateControl(int32_t gateIndex) {
+	if (gateIndex < 0 || gateIndex >= 8) return;
+
+	// Track the last touched gate pad for LED feedback
+	lastTouchedGatePad = gateIndex;
+
+	// Gate values: same as arp_control
+	int32_t gateValues[8] = {1, 10, 20, 25, 35, 40, 45, 50};
+	int32_t newGate = gateValues[gateIndex];
+
+	// Get arp settings
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip) return;
+	ArpeggiatorSettings* settings = &clip->arpSettings;
+
+	// Check output type to determine which approach to use
+	OutputType outputType = getCurrentOutputType();
+
+	if (outputType == OutputType::SYNTH) {
+		// Use soundEditor.setup() for synth tracks
+		UI* originalUI = getCurrentUI();
+
+		if (soundEditor.setup(clip, nullptr, 0)) {
+			char modelStackMemory[MODEL_STACK_MAX_SIZE];
+			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+			ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
+
+			if (modelStackWithParam && modelStackWithParam->autoParam) {
+				int32_t finalValue = computeFinalValueForStandardMenuItem(newGate);
+				modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
+			}
+
+			originalUI->focusRegained();
+		}
+	}
+	else {
+		// Use direct parameter setting for CV/MIDI tracks
+		int32_t scaledValue = computeFinalValueForStandardMenuItem(newGate);
+		settings->gate = scaledValue;
+	}
+
+	// Show popup
+	if (display->haveOLED()) {
+		char text[30];
+		strcpy(text, "Gate: ");
+		intToString(newGate, text + strlen(text));
+		display->popupText(text);
+	}
+
+	displayState.needsRefresh = true;
+}
+
+void KeyboardLayoutPulseSeq::handlePlayOrderChange(int32_t playOrderIndex) {
+	if (playOrderIndex < 0 || playOrderIndex > 3) return;
+
+	PlayOrder newPlayOrder = static_cast<PlayOrder>(playOrderIndex);
+
+	if (performanceControls.playOrder != newPlayOrder) {
+		performanceControls.playOrder = newPlayOrder;
+
+		// Reset ping pong direction when changing play order
+		performanceControls.pingPongDirection = 1;
+
+		// Show popup
+		if (display->haveOLED()) {
+			const char* orderNames[] = {"FORWARDS", "BACKWARDS", "PING PONG", "RANDOM"};
+			char text[20];
+			strcpy(text, "Order: ");
+			strcat(text, orderNames[playOrderIndex]);
+			display->popupText(text);
+		}
+
+		displayState.needsRefresh = true;
+	}
+}
+
+void KeyboardLayoutPulseSeq::handleTransposeChange(int32_t direction) {
+	// Transpose affects all notes by moving within the scale
+	// direction: -1 for down, +1 for up
+	performanceControls.transpose += direction;
+
+	// Keep transpose within reasonable bounds (-12 to +12)
+	if (performanceControls.transpose < -12) performanceControls.transpose = -12;
+	if (performanceControls.transpose > 12) performanceControls.transpose = 12;
+
+	// Show popup
+	if (display->haveOLED()) {
+		char text[30];
+		strcpy(text, "Transpose: ");
+		if (performanceControls.transpose >= 0) {
+			strcat(text, "+");
+		}
+		intToString(performanceControls.transpose, text + strlen(text));
+		display->displayPopup(text);
+
+		// Set custom 2-second timeout for OLED
+		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	}
+
+	displayState.needsRefresh = true;
+}
+
+void KeyboardLayoutPulseSeq::handleOctaveChange(int32_t direction) {
+	// Octave affects all notes by shifting octaves
+	// direction: -1 for down, +1 for up
+	performanceControls.octave += direction;
+
+	// Keep octave within reasonable bounds (-3 to +3)
+	if (performanceControls.octave < -3) performanceControls.octave = -3;
+	if (performanceControls.octave > 3) performanceControls.octave = 3;
+
+	// Show popup
+	if (display->haveOLED()) {
+		char text[30];
+		strcpy(text, "Octave: ");
+		if (performanceControls.octave >= 0) {
+			strcat(text, "+");
+		}
+		intToString(performanceControls.octave, text + strlen(text));
+		display->displayPopup(text);
+
+		// Set custom 2-second timeout for OLED
+		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	}
+
+	displayState.needsRefresh = true;
+}
+
 void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 	if (stage < 0 || stage >= 8) return;
 	if (position < 0 || position >= 7) return;
@@ -600,12 +957,15 @@ void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 RGB KeyboardLayoutPulseSeq::getGateTypeColor(int32_t stage) const {
 	if (stage < 0 || stage >= 8) return RGB{0, 0, 0}; // Gate line only on first 8 columns
 
-	// No flashing - just use gate type colors
+	// Flash red when this stage is currently playing a note
+	if (sequencerState.activeNote >= 0 && sequencerState.currentStage == stage) {
+		return RGB{255, 0, 0}; // Red flash
+	}
 
 	// Normal gate type colors
 	switch (stages[stage].gateType) {
 		case GateType::OFF:
-			return RGB{255, 255, 255}; // White
+			return RGB{100, 100, 100}; // Dim white (changed from bright white to distinguish from flash)
 		case GateType::SINGLE:
 			return RGB{0, 255, 0}; // Green
 		case GateType::MULTIPLE:
@@ -614,6 +974,50 @@ RGB KeyboardLayoutPulseSeq::getGateTypeColor(int32_t stage) const {
 			return RGB{255, 0, 255}; // Magenta
 		default:
 			return RGB{0, 0, 0}; // Black
+	}
+}
+
+RGB KeyboardLayoutPulseSeq::getGateControlColor(int32_t gateIndex) const {
+	if (gateIndex < 0 || gateIndex >= 8) return RGB{0, 0, 0};
+
+	// Light all pads to the left of the selected gate, black for others
+	if (lastTouchedGatePad >= 0 && gateIndex <= lastTouchedGatePad) {
+		return RGB{0, 255, 0}; // Bright green for selected and all pads to the left
+	}
+	else {
+		return RGB{0, 0, 0}; // Black for unselected pads
+	}
+}
+
+RGB KeyboardLayoutPulseSeq::getPlayOrderColor(int32_t playOrderIndex) const {
+	if (playOrderIndex < 0 || playOrderIndex > 3) return RGB{0, 0, 0};
+
+	// Highlight the selected play order, dim others
+	if (static_cast<int32_t>(performanceControls.playOrder) == playOrderIndex) {
+		return RGB{0, 255, 255}; // Bright cyan for selected
+	}
+	else {
+		return RGB{0, 128, 128}; // Dim cyan for others
+	}
+}
+
+RGB KeyboardLayoutPulseSeq::getTransposeColor(int32_t direction) const {
+	// Show active state if transpose is not zero
+	if (performanceControls.transpose != 0) {
+		return RGB{255, 128, 0}; // Orange when active
+	}
+	else {
+		return RGB{64, 32, 0}; // Dim orange when inactive
+	}
+}
+
+RGB KeyboardLayoutPulseSeq::getOctaveControlColor(int32_t direction) const {
+	// Show active state if octave is not zero
+	if (performanceControls.octave != 0) {
+		return RGB{255, 0, 255}; // Magenta when active
+	}
+	else {
+		return RGB{64, 0, 64}; // Dim magenta when inactive
 	}
 }
 
@@ -635,9 +1039,9 @@ RGB KeyboardLayoutPulseSeq::getPulseCountColor(int32_t stage, int32_t position) 
 
 	// Check if this position should be lit based on the stage's pulse count
 	if (position < stages[stage].pulseCount) {
-		// Active pulse positions - cyan to purple gradient
-		// Position 0 (top) = cyan, position 6 (bottom) = purple
-		int32_t intensity = (position * 255) / 6; // 0-255
+		// Active pulse positions - purple/pink to cyan gradient (reversed)
+		// Position 0 (top) = purple/pink, position 6 (bottom) = cyan
+		int32_t intensity = ((6 - position) * 255) / 6; // 255-0 (reversed)
 		uint8_t red = static_cast<uint8_t>(intensity);
 		uint8_t green = static_cast<uint8_t>(255 - intensity);
 		uint8_t blue = 255;
