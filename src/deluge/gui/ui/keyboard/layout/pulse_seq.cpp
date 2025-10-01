@@ -129,7 +129,7 @@ void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
                 char modelStackMemory[MODEL_STACK_MAX_SIZE];
                 ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
                 if (modelStack) {
-                    melodicInstrument->sendNote(modelStack, false, sequencerState.activeNote, nullptr, 
+                    melodicInstrument->sendNote(modelStack, false, sequencerState.activeNote, nullptr,
                                                MIDI_CHANNEL_NONE, 64, 0);
                 }
             }
