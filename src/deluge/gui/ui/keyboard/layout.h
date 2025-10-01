@@ -77,14 +77,14 @@ public:
 	virtual bool supportsInstrument() { return false; }
 	virtual bool supportsKit() { return false; }
 	virtual RequiredScaleMode requiredScaleMode() { return RequiredScaleMode::Undefined; }
-	
+
 	/// Check if this layout supports timing-based note generation
 	virtual bool supportsTiming() { return false; }
-	
+
 	/// Handle timing-based note generation (similar to arpeggiator)
 	/// Returns ticks until next event, or 2147483647 if no timing support
-	virtual int32_t doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed, ArpReturnInstruction* instruction) { 
-		return 2147483647; 
+	virtual int32_t doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed, ArpReturnInstruction* instruction) {
+		return 2147483647;
 	}
 
 	virtual NotesState& getNotesState() { return currentNotesState; }

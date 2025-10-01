@@ -225,17 +225,12 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 
     int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
 
-    // Check for note-off first (every tick)
-    if (sequencerState.gateCurrentlyActive) {
-        sequencerState.gatePos++;
-        uint32_t gateLength = calculateGateLength();
-        if (sequencerState.gatePos >= gateLength) {
+    if (!howFarIntoPeriod) {
+        // Check for note-off first (on timing boundaries only, like arpeggiator)
+        if (sequencerState.gateCurrentlyActive) {
             switchAnyNoteOff(instruction);
             sequencerState.gateCurrentlyActive = false;
         }
-    }
-
-    if (!howFarIntoPeriod) {
 
         // Check if we should play a note based on rhythm pattern (BEFORE advancement)
         bool shouldPlayNote = evaluateRhythmPattern(sequencerState.currentStage, sequencerState.currentPulseInStage);
@@ -247,7 +242,8 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
             // Process the instruction
             if (instruction->arpNoteOn != nullptr) {
                 // Note on event - this will be handled by the caller
-                // Trigger red flash for visual feedback
+                // Track which stage just played for flash
+                sequencerState.lastPlayedStage = sequencerState.currentStage;
                 sequencerState.gateCurrentlyActive = true;
                 keyboardScreen.requestMainPadsRendering();
             }
@@ -322,7 +318,7 @@ void KeyboardLayoutPulseSeq::switchNoteOn(ArpReturnInstruction* instruction) {
 
     // Set the instruction
     instruction->arpNoteOn = &currentNote;
-    instruction->sampleSyncLengthOn = calculateGateLength();
+    instruction->sampleSyncLengthOn = calculateGateLength(); // This is the note duration
 
     // Store note for note-off tracking (matches arpeggiator format)
     sequencerState.noteCodeCurrentlyOnPostArp[0] = note;
@@ -356,6 +352,7 @@ void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction)
     // Clear sequencer state
     sequencerState.gateCurrentlyActive = false;
     sequencerState.gatePos = 0;
+    sequencerState.lastPlayedStage = -1;
 }
 
 uint32_t KeyboardLayoutPulseSeq::calculateGateLength() {
@@ -375,8 +372,11 @@ uint32_t KeyboardLayoutPulseSeq::calculateGateLength() {
     uint32_t baseGateLength;
     switch (currentStageData.gateType) {
         case GateType::SINGLE:
+            // Single notes last for 1 timing period (will be shortened by arp gate setting)
+            baseGateLength = ticksPerPeriod;
+            break;
         case GateType::MULTIPLE:
-            // Single and multiple notes last for the full clock period (16th note)
+            // Multiple notes last for the full clock period (16th note)
             baseGateLength = ticksPerPeriod;
             break;
         case GateType::HELD:
@@ -393,9 +393,6 @@ uint32_t KeyboardLayoutPulseSeq::calculateGateLength() {
 
     // Scale to base gate length (1-50 becomes 2%-100% of base gate length)
     uint32_t gateLength = (gatePercent * baseGateLength) / 50;
-
-    // TEMP: Force short gate length for testing note-off
-    gateLength = 24; // 1/4 of a 16th note
 
     return gateLength;
 }
@@ -503,6 +500,7 @@ void KeyboardLayoutPulseSeq::resetSequencerState() {
 	sequencerState.stageStartTime = 0;
 	sequencerState.gateCurrentlyActive = false;
 	sequencerState.gatePos = 0;
+	sequencerState.lastPlayedStage = -1;
 
 	// Reset pattern state
 	sequencerState.totalPatternLength = calculateTotalPatternLength();
@@ -937,9 +935,9 @@ void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 RGB KeyboardLayoutPulseSeq::getGateTypeColor(int32_t stage) const {
 	if (stage < 0 || stage >= 8) return RGB{0, 0, 0}; // Gate line only on first 8 columns
 
-	// Flash white when this stage is currently playing a note
-	if (sequencerState.gateCurrentlyActive && sequencerState.currentStage == stage) {
-		return RGB{255, 255, 255}; // White flash
+	// Flash red when this stage just played a note
+	if (sequencerState.gateCurrentlyActive && sequencerState.lastPlayedStage == stage) {
+		return RGB{255, 0, 0}; // Red flash
 	}
 
 	// Normal gate type colors

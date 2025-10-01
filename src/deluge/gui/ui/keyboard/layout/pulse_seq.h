@@ -186,6 +186,7 @@ private:
 		int32_t stageStartTime = 0;      // When current stage started
 		bool gateCurrentlyActive = false;
 		uint32_t gatePos = 0;
+		int32_t lastPlayedStage = -1;    // Stage that just played a note (for flash)
 
 		// Pattern state for variable-length patterns
 		int32_t totalPatternLength = 8;  // Total length of current pattern (8-56)

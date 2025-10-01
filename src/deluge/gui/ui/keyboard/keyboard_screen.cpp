@@ -1034,10 +1034,10 @@ int32_t KeyboardScreen::doTickForwardForKeyboardScreen(int32_t currentPos, ArpRe
 		// Forward to layout's timing method
 		int32_t ticks = layout_list[currentLayoutType]->doTickForward(currentPos, false, &layoutInstruction);
 
-		// If the layout generated a note, copy it to the main instruction
-		if (layoutInstruction.arpNoteOn != nullptr) {
-			*instruction = layoutInstruction;
-		}
+	// If the layout generated a note or note-off, copy it to the main instruction
+	if (layoutInstruction.arpNoteOn != nullptr || layoutInstruction.noteCodeOffPostArp[0] != ARP_NOTE_NONE) {
+		*instruction = layoutInstruction;
+	}
 
 		return ticks;
 	}
