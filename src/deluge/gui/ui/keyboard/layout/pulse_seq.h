@@ -155,6 +155,11 @@ private:
 		uint32_t flashStartTime = 0;
 		uint32_t flashDuration = 100; // Flash duration in milliseconds
 		int32_t flashPosition = 0;    // Position across the gate pad (0-7)
+
+		// Note tracking for proper note-off handling
+		int32_t activeNote = -1; // Currently playing note (-1 = none)
+		uint64_t noteOnTick = 0; // Tick when note was triggered
+		uint32_t noteGateLength = 0; // Gate length for current note
 	} sequencerState;
 
 	// Stage data (8 stages, one per column)

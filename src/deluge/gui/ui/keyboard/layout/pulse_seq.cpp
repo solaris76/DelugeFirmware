@@ -117,6 +117,26 @@ void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
         return;
     }
 
+    // Check if we need to send note-off for currently playing note
+    if (sequencerState.activeNote >= 0) {
+        uint64_t ticksSinceNoteOn = currentTick - sequencerState.noteOnTick;
+        // Convert gate length to ticks (gate length is in 50ths, we need to convert to swung ticks)
+        // For now, use a simple check - if enough ticks have passed, send note-off
+        if (ticksSinceNoteOn >= sequencerState.noteGateLength) {
+            // Send note-off
+            MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
+            if (melodicInstrument && soundEditor.setup(clip, nullptr, 0)) {
+                char modelStackMemory[MODEL_STACK_MAX_SIZE];
+                ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+                if (modelStack) {
+                    melodicInstrument->sendNote(modelStack, false, sequencerState.activeNote, nullptr, 
+                                               MIDI_CHANNEL_NONE, 64, 0);
+                }
+            }
+            sequencerState.activeNote = -1; // Mark note as off
+        }
+    }
+
     // Divide 32nd notes down to 16th notes (every 2nd call)
     static int32_t counter32ndNotes = 0;
     counter32ndNotes++;
@@ -429,6 +449,19 @@ void KeyboardLayoutPulseSeq::generateNote() {
 
                 // Trigger a note-on event with gate length
                 melodicInstrument->sendNote(modelStack, true, note, nullptr, MIDI_CHANNEL_NONE, velocity, gateLength);
+
+                // Track the active note for note-off handling
+                sequencerState.activeNote = note;
+                sequencerState.noteOnTick = playbackHandler.lastSwungTickActioned;
+                // Convert gate length to ticks - gate length is in 50ths (0-50), we need swung ticks
+                // Gate length of 50 = full length, use arp sync as reference
+                InstrumentClip* clip = getCurrentInstrumentClip();
+                if (clip) {
+                    uint32_t swungTicksPerQuarterNote = currentSong->getQuarterNoteLength();
+                    uint32_t swungTicksPer16thNote = swungTicksPerQuarterNote / 4;
+                    // Scale gate length: 50 = full 16th note, 25 = half 16th note, etc.
+                    sequencerState.noteGateLength = (swungTicksPer16thNote * gateLength) / 50;
+                }
             }
         }
     }
