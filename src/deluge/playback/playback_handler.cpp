@@ -957,14 +957,14 @@ doMetronome:
 					// Use 32nd notes as base clock (quarter note / 8)
 					uint32_t swungTicksPerQuarterNote = currentSong->getQuarterNoteLength();
 					uint32_t swungTicksPer32ndNote = swungTicksPerQuarterNote / 8; // 32nd note = 1/8 of quarter note
-					
+
 					if ((lastSwungTickActioned % swungTicksPer32ndNote) == 0) {
 						// Call pulse sequencer on every 32nd note
-						deluge::gui::ui::keyboard::KeyboardScreen* kbScreen = 
+						deluge::gui::ui::keyboard::KeyboardScreen* kbScreen =
 							static_cast<deluge::gui::ui::keyboard::KeyboardScreen*>(getCurrentUI());
 						kbScreen->notifyPulseSeqTick(lastSwungTickActioned);
 					}
-					
+
 					// Tell playback handler when to call us next
 					int32_t ticksIntoCurrent32ndNote = lastSwungTickActioned % swungTicksPer32ndNote;
 					int32_t swungTicksTilNextPulseSeqEvent = swungTicksPer32ndNote - ticksIntoCurrent32ndNote;

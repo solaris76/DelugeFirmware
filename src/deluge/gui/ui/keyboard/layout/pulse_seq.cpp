@@ -134,19 +134,15 @@ void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
         // Now we're on 16th notes - run the full pulse sequencer logic
         StageData& currentStageData = stages[sequencerState.currentStage];
 
-        // Increment pulse counter for this stage
-        sequencerState.currentPulseInStage++;
-        sequencerState.currentPatternPosition++;
-
-        // Check if we should play a note based on rhythm pattern
-        bool shouldPlayNote = evaluateRhythmPattern(sequencerState.currentStage, sequencerState.currentPulseInStage - 1);
+        // Check if we should play a note based on rhythm pattern (before incrementing)
+        bool shouldPlayNote = evaluateRhythmPattern(sequencerState.currentStage, sequencerState.currentPulseInStage);
 
         // Handle different gate types
         if (shouldPlayNote) {
             switch (currentStageData.gateType) {
                 case GateType::SINGLE:
                     // One note on stage entry
-                    if (sequencerState.currentPulseInStage == 1) {
+                    if (sequencerState.currentPulseInStage == 0) {
                         generateNote();
                     }
                     break;
@@ -158,7 +154,7 @@ void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
 
                 case GateType::HELD:
                     // One sustained note for duration of the stage
-                    if (sequencerState.currentPulseInStage == 1) {
+                    if (sequencerState.currentPulseInStage == 0) {
                         generateNote();
                     }
                     break;
@@ -168,6 +164,10 @@ void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
                     break;
             }
         }
+
+        // Increment pulse counter AFTER playing note
+        sequencerState.currentPulseInStage++;
+        sequencerState.currentPatternPosition++;
 
         // Check if we've completed the required number of pulses for this stage
         if (sequencerState.currentPulseInStage >= currentStageData.pulseCount) {
