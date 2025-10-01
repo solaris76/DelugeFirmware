@@ -64,6 +64,9 @@ public:
 
 	void killColumnSwitchKey(int32_t column);
 
+	/// Notify pulse sequencer of 16th note tick (called from playback handler)
+	void notifyPulseSeqTick(uint64_t currentTick);
+
 	// ui
 	UIType getUIType() override { return UIType::KEYBOARD_SCREEN; }
 	UIType getUIContextType() override { return UIType::INSTRUMENT_CLIP; }

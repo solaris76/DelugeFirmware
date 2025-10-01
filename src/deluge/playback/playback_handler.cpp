@@ -24,6 +24,7 @@
 #include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
 #include "gui/ui_timer_manager.h"
+#include "gui/ui/keyboard/keyboard_screen.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
@@ -946,6 +947,28 @@ doMetronome:
 				int32_t swungTicksTilNextMetronomeEvent =
 				    swungTicksPerQuarterNote - ticksIntoCurrentBeep; // Ticks til next beep
 				swungTicksTilNextEvent = std::min(swungTicksTilNextEvent, swungTicksTilNextMetronomeEvent);
+			}
+
+			// Pulse sequencer - call on quarter note boundaries like metronome
+			// Check if keyboard screen with pulse sequencer is active
+			if (getCurrentUI()->getUIType() == UIType::KEYBOARD_SCREEN) {
+				InstrumentClip* clip = getCurrentInstrumentClip();
+				if (clip && clip->keyboardState.currentLayout == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
+					// Use same timing as metronome - quarter notes
+					uint32_t swungTicksPerQuarterNote = currentSong->getQuarterNoteLength();
+
+					if ((lastSwungTickActioned % swungTicksPerQuarterNote) == 0) {
+						// Call pulse sequencer on quarter note
+						deluge::gui::ui::keyboard::KeyboardScreen* kbScreen =
+							static_cast<deluge::gui::ui::keyboard::KeyboardScreen*>(getCurrentUI());
+						kbScreen->notifyPulseSeqTick(lastSwungTickActioned);
+					}
+
+					// Tell playback handler when to call us next (like metronome does)
+					int32_t ticksIntoCurrentQuarterNote = lastSwungTickActioned % swungTicksPerQuarterNote;
+					int32_t swungTicksTilNextPulseSeqEvent = swungTicksPerQuarterNote - ticksIntoCurrentQuarterNote;
+					swungTicksTilNextEvent = std::min(swungTicksTilNextEvent, swungTicksTilNextPulseSeqEvent);
+				}
 			}
 		}
 	}

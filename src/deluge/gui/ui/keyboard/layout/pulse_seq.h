@@ -47,6 +47,9 @@ public:
 
 	/// Update animation and check if display needs refreshing
 	void updateAnimation();
+	
+	/// Handle swung tick - called from playback handler on musical ticks
+	void handleSwungTick(uint64_t currentTick);
 
 	/// Direct pad LED update for real-time animation
 	void updatePadLEDsDirect();
@@ -91,6 +94,7 @@ private:
 	void advanceStage();
 	bool isDelugePlaying() const;
 	void generateNote();
+	void generateSimpleTestNote(); // TEST: Simple quarter note test function
 	void updateVisualFeedback();
 	void triggerGatePadFlash(int32_t stage, int32_t pulsePosition);
 	bool isGatePadFlashing() const;

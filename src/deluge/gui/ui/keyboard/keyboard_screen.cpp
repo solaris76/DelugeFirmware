@@ -1013,4 +1013,12 @@ void KeyboardScreen::graphicsRoutine() {
 	}
 }
 
+void KeyboardScreen::notifyPulseSeqTick(uint64_t currentTick) {
+	// Forward the 16th note tick to the pulse sequencer layout
+	KeyboardLayoutType currentLayoutType = getCurrentInstrumentClip()->keyboardState.currentLayout;
+	if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
+		((layout::KeyboardLayoutPulseSeq*)layout_list[currentLayoutType])->handleSwungTick(currentTick);
+	}
+}
+
 } // namespace deluge::gui::ui::keyboard
