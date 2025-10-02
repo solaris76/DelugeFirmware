@@ -26,7 +26,7 @@
 
 ### 3. Randomizer Features
 - [ ] **Random Octave**: y1 x8-15 (cyan pads)
-- [ ] **Random Gate**: y2 x8-15 (lime pads) 
+- [ ] **Random Gate**: y2 x8-15 (lime pads)
 - [ ] **Randomizer Lock**: y0 x15 (yellow toggle)
 - [ ] **Random Note**: Random note selection within scale
 - [ ] **Random Velocity**: Random velocity per note
@@ -42,6 +42,11 @@
 - [ ] **Add**: Random note skipping based on probability
 - [ ] **Visual**: Dim pads when probability < 100%
 - [ ] **Add**: Probability patterns (every 2nd, 3rd, etc.)
+
+### 6. Clear state
+
+### 7. Loop mode - press two pad loop stage between them
+
 
 ## Medium Priority Features
 

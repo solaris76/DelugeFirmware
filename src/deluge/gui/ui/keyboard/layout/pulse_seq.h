@@ -165,7 +165,7 @@ private:
 		// Visual feedback state
 		bool gatePadFlashing = false;
 		uint32_t flashStartTime = 0;
-		uint32_t flashDuration = 100; // Flash duration in milliseconds
+		uint32_t flashDuration = 50; // Flash duration in milliseconds (shorter for multiple notes)
 		int32_t flashPosition = 0;    // Position across the gate pad (0-7)
 
 		// Note tracking for proper note-off handling (matches arpeggiator format)
@@ -196,6 +196,7 @@ private:
 		PlayOrder playOrder = PlayOrder::FORWARDS; // Stage play order
 		int32_t pingPongDirection = 1; // 1 = forwards, -1 = backwards (for ping pong)
 	} performanceControls;
+
 };
 
 }; // namespace deluge::gui::ui::keyboard::layout

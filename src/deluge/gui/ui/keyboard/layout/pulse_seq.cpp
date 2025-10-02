@@ -232,6 +232,8 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
         sequencerState.gatePos++;
         uint32_t gateLength = calculateGateLength();
         if (sequencerState.gatePos >= gateLength) {
+            // Debug: show when note-off is triggered
+            display->displayPopup("NOTE OFF");
             switchAnyNoteOff(instruction);
             sequencerState.gateCurrentlyActive = false;
         }
@@ -242,14 +244,16 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
         // Check if we should play a note based on rhythm pattern (BEFORE advancement)
         bool shouldPlayNote = evaluateRhythmPattern(sequencerState.currentStage, sequencerState.currentPulseInStage);
 
+        // Always flash the current stage (for both notes and OFF gates)
+        sequencerState.gatePadFlashing = true;
+        sequencerState.flashStartTime = playbackHandler.getCurrentInternalTickCount();
+        sequencerState.lastPlayedStage = sequencerState.currentStage;
+        keyboardScreen.requestMainPadsRendering();
+
         if (shouldPlayNote) {
             // Generate note for the CURRENT stage (before advancement)
             switchNoteOn(instruction);
-
-            // Track which stage just played for flash (always flash when note is generated)
-            sequencerState.lastPlayedStage = sequencerState.currentStage;
             sequencerState.gateCurrentlyActive = true;
-            keyboardScreen.requestMainPadsRendering();
         }
 
 
@@ -313,24 +317,15 @@ void KeyboardLayoutPulseSeq::switchNoteOn(ArpReturnInstruction* instruction) {
     // Get default velocity
     uint8_t velocity = getDefaultVelocity();
 
-    // Send note directly using sendNote (like keyboard input)
-    InstrumentClip* clip = getCurrentInstrumentClip();
-    if (clip) {
-        MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
-        if (melodicInstrument) {
-            // Create a ModelStack for the note-on event using soundEditor
-            if (soundEditor.setup(clip, nullptr, 0)) {
-                char modelStackMemory[MODEL_STACK_MAX_SIZE];
-                ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+    // Set up the arpeggiator note for the instruction system
+    currentNote.velocity = velocity;
+    currentNote.baseVelocity = velocity;
+    currentNote.noteCodeOnPostArp[0] = note;
+    currentNote.outputMemberChannel[0] = MIDI_CHANNEL_NONE;
 
-                if (modelStack) {
-                    // Send note-on directly
-                    uint32_t gateLength = calculateGateLength();
-                    melodicInstrument->sendNote(modelStack, true, note, nullptr, MIDI_CHANNEL_NONE, velocity, gateLength);
-                }
-            }
-        }
-    }
+    // Use arpeggiator instruction system (applies randomizer settings automatically)
+    instruction->arpNoteOn = &currentNote;
+    instruction->sampleSyncLengthOn = calculateGateLength();
 
     // Store note for note-off tracking (matches arpeggiator format)
     sequencerState.noteCodeCurrentlyOnPostArp[0] = note;
@@ -352,25 +347,16 @@ void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction)
         return;
     }
 
-    // Send note-off directly using sendNote (like note-on)
-    InstrumentClip* clip = getCurrentInstrumentClip();
-    if (clip) {
-        MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
-        if (melodicInstrument) {
-            // Create a ModelStack for the note-off event using soundEditor
-            if (soundEditor.setup(clip, nullptr, 0)) {
-                char modelStackMemory[MODEL_STACK_MAX_SIZE];
-                ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+    // Use arpeggiator instruction system for note-off (applies randomizer settings automatically)
+    int32_t note = sequencerState.noteCodeCurrentlyOnPostArp[0];
+    if (note != ARP_NOTE_NONE) {
+        instruction->noteCodeOffPostArp[0] = note;
+        instruction->outputMIDIChannelOff[0] = sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[0];
 
-                if (modelStack) {
-                    // Get the note that was playing
-                    int32_t note = sequencerState.noteCodeCurrentlyOnPostArp[0];
-                    if (note != ARP_NOTE_NONE) {
-                        // Send note-off directly
-                        melodicInstrument->sendNote(modelStack, false, note, nullptr, MIDI_CHANNEL_NONE, 64);
-                    }
-                }
-            }
+        // Clear remaining slots
+        for (int32_t n = 1; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
+            instruction->noteCodeOffPostArp[n] = ARP_NOTE_NONE;
+            instruction->outputMIDIChannelOff[n] = MIDI_CHANNEL_NONE;
         }
     }
 
@@ -378,6 +364,7 @@ void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction)
     sequencerState.gateCurrentlyActive = false;
     sequencerState.gatePos = 0;
     sequencerState.lastPlayedStage = -1;
+    sequencerState.gatePadFlashing = false;
 
     // Clear the stored note data
     for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
@@ -604,8 +591,26 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 	// Render gate line (x0-x7)
 	for (int32_t x = 0; x < 8; x++) {
 		// Gate type colors with red flash for active stage
-		if (sequencerState.gateCurrentlyActive && sequencerState.lastPlayedStage == x) {
-			image[gateLineY][x] = RGB{255, 0, 0}; // Bright red flash
+		bool shouldFlash = false;
+		if (sequencerState.gatePadFlashing && sequencerState.lastPlayedStage == x) {
+			// Check if flash duration has expired
+			uint32_t currentTime = playbackHandler.getCurrentInternalTickCount();
+			uint32_t flashElapsed = currentTime - sequencerState.flashStartTime;
+			if (flashElapsed < sequencerState.flashDuration) {
+				shouldFlash = true;
+			} else {
+				// Flash duration expired, stop flashing
+				sequencerState.gatePadFlashing = false;
+			}
+		}
+
+		if (shouldFlash) {
+			// Different flash colors for different gate types
+			if (stages[x].gateType == GateType::OFF) {
+				image[gateLineY][x] = RGB{255, 100, 0}; // Orange flash for OFF gates
+			} else {
+				image[gateLineY][x] = RGB{255, 0, 0}; // Red flash for active gates
+			}
 		} else {
 			// Normal gate type colors
 			switch (stages[x].gateType) {
@@ -1005,5 +1010,6 @@ void KeyboardLayoutPulseSeq::resetToPatternStart() {
 	sequencerState.currentPatternPosition = 0;
 	sequencerState.totalPatternLength = calculateTotalPatternLength();
 }
+
 
 } // namespace deluge::gui::ui::keyboard::layout
