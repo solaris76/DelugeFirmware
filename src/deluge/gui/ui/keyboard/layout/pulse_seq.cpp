@@ -19,6 +19,7 @@
 #include "gui/ui/keyboard/keyboard_screen.h"
 #include "gui/colour/colour.h"
 #include "model/instrument/non_audio_instrument.h"
+#include "model/instrument/midi_instrument.h"
 #include "hid/display/display.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/melodic_instrument.h"
@@ -75,10 +76,6 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			// y4: Stage count control
 			else if (y == 4 && x >= 8 && x < kDisplayWidth) {
 				handleStageCountChange(x - 7); // 1-8
-			}
-			// y5: Gate control (note length)
-			else if (y == 5 && x >= 8 && x < kDisplayWidth) {
-				handleGateControl(x - 8); // 0-7
 			}
 			// y3: Play order presets
 			else if (y == 3 && x >= 8 && x < 12) {
@@ -201,7 +198,10 @@ void KeyboardLayoutPulseSeq::handleHorizontalEncoder(int32_t offset, bool shiftE
 
 void KeyboardLayoutPulseSeq::precalculate() {
 	// Pre-calculate any colors or values needed for rendering
-	// For now, we don't need to pre-calculate anything
+	// Initialize total pattern length for the first time
+	if (sequencerState.totalPatternLength == 8) {
+		sequencerState.totalPatternLength = calculateTotalPatternLength();
+	}
 }
 
 
@@ -215,6 +215,7 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
     // Reset sequencer state when playback starts (every play press)
     static uint32_t lastPos = 0;
     if (clipCurrentPos < lastPos || clipCurrentPos == 0) {
+        // Reset when playback starts/stops
         resetSequencerState();
     }
     lastPos = clipCurrentPos;
@@ -245,41 +246,18 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
     }
 
     // Update overall gate state
-    sequencerState.gateCurrentlyActive = anyNoteActive;
 
     if (!howFarIntoPeriod) {
 
-        // Check if we should play a note based on rhythm pattern (BEFORE advancement)
-        bool shouldPlayNote = evaluateRhythmPattern(sequencerState.currentStage, sequencerState.currentPulseInStage);
-
-        // Always flash the current stage (for both notes and OFF gates)
+        // Flash pad for visual feedback
         sequencerState.gatePadFlashing = true;
         sequencerState.flashStartTime = playbackHandler.getCurrentInternalTickCount();
-        sequencerState.lastPlayedStage = sequencerState.currentStage;
+        sequencerState.lastPlayedStage = sequencerState.currentVisualStage;
         keyboardScreen.requestMainPadsRendering();
 
-        if (shouldPlayNote) {
-            // Generate note for the CURRENT stage (before advancement)
-            switchNoteOn(instruction);
-            // Debug: show when note is generated
-            display->displayPopup("NOTE ON");
-        }
+        // Generate notes based on rhythm pattern
+        generateNotes(instruction);
 
-
-        // Advance sequencer state AFTER generating note
-        sequencerState.currentPulseInStage++;
-        sequencerState.currentPatternPosition++;
-
-        // Check if stage is complete
-        StageData& currentStageData = stages[sequencerState.currentStage];
-        if (sequencerState.currentPulseInStage >= currentStageData.pulseCount) {
-            advanceStage();
-        }
-
-        // Check if pattern is complete
-        if (sequencerState.currentPatternPosition >= sequencerState.totalPatternLength) {
-            resetToPatternStart();
-        }
     }
     else {
         if (!currentlyPlayingReversed) {
@@ -290,12 +268,61 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
     return howFarIntoPeriod;
 }
 
-void KeyboardLayoutPulseSeq::switchNoteOn(ArpReturnInstruction* instruction) {
-    // Get current stage data
-    StageData& currentStageData = stages[sequencerState.currentStage];
+void KeyboardLayoutPulseSeq::generateNotes(ArpReturnInstruction* instruction) {
+    // Find which stage this pulse belongs to
+    int32_t stage = findStageForPulse(sequencerState.currentPulse);
+
+    if (stage >= 0) {
+        StageData& stageData = stages[stage];
+
+        // Calculate pulse position within the stage
+        int32_t pulseInStage = 0;
+        int32_t stageStartPulse = 0;
+        for (int32_t i = 0; i < stage; i++) {
+            stageStartPulse += stages[i].pulseCount;
+        }
+        pulseInStage = sequencerState.currentPulse - stageStartPulse;
+
+        // Use gate type logic to determine if we should play
+        if (evaluateRhythmPattern(stage, pulseInStage)) {
+            playNoteForStage(instruction, stage);
+        }
+    }
+
+    // Advance visual stage for pad flashing
+    int32_t visualStage = findStageForPulse(sequencerState.currentPulse);
+    sequencerState.lastPlayedStage = visualStage;
+
+    // Advance to next pulse
+    sequencerState.currentPulse++;
+    if (sequencerState.currentPulse >= sequencerState.totalPatternLength) {
+        // Pattern completed, loop back to start
+        sequencerState.currentPulse = 0; // Loop back to start
+    }
+}
+
+int32_t KeyboardLayoutPulseSeq::findStageForPulse(int32_t pulse) {
+    int32_t stageStartPulse = 0;
+
+    for (int32_t stage = 0; stage < performanceControls.numStages; stage++) {
+        int32_t stageEndPulse = stageStartPulse + stages[stage].pulseCount;
+
+        if (pulse >= stageStartPulse && pulse < stageEndPulse) {
+            return stage;
+        }
+
+        stageStartPulse = stageEndPulse;
+    }
+
+    return -1; // Not found
+}
+
+
+void KeyboardLayoutPulseSeq::playNoteForStage(ArpReturnInstruction* instruction, int32_t stage) {
+    StageData& stageData = stages[stage];
 
     // Only generate notes for non-OFF gate types
-    if (currentStageData.gateType == GateType::OFF) {
+    if (stageData.gateType == GateType::OFF) {
         return; // No note generation for rest
     }
 
@@ -308,14 +335,14 @@ void KeyboardLayoutPulseSeq::switchNoteOn(ArpReturnInstruction* instruction) {
     constexpr int32_t kBaseOctave = 48; // C3
 
     // Calculate base note index with accumulator applied
-    int32_t noteIndexWithAccumulator = currentStageData.noteIndex + currentStageData.accumulator;
+    int32_t noteIndexWithAccumulator = stageData.noteIndex + stageData.accumulator;
 
     // Wrap around the scale if needed
     while (noteIndexWithAccumulator < 0) noteIndexWithAccumulator += scaleNoteCount;
     while (noteIndexWithAccumulator >= scaleNoteCount) noteIndexWithAccumulator -= scaleNoteCount;
 
     int32_t note = kBaseOctave + getRootNote() + scaleNotes[noteIndexWithAccumulator]
-                   + (currentStageData.octave * kOctaveSize)
+                   + (stageData.octave * kOctaveSize)
                    + performanceControls.transpose  // Apply transpose (within scale)
                    + (performanceControls.octave * kOctaveSize); // Apply global octave shift
 
@@ -531,68 +558,23 @@ const char* KeyboardLayoutPulseSeq::getNoteName(int32_t noteIndex, int32_t octav
 // Pulse sequencer engine implementation
 
 void KeyboardLayoutPulseSeq::resetSequencerState() {
+	// Send all notes off when Deluge stops
+	sendAllNotesOff();
+
 	sequencerState.isPlaying = false;
-	sequencerState.currentStage = 0;        // Stage 1
-	sequencerState.currentPulseInStage = 0; // First pulse
-	sequencerState.stageStartTime = 0;
-	sequencerState.gateCurrentlyActive = false;
-	sequencerState.gatePos = 0;
+	sequencerState.currentPulse = 0;
 	sequencerState.lastPlayedStage = -1;
 
-	// Reset pattern state
-	sequencerState.totalPatternLength = calculateTotalPatternLength();
-	sequencerState.currentPatternPosition = 0;
+	// DON'T reset totalPatternLength - keep the user's custom pulse counts!
+	// The pattern length should only be set when pulse counts are changed, not on every play
 
 	// Reset visual feedback state
 	sequencerState.gatePadFlashing = false;
 	sequencerState.flashStartTime = 0;
-	sequencerState.flashPosition = 0;
 
 	// All stages start as OFF by default - user must enable them manually
 }
 
-void KeyboardLayoutPulseSeq::advanceStage() {
-	// Advance to next stage based on play order
-	switch (performanceControls.playOrder) {
-		case PlayOrder::FORWARDS:
-			sequencerState.currentStage++;
-			if (sequencerState.currentStage >= performanceControls.numStages) {
-				sequencerState.currentStage = 0; // Loop back to stage 1
-			}
-			break;
-
-		case PlayOrder::BACKWARDS:
-			sequencerState.currentStage--;
-			if (sequencerState.currentStage < 0) {
-				sequencerState.currentStage = performanceControls.numStages - 1; // Loop to last stage
-			}
-			break;
-
-		case PlayOrder::PING_PONG:
-			// Move in current direction
-			sequencerState.currentStage += performanceControls.pingPongDirection;
-
-			// Check boundaries and reverse direction
-			if (sequencerState.currentStage >= performanceControls.numStages) {
-				sequencerState.currentStage = performanceControls.numStages - 1; // Go to last stage
-				performanceControls.pingPongDirection = -1; // Reverse direction
-			}
-			else if (sequencerState.currentStage < 0) {
-				sequencerState.currentStage = 0; // Go to first stage
-				performanceControls.pingPongDirection = 1; // Reverse direction
-			}
-			break;
-
-		case PlayOrder::RANDOM:
-			// Generate random stage within active range
-			sequencerState.currentStage = (rand() % performanceControls.numStages);
-			break;
-	}
-
-	// Reset pulse counter for new stage
-	sequencerState.currentPulseInStage = 0;
-	sequencerState.stageStartTime = 0;
-}
 
 
 
@@ -700,17 +682,6 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 	}
 
-	// y5: Gate control (note length) - 8 pads
-	for (int32_t x = 8; x < kDisplayWidth; x++) {
-		// Gate control colors - light selected and all pads to the left
-		int32_t gateIndex = x - 8;
-		int32_t selectedGate = (lastTouchedGatePad >= 0) ? lastTouchedGatePad : 3;
-		if (gateIndex <= selectedGate || (selectedGate == 0 && gateIndex == 0)) {
-			image[5][x] = RGB{0, 255, 0}; // Bright green for selected and all pads to the left
-		} else {
-			image[5][x] = RGB{0, 0, 0}; // Black for unselected pads
-		}
-	}
 
 	// y3: Play order presets - 4 pads (x8-11)
 	for (int32_t x = 8; x < 12; x++) {
@@ -819,11 +790,14 @@ void KeyboardLayoutPulseSeq::handleStageCountChange(int32_t numStages) {
 	if (performanceControls.numStages != numStages) {
 		performanceControls.numStages = numStages;
 
-		// If current stage is beyond new limit, loop back to start
-		if (sequencerState.currentStage >= numStages) {
-			sequencerState.currentStage = 0;
-			sequencerState.currentPulseInStage = 0;
-		}
+		// Debug: see what's happening
+		char debugMsg[50];
+		sprintf(debugMsg, "Stage count: %d->%d", performanceControls.numStages, numStages);
+		display->displayPopup(debugMsg);
+
+		// Recalculate total pattern length when stage count changes
+		sequencerState.totalPatternLength = calculateTotalPatternLength();
+
 
 		// Show popup
 		if (display->haveOLED()) {
@@ -837,57 +811,6 @@ void KeyboardLayoutPulseSeq::handleStageCountChange(int32_t numStages) {
 	}
 }
 
-void KeyboardLayoutPulseSeq::handleGateControl(int32_t gateIndex) {
-	if (gateIndex < 0 || gateIndex >= 8) return;
-
-	// Track the last touched gate pad for LED feedback
-	lastTouchedGatePad = gateIndex;
-
-	// Gate values: same as arp_control
-	int32_t gateValues[8] = {1, 10, 20, 25, 35, 40, 45, 50};
-	int32_t newGate = gateValues[gateIndex];
-
-	// Get arp settings
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip) return;
-	ArpeggiatorSettings* settings = &clip->arpSettings;
-
-	// Check output type to determine which approach to use
-	OutputType outputType = getCurrentOutputType();
-
-	if (outputType == OutputType::SYNTH) {
-		// Use soundEditor.setup() for synth tracks
-		UI* originalUI = getCurrentUI();
-
-		if (soundEditor.setup(clip, nullptr, 0)) {
-			char modelStackMemory[MODEL_STACK_MAX_SIZE];
-			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-			ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
-
-			if (modelStackWithParam && modelStackWithParam->autoParam) {
-				int32_t finalValue = computeFinalValueForStandardMenuItem(newGate);
-				modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
-			}
-
-			originalUI->focusRegained();
-		}
-	}
-	else {
-		// Use direct parameter setting for CV/MIDI tracks
-		int32_t scaledValue = computeFinalValueForStandardMenuItem(newGate);
-		settings->gate = scaledValue;
-	}
-
-	// Show popup
-	if (display->haveOLED()) {
-		char text[30];
-		strcpy(text, "Gate: ");
-		intToString(newGate, text + strlen(text));
-		display->popupText(text);
-	}
-
-	displayState.needsRefresh = true;
-}
 
 void KeyboardLayoutPulseSeq::handlePlayOrderChange(int32_t playOrderIndex) {
 	if (playOrderIndex < 0 || playOrderIndex > 3) return;
@@ -973,10 +896,16 @@ void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 	int32_t newPulseCount = position + 1;
 
 	if (newPulseCount != stages[stage].pulseCount) {
+		int32_t oldPulseCount = stages[stage].pulseCount;
 		stages[stage].pulseCount = newPulseCount;
 
 		// Recalculate total pattern length when pulse counts change
 		sequencerState.totalPatternLength = calculateTotalPatternLength();
+
+		// Restart pulse index if it becomes invalid
+		if (sequencerState.currentPulse >= sequencerState.totalPatternLength) {
+			sequencerState.currentPulse = 0;
+		}
 
 		displayPulseCountPopup(stage);
 		displayState.needsRefresh = true;
@@ -1017,17 +946,40 @@ bool KeyboardLayoutPulseSeq::evaluateRhythmPattern(int32_t stage, int32_t pulseP
 
 int32_t KeyboardLayoutPulseSeq::calculateTotalPatternLength() const {
 	int32_t totalLength = 0;
-	for (int32_t i = 0; i < 8; i++) {
+	// Only sum pulse counts for active stages (0 to numStages-1)
+	for (int32_t i = 0; i < performanceControls.numStages; i++) {
 		totalLength += stages[i].pulseCount;
 	}
 	return totalLength;
 }
 
+
 void KeyboardLayoutPulseSeq::resetToPatternStart() {
-	sequencerState.currentStage = 0;
-	sequencerState.currentPulseInStage = 0;
-	sequencerState.currentPatternPosition = 0;
+	sequencerState.currentPulse = 0;
 	sequencerState.totalPatternLength = calculateTotalPatternLength();
+	// Clear stage flash so it doesn't interfere with next playback
+	sequencerState.gatePadFlashing = false;
+}
+
+void KeyboardLayoutPulseSeq::sendAllNotesOff() {
+	// Send all notes off via instrument
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip) {
+		MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
+		if (melodicInstrument) {
+			// Cast to MIDIInstrument to access allNotesOff
+			MIDIInstrument* midiInstrument = (MIDIInstrument*)melodicInstrument;
+			if (midiInstrument) {
+				midiInstrument->allNotesOff();
+			}
+
+			// Also clear the arpeggiator's note list to prevent hung notes
+			NonAudioInstrument* nonAudioInstrument = (NonAudioInstrument*)melodicInstrument;
+			if (nonAudioInstrument) {
+				nonAudioInstrument->arpeggiator.reset();
+			}
+		}
+	}
 }
 
 

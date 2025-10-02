@@ -79,8 +79,6 @@ private:
 	/// Handle stage count change (performance control)
 	void handleStageCountChange(int32_t numStages);
 
-	/// Handle gate control (note length adjustment)
-	void handleGateControl(int32_t gateIndex);
 
 	/// Handle play order preset selection
 	void handlePlayOrderChange(int32_t playOrderIndex);
@@ -104,11 +102,14 @@ private:
 	void resetToPatternStart();
 
 	/// Pulse sequencer engine methods
-	void advanceStage();
 	void resetSequencerState();
 
 	/// Note handling methods
+	void generateNotes(ArpReturnInstruction* instruction);
+	int32_t findStageForPulse(int32_t pulse);
+	void playNoteForStage(ArpReturnInstruction* instruction, int32_t stage);
 	void switchNoteOff(ArpReturnInstruction* instruction, int32_t noteSlot);
+	void sendAllNotesOff();
 
 
 
@@ -148,22 +149,15 @@ private:
 	// Track which note pad is being held for encoder adjustment
 	int32_t heldNotePad = -1; // -1 = none, 0-7 = stage index
 
-	// Track which gate control pad was last touched for LED feedback
-	int32_t lastTouchedGatePad = -1; // -1 = none, 0-7 = gate index
 
 	// Pulse sequencer engine state
 	struct {
 		bool isPlaying = false;
-		int32_t currentStage = 0;        // 0-7 (stages 1-8)
-		int32_t currentPulseInStage = 0; // 0 to pulseCount-1
-		int32_t stageStartTime = 0;      // When current stage started
-		bool gateCurrentlyActive = false;
-		uint32_t gatePos = 0;
-		int32_t lastPlayedStage = -1;    // Stage that just played a note (for flash)
-
-		// Pattern state for variable-length patterns
-		int32_t totalPatternLength = 8;  // Total length of current pattern (8-56)
-		int32_t currentPatternPosition = 0; // Position within the full pattern (0 to totalPatternLength-1)
+		int32_t currentPulse = 0;         // Current pulse (0 to totalPatternLength-1)
+		int32_t currentVisualStage = 0;   // Which stage pad to flash (visual only)
+		int32_t currentStagePulse = 0;    // Pulse within current visual stage
+		int32_t lastPlayedStage = -1;     // Last stage that played (for flash feedback)
+		int32_t totalPatternLength = 8;   // Total length (sum of all pulse counts)
 
 		// Visual feedback state
 		bool gatePadFlashing = false;
