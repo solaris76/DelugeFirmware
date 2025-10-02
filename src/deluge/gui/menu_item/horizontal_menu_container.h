@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2023 Synthstrom Audible Limited
+ * Copyright (c) 2025 Leonid Burygin
  *
  * This file is part of The Synthstrom Audible Deluge Firmware.
  *
@@ -14,15 +14,25 @@
  * You should have received a copy of the GNU General Public License along with this program.
  * If not, see <https://www.gnu.org/licenses/>.
  */
+
 #pragma once
 
-#include "gui/menu_item/integer.h"
+namespace deluge::gui::menu_item {
 
-namespace deluge::gui::menu_item::reverb {
-class Amount_Unpatched final : public UnpatchedParam {
+// A base class for rendering multiple menu items as single "container" within Horizontal menu
+class HorizontalMenuContainer {
 public:
-	using UnpatchedParam::UnpatchedParam;
+	virtual ~HorizontalMenuContainer() = default;
+	HorizontalMenuContainer(std::initializer_list<MenuItem*> items) : items_{items} {}
 
-	[[nodiscard]] NumberStyle getNumberStyle() const override { return BAR; }
+	[[nodiscard]] int32_t getColumnSpan() const { return items_.size(); }
+	std::span<MenuItem* const> getItems() const { return items_; }
+
+	virtual void render(int32_t start_x, int32_t width, int32_t start_y, int32_t height, const MenuItem* selected_item,
+	                    HorizontalMenu* parent, bool* halt_remaining_rendering) {}
+
+protected:
+	deluge::vector<MenuItem*> items_;
 };
-} // namespace deluge::gui::menu_item::reverb
+
+} // namespace deluge::gui::menu_item

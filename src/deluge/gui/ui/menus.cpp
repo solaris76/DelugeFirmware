@@ -68,6 +68,7 @@
 #include "gui/menu_item/eq/eq_frequency.h"
 #include "gui/menu_item/eq/eq_unpatched_param.h"
 #include "gui/menu_item/file_selector.h"
+#include "gui/menu_item/filter/filter_container.h"
 #include "gui/menu_item/filter/mode.h"
 #include "gui/menu_item/filter/param.h"
 #include "gui/menu_item/filter_route.h"
@@ -78,6 +79,7 @@
 #include "gui/menu_item/gate/off_time.h"
 #include "gui/menu_item/gate/selection.h"
 #include "gui/menu_item/horizontal_menu.h"
+#include "gui/menu_item/horizontal_menu_container.h"
 #include "gui/menu_item/horizontal_menu_group.h"
 #include "gui/menu_item/integer_range.h"
 #include "gui/menu_item/key_range.h"
@@ -138,6 +140,7 @@
 #include "gui/menu_item/osc/source/volume.h"
 #include "gui/menu_item/osc/source/wave_index.h"
 #include "gui/menu_item/osc/sync.h"
+#include "gui/menu_item/osc/tracking.h"
 #include "gui/menu_item/osc/type.h"
 #include "gui/menu_item/patch_cable_strength/fixed.h"
 #include "gui/menu_item/patch_cables.h"
@@ -600,11 +603,10 @@ HorizontalMenu routingHorizontal{STRING_FOR_FILTER_ROUTE, {&filterRoutingMenu}};
 HorizontalMenuGroup filtersMenuGroup{{&lpfMenu, &hpfMenu, &routingHorizontal}};
 
 // FX ----------------------------------------------------------------------------------------
-
 fx::Clipping clippingMenu{STRING_FOR_SATURATION};
-UnpatchedParam srrMenu{STRING_FOR_DECIMATION, params::UNPATCHED_SAMPLE_RATE_REDUCTION};
-UnpatchedParam bitcrushMenu{STRING_FOR_BITCRUSH, params::UNPATCHED_BITCRUSHING};
-patched_param::Integer foldMenu{STRING_FOR_WAVEFOLD, STRING_FOR_WAVEFOLD, params::LOCAL_FOLD};
+UnpatchedParam srrMenu{STRING_FOR_DECIMATION, params::UNPATCHED_SAMPLE_RATE_REDUCTION, NumberStyle::BAR};
+UnpatchedParam bitcrushMenu{STRING_FOR_BITCRUSH, params::UNPATCHED_BITCRUSHING, NumberStyle::BAR};
+patched_param::Integer foldMenu{STRING_FOR_WAVEFOLD, STRING_FOR_WAVEFOLD, params::LOCAL_FOLD, NumberStyle::BAR};
 
 HorizontalMenu soundDistortionMenu{
     STRING_FOR_DISTORTION,
@@ -687,13 +689,7 @@ filter::UnpatchedFilterParam globalLPFResMenu{STRING_FOR_RESONANCE, STRING_FOR_L
 filter::UnpatchedFilterParam globalLPFMorphMenu{STRING_FOR_MORPH, STRING_FOR_LPF_MORPH, params::UNPATCHED_LPF_MORPH,
                                                 filter::FilterSlot::LPF, filter::FilterParamType::MORPH};
 HorizontalMenu globalLPFMenu{STRING_FOR_LPF,
-                             {
-                                 &globalLPFFreqMenu,
-                                 &globalLPFResMenu,
-                                 &globalLPFMorphMenu,
-                                 &lpfModeMenu,
-                             },
-                             HorizontalMenu::Layout::FIXED};
+                             {&lpfModeMenu, &globalLPFFreqMenu, &globalLPFResMenu, &globalLPFMorphMenu}};
 
 // HPF Menu
 filter::UnpatchedFilterParam globalHPFFreqMenu{STRING_FOR_FREQUENCY, STRING_FOR_HPF_FREQUENCY,
@@ -705,13 +701,7 @@ filter::UnpatchedFilterParam globalHPFMorphMenu{STRING_FOR_MORPH, STRING_FOR_HPF
                                                 filter::FilterSlot::HPF, filter::FilterParamType::MORPH};
 
 HorizontalMenu globalHPFMenu{STRING_FOR_HPF,
-                             {
-                                 &globalHPFFreqMenu,
-                                 &globalHPFResMenu,
-                                 &globalHPFMorphMenu,
-                                 &hpfModeMenu,
-                             },
-                             HorizontalMenu::Layout::FIXED};
+                             {&hpfModeMenu, &globalHPFFreqMenu, &globalHPFResMenu, &globalHPFMorphMenu}};
 
 Submenu globalFiltersMenu{
     STRING_FOR_FILTERS,
@@ -1375,7 +1365,8 @@ HorizontalMenu soundMasterMenuWithoutVibrato{
     {&synthModeMenu, &volumeMenu, &panMenu, &masterTransposeMenu},
 };
 
-HorizontalMenuGroup sourceMenuGroup{{&source0Menu, &source1Menu, &modulator0Menu, &modulator1Menu, &oscMixerMenu}};
+HorizontalMenuGroup sourceMenuGroup{
+    {&source0Menu, &source1Menu, &modulator0Menu, &modulator1Menu, &oscMixerMenu, &oscTrackingMenu}};
 
 Submenu soundFXMenu{
     STRING_FOR_FX,
@@ -1411,6 +1402,7 @@ Submenu soundEditorRootMenu{
         &modulator0Menu,
         &modulator1Menu,
         &oscMixerMenu,
+        &oscTrackingMenu,
         &env1Menu,
         &env2Menu,
         &env3Menu,
@@ -1820,7 +1812,7 @@ PLACE_SDRAM_DATA MenuItem* paramShortcutsForKitGlobalFX[][kDisplayHeight] = {
     {nullptr,          	     &spreadVelocityMenu,	  &randomizerLockMenu,            &randomizerNoteProbabilityMenu,        nullptr,                     nullptr,                nullptr,                  nullptr                            },
 };
 
-PLACE_SDRAM_DATA std::array<HorizontalMenu*, 17> horizontalMenusChainForSound = {
+deluge::vector<HorizontalMenu*> horizontalMenusChainForSound = {
 	&soundMasterMenuWithoutVibrato, &recorderMenu,
 	&sourceMenuGroup, &voiceMenuGroup, &envMenuGroup, &lfoMenuGroup,
 	&filtersMenuGroup, &eqMenu, &modFXMenu,
@@ -1829,7 +1821,7 @@ PLACE_SDRAM_DATA std::array<HorizontalMenu*, 17> horizontalMenusChainForSound = 
 	&arpMenuGroup, &randomizerMenu
 };
 
-PLACE_SDRAM_DATA std::array<HorizontalMenu*, 12> horizontalMenusChainForKit = {
+deluge::vector<HorizontalMenu*> horizontalMenusChainForKit = {
 	&kitClipMasterMenu,
 	&globalFiltersMenuGroup, &globalEQMenu, &globalModFXMenu,
 	&globalReverbMenuGroup, &globalDelayMenu, &globalDistortionMenu,
@@ -1837,23 +1829,29 @@ PLACE_SDRAM_DATA std::array<HorizontalMenu*, 12> horizontalMenusChainForKit = {
 	&arpMenuGroupKit, &randomizerMenu
 };
 
-PLACE_SDRAM_DATA std::array<HorizontalMenu*, 9> horizontalMenusChainForSong = {
+deluge::vector<HorizontalMenu*> horizontalMenusChainForSong = {
 	&songMasterMenu,
 	&globalFiltersMenuGroup, &globalEQMenu, &globalModFXMenu,
 	&globalReverbMenuGroup, &globalDelayMenu, &globalDistortionMenu,
 	&audioCompMenu, &stutterMenu
 };
 
-PLACE_SDRAM_DATA std::array<HorizontalMenu*, 11> horizontalMenusChainForAudioClip = {
+deluge::vector<HorizontalMenu*> horizontalMenusChainForAudioClip = {
 	&audioClipMasterMenu, &audioClipSampleMenu,
 	&globalFiltersMenuGroup, &eqMenu, &globalModFXMenu,
 	&globalReverbMenuGroup, &globalDelayMenu, &audioClipDistortionMenu,
 	&globalSidechainMenu, &audioCompMenu, &stutterMenu
 };
 
-PLACE_SDRAM_DATA std::array<HorizontalMenu*, 2> horizontalMenusChainForMidiOrCv = {
+deluge::vector<HorizontalMenu*> horizontalMenusChainForMidiOrCv = {
 	&arpMenuGroupMIDIOrCV, &randomizerMenu
 };
+
+filter::FilterContainer lpfContainer{{&lpfFreqMenu, &lpfResMenu}, &lpfMorphMenu};
+filter::FilterContainer hpfContainer{{&hpfFreqMenu, &hpfResMenu}, &hpfMorphMenu};
+filter::FilterContainer globalLpfContainer{{&globalLPFFreqMenu, &globalLPFResMenu}, &globalLPFMorphMenu};
+filter::FilterContainer globalHpfContainer{{&globalHPFFreqMenu, &globalHPFResMenu}, &globalHPFMorphMenu};
+deluge::vector<HorizontalMenuContainer*> horizontalMenuContainers{&lpfContainer, &hpfContainer, &globalLpfContainer, &globalHpfContainer};
 
 //clang-format on
 
