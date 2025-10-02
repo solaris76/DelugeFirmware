@@ -18,6 +18,7 @@
 #include "gui/ui/keyboard/layout/pulse_seq.h"
 #include "gui/ui/keyboard/keyboard_screen.h"
 #include "gui/colour/colour.h"
+#include "model/instrument/non_audio_instrument.h"
 #include "hid/display/display.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/melodic_instrument.h"
@@ -27,6 +28,7 @@
 #include "model/song/song.h"
 #include "gui/ui_timer_manager.h"
 #include "gui/menu_item/value_scaling.h"
+#include "gui/ui/sound_editor.h"
 
 namespace deluge::gui::ui::keyboard::layout {
 
@@ -225,12 +227,17 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 
     int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
 
-    if (!howFarIntoPeriod) {
-        // Check for note-off first (on timing boundaries only, like arpeggiator)
-        if (sequencerState.gateCurrentlyActive) {
+    // Check for note-off first (when gate expires, like arpeggiator)
+    if (sequencerState.gateCurrentlyActive) {
+        sequencerState.gatePos++;
+        uint32_t gateLength = calculateGateLength();
+        if (sequencerState.gatePos >= gateLength) {
             switchAnyNoteOff(instruction);
             sequencerState.gateCurrentlyActive = false;
         }
+    }
+
+    if (!howFarIntoPeriod) {
 
         // Check if we should play a note based on rhythm pattern (BEFORE advancement)
         bool shouldPlayNote = evaluateRhythmPattern(sequencerState.currentStage, sequencerState.currentPulseInStage);
@@ -239,14 +246,10 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
             // Generate note for the CURRENT stage (before advancement)
             switchNoteOn(instruction);
 
-            // Process the instruction
-            if (instruction->arpNoteOn != nullptr) {
-                // Note on event - this will be handled by the caller
-                // Track which stage just played for flash
-                sequencerState.lastPlayedStage = sequencerState.currentStage;
-                sequencerState.gateCurrentlyActive = true;
-                keyboardScreen.requestMainPadsRendering();
-            }
+            // Track which stage just played for flash (always flash when note is generated)
+            sequencerState.lastPlayedStage = sequencerState.currentStage;
+            sequencerState.gateCurrentlyActive = true;
+            keyboardScreen.requestMainPadsRendering();
         }
 
 
@@ -310,15 +313,24 @@ void KeyboardLayoutPulseSeq::switchNoteOn(ArpReturnInstruction* instruction) {
     // Get default velocity
     uint8_t velocity = getDefaultVelocity();
 
-    // Set up the ArpNote for the instruction
-    currentNote.noteCodeOnPostArp[0] = note;
-    currentNote.velocity = velocity;
-    currentNote.inputCharacteristics[util::to_underlying(MIDICharacteristic::NOTE)] = note;
-    currentNote.inputCharacteristics[util::to_underlying(MIDICharacteristic::CHANNEL)] = MIDI_CHANNEL_NONE;
+    // Send note directly using sendNote (like keyboard input)
+    InstrumentClip* clip = getCurrentInstrumentClip();
+    if (clip) {
+        MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
+        if (melodicInstrument) {
+            // Create a ModelStack for the note-on event using soundEditor
+            if (soundEditor.setup(clip, nullptr, 0)) {
+                char modelStackMemory[MODEL_STACK_MAX_SIZE];
+                ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
 
-    // Set the instruction
-    instruction->arpNoteOn = &currentNote;
-    instruction->sampleSyncLengthOn = calculateGateLength(); // This is the note duration
+                if (modelStack) {
+                    // Send note-on directly
+                    uint32_t gateLength = calculateGateLength();
+                    melodicInstrument->sendNote(modelStack, true, note, nullptr, MIDI_CHANNEL_NONE, velocity, gateLength);
+                }
+            }
+        }
+    }
 
     // Store note for note-off tracking (matches arpeggiator format)
     sequencerState.noteCodeCurrentlyOnPostArp[0] = note;
@@ -340,19 +352,38 @@ void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction)
         return;
     }
 
-    // Set note-off instruction (same format as arpeggiator)
-    for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
-        instruction->noteCodeOffPostArp[n] = sequencerState.noteCodeCurrentlyOnPostArp[n];
-        instruction->outputMIDIChannelOff[n] = sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[n];
-        // Clear the stored note data
-        sequencerState.noteCodeCurrentlyOnPostArp[n] = ARP_NOTE_NONE;
-        sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[n] = MIDI_CHANNEL_NONE;
+    // Send note-off directly using sendNote (like note-on)
+    InstrumentClip* clip = getCurrentInstrumentClip();
+    if (clip) {
+        MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
+        if (melodicInstrument) {
+            // Create a ModelStack for the note-off event using soundEditor
+            if (soundEditor.setup(clip, nullptr, 0)) {
+                char modelStackMemory[MODEL_STACK_MAX_SIZE];
+                ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+
+                if (modelStack) {
+                    // Get the note that was playing
+                    int32_t note = sequencerState.noteCodeCurrentlyOnPostArp[0];
+                    if (note != ARP_NOTE_NONE) {
+                        // Send note-off directly
+                        melodicInstrument->sendNote(modelStack, false, note, nullptr, MIDI_CHANNEL_NONE, 64);
+                    }
+                }
+            }
+        }
     }
 
     // Clear sequencer state
     sequencerState.gateCurrentlyActive = false;
     sequencerState.gatePos = 0;
     sequencerState.lastPlayedStage = -1;
+
+    // Clear the stored note data
+    for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
+        sequencerState.noteCodeCurrentlyOnPostArp[n] = ARP_NOTE_NONE;
+        sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[n] = MIDI_CHANNEL_NONE;
+    }
 }
 
 uint32_t KeyboardLayoutPulseSeq::calculateGateLength() {
@@ -557,71 +588,7 @@ void KeyboardLayoutPulseSeq::advanceStage() {
 	sequencerState.stageStartTime = 0;
 }
 
-void KeyboardLayoutPulseSeq::handleSwungTick(uint64_t currentTick) {
-	// Handle timing for pulse sequencer
-	// This method is called by the keyboard screen for timing
-	// The actual timing logic is handled in doTickForward
-}
 
-void KeyboardLayoutPulseSeq::generateNote() {
-	// Generate the note using the instrument's noteOn method
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || !clip->output) {
-		return;
-	}
-
-	// Get current stage data
-	StageData& currentStageData = stages[sequencerState.currentStage];
-
-	// Calculate note from scale
-	NoteSet& scaleNotes = getScaleNotes();
-	uint8_t scaleNoteCount = getScaleNoteCount();
-
-	// Get note from stage's noteIndex and octave
-	// Start from C1 (MIDI note 24) as base octave for full range access
-	// With octave range -2 to +3, gives: C-2 (0) to C4 (60)
-	constexpr int32_t kBaseOctave = 24; // C1
-
-	// Calculate base note index with accumulator applied
-	int32_t noteIndexWithAccumulator = currentStageData.noteIndex + currentStageData.accumulator;
-
-	// Wrap around the scale if needed
-	while (noteIndexWithAccumulator < 0) noteIndexWithAccumulator += scaleNoteCount;
-	while (noteIndexWithAccumulator >= scaleNoteCount) noteIndexWithAccumulator -= scaleNoteCount;
-
-	int32_t note = kBaseOctave + getRootNote() + scaleNotes[noteIndexWithAccumulator]
-	               + (currentStageData.octave * kOctaveSize)
-	               + performanceControls.transpose  // Apply transpose (within scale)
-	               + (performanceControls.octave * kOctaveSize); // Apply global octave shift
-
-	// Clamp note to valid range
-	if (note < 0) note = 0;
-	if (note > 127) note = 127;
-
-	// Get default velocity
-	uint8_t velocity = getDefaultVelocity();
-
-	// Create a simple note-on event
-	MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
-	if (melodicInstrument) {
-		// Create a ModelStack for the note-on event using soundEditor
-		if (soundEditor.setup(clip, nullptr, 0)) {
-			char modelStackMemory[MODEL_STACK_MAX_SIZE];
-			ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-
-            if (modelStack) {
-                // Calculate gate length from arp settings
-                ArpeggiatorSettings* arpSettings = &clip->arpSettings;
-                uint32_t gateLength = computeFinalValueForStandardMenuItem(arpSettings->gate);
-
-                // Trigger a note-on event with gate length
-                melodicInstrument->sendNote(modelStack, true, note, nullptr, MIDI_CHANNEL_NONE, velocity, gateLength);
-
-                // Note tracking is now handled by the arpeggiator instruction system
-            }
-        }
-    }
-}
 
 
 void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidth]) {
@@ -636,23 +603,46 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 	// Render gate line (x0-x7)
 	for (int32_t x = 0; x < 8; x++) {
-		image[gateLineY][x] = getGateTypeColor(x);
+		// Gate type colors with red flash for active stage
+		if (sequencerState.gateCurrentlyActive && sequencerState.lastPlayedStage == x) {
+			image[gateLineY][x] = RGB{255, 0, 0}; // Bright red flash
+		} else {
+			// Normal gate type colors
+			switch (stages[x].gateType) {
+				case GateType::OFF:
+					image[gateLineY][x] = RGB{100, 100, 100}; // Dim white
+					break;
+				case GateType::SINGLE:
+					image[gateLineY][x] = RGB{0, 255, 0}; // Green
+					break;
+				case GateType::MULTIPLE:
+					image[gateLineY][x] = RGB{0, 0, 255}; // Blue
+					break;
+				case GateType::HELD:
+					image[gateLineY][x] = RGB{255, 0, 255}; // Magenta
+					break;
+				default:
+					image[gateLineY][x] = RGB{0, 0, 0}; // Black
+					break;
+			}
+		}
 	}
 
 	// Render note selection pads (above gate line) - 8 columns only
 	for (int32_t x = 0; x < 8; x++) {
 		if (gateLineY + 1 < kDisplayHeight) {
-			image[gateLineY + 1][x] = getNoteSelectionColor(x);
+			// Note selection colors - magenta when accumulator is non-zero, pink when zero
+			image[gateLineY + 1][x] = (stages[x].accumulator != 0) ? RGB{255, 0, 255} : RGB{255, 100, 150};
 		}
 	}
 
 	// Render octave controls (above note selection) - 8 columns only
 	for (int32_t x = 0; x < 8; x++) {
 		if (gateLineY + 2 < kDisplayHeight) {
-			image[gateLineY + 2][x] = getOctaveControlColor(); // Octave down
+			image[gateLineY + 2][x] = RGB{100, 150, 255}; // Octave down
 		}
 		if (gateLineY + 3 < kDisplayHeight) {
-			image[gateLineY + 3][x] = getOctaveControlColor(); // Octave up
+			image[gateLineY + 3][x] = RGB{100, 150, 255}; // Octave up
 		}
 	}
 
@@ -662,7 +652,14 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 	for (int32_t i = 0; i < 7; i++) {
 		if (gateLineY - 1 - i >= 0) {
 			for (int32_t x = 0; x < 8; x++) {
-				image[gateLineY - 1 - i][x] = getPulseCountColor(x, i);
+				// Inline pulse count color calculation
+				if (i < stages[x].pulseCount) {
+					// Active pulse positions - purple/pink to cyan gradient (reversed)
+					int32_t intensity = ((6 - i) * 255) / 6;
+					image[gateLineY - 1 - i][x] = RGB{static_cast<uint8_t>(intensity), static_cast<uint8_t>(255 - intensity), 255};
+				} else {
+					image[gateLineY - 1 - i][x] = RGB{0, 0, 0}; // Inactive pulse positions
+				}
 			}
 		}
 	}
@@ -681,19 +678,53 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 	// y5: Gate control (note length) - 8 pads
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
-		image[5][x] = getGateControlColor(x - 8);
+		// Gate control colors - light selected and all pads to the left
+		int32_t gateIndex = x - 8;
+		int32_t selectedGate = (lastTouchedGatePad >= 0) ? lastTouchedGatePad : 3;
+		if (gateIndex <= selectedGate || (selectedGate == 0 && gateIndex == 0)) {
+			image[5][x] = RGB{0, 255, 0}; // Bright green for selected and all pads to the left
+		} else {
+			image[5][x] = RGB{0, 0, 0}; // Black for unselected pads
+		}
 	}
 
 	// y3: Play order presets - 4 pads (x8-11)
 	for (int32_t x = 8; x < 12; x++) {
-		image[3][x] = getPlayOrderColor(x - 8);
+		// Play order colors - highlight selected, dim others
+		if (static_cast<int32_t>(performanceControls.playOrder) == (x - 8)) {
+			image[3][x] = RGB{0, 255, 255}; // Bright cyan for selected
+		} else {
+			image[3][x] = RGB{0, 128, 128}; // Dim cyan for others
+		}
 	}
 
 	// y7: Transpose and octave controls - 4 pads (x12-15)
-	image[7][12] = getTransposeColor(-1); // Transpose -1
-	image[7][13] = getTransposeColor(1);  // Transpose +1
-	image[7][14] = getOctaveControlColor(-1); // Octave down
-	image[7][15] = getOctaveControlColor(1);  // Octave up
+	// Transpose controls with direction-specific colors
+	if (performanceControls.transpose != 0) {
+		if (performanceControls.transpose < 0) {
+			image[7][12] = RGB{255, 128, 0}; // Orange for active -1
+			image[7][13] = RGB{64, 32, 0};   // Dim orange for inactive +1
+		} else {
+			image[7][12] = RGB{64, 32, 0};   // Dim orange for inactive -1
+			image[7][13] = RGB{255, 128, 0}; // Orange for active +1
+		}
+	} else {
+		image[7][12] = RGB{64, 32, 0}; // Dim orange for inactive
+		image[7][13] = RGB{64, 32, 0}; // Dim orange for inactive
+	}
+	// Octave controls with direction-specific colors
+	if (performanceControls.octave != 0) {
+		if (performanceControls.octave < 0) {
+			image[7][14] = RGB{255, 0, 255}; // Magenta for active down
+			image[7][15] = RGB{64, 0, 64};   // Dim magenta for inactive up
+		} else {
+			image[7][14] = RGB{64, 0, 64};   // Dim magenta for inactive down
+			image[7][15] = RGB{255, 0, 255}; // Magenta for active up
+		}
+	} else {
+		image[7][14] = RGB{64, 0, 64}; // Dim magenta for inactive
+		image[7][15] = RGB{64, 0, 64}; // Dim magenta for inactive
+	}
 
 	// Dim gate pads that are beyond the active stage count (x0-x7 only)
 	for (int32_t x = 0; x < 8; x++) {
@@ -710,10 +741,6 @@ ArpeggiatorSettings* KeyboardLayoutPulseSeq::getArpSettings() {
 	return &clip->arpSettings;
 }
 
-Arpeggiator* KeyboardLayoutPulseSeq::getArpeggiator() {
-	// Not needed for pulse sequencer - we use our own timing system
-	return nullptr;
-}
 
 int32_t KeyboardLayoutPulseSeq::getGateLineY() const {
 	return displayState.gateLineOffset + 4; // y4-y7 (bottom left is y0 x0)
@@ -932,104 +959,11 @@ void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 	}
 }
 
-RGB KeyboardLayoutPulseSeq::getGateTypeColor(int32_t stage) const {
-	if (stage < 0 || stage >= 8) return RGB{0, 0, 0}; // Gate line only on first 8 columns
 
-	// Flash red when this stage just played a note
-	if (sequencerState.gateCurrentlyActive && sequencerState.lastPlayedStage == stage) {
-		return RGB{255, 0, 0}; // Red flash
-	}
 
-	// Normal gate type colors
-	switch (stages[stage].gateType) {
-		case GateType::OFF:
-			return RGB{100, 100, 100}; // Dim white
-		case GateType::SINGLE:
-			return RGB{0, 255, 0}; // Green
-		case GateType::MULTIPLE:
-			return RGB{0, 0, 255}; // Blue
-		case GateType::HELD:
-			return RGB{255, 0, 255}; // Magenta
-		default:
-			return RGB{0, 0, 0}; // Black
-	}
-}
 
-RGB KeyboardLayoutPulseSeq::getGateControlColor(int32_t gateIndex) const {
-	if (gateIndex < 0 || gateIndex >= 8) return RGB{0, 0, 0};
 
-	// Default to gate index 3 (25) if no pad has been touched
-	int32_t selectedGate = (lastTouchedGatePad >= 0) ? lastTouchedGatePad : 3;
 
-	// Always light at least the first pad (minimum gate length 1)
-	if (gateIndex <= selectedGate || (selectedGate == 0 && gateIndex == 0)) {
-		return RGB{0, 255, 0}; // Bright green for selected and all pads to the left
-	}
-	else {
-		return RGB{0, 0, 0}; // Black for unselected pads
-	}
-}
-
-RGB KeyboardLayoutPulseSeq::getPlayOrderColor(int32_t playOrderIndex) const {
-	if (playOrderIndex < 0 || playOrderIndex > 3) return RGB{0, 0, 0};
-
-	// Highlight the selected play order, dim others
-	if (static_cast<int32_t>(performanceControls.playOrder) == playOrderIndex) {
-		return RGB{0, 255, 255}; // Bright cyan for selected
-	}
-	else {
-		return RGB{0, 128, 128}; // Dim cyan for others
-	}
-}
-
-RGB KeyboardLayoutPulseSeq::getTransposeColor(int32_t direction) const {
-	// Only light the specific pad that was pressed
-	if (performanceControls.transpose != 0) {
-		// Check if this is the direction that was pressed
-		if ((direction == -1 && performanceControls.transpose < 0) ||
-		    (direction == 1 && performanceControls.transpose > 0)) {
-			return RGB{255, 128, 0}; // Orange for the active direction
-		}
-	}
-	return RGB{64, 32, 0}; // Dim orange for inactive
-}
-
-RGB KeyboardLayoutPulseSeq::getOctaveControlColor(int32_t direction) const {
-	// Only light the specific pad that was pressed
-	if (performanceControls.octave != 0) {
-		// Check if this is the direction that was pressed
-		if ((direction == -1 && performanceControls.octave < 0) ||
-		    (direction == 1 && performanceControls.octave > 0)) {
-			return RGB{255, 0, 255}; // Magenta for the active direction
-		}
-	}
-	return RGB{64, 0, 64}; // Dim magenta for inactive
-}
-
-RGB KeyboardLayoutPulseSeq::getNoteSelectionColor(int32_t stage) const {
-	if (stage < 0 || stage >= 8) return RGB{0, 0, 0};
-
-	// Magenta when accumulator is non-zero, pink when zero
-	return (stages[stage].accumulator != 0) ? RGB{255, 0, 255} : RGB{255, 100, 150};
-}
-
-RGB KeyboardLayoutPulseSeq::getOctaveControlColor() const {
-	return RGB{100, 150, 255}; // Light blue
-}
-
-RGB KeyboardLayoutPulseSeq::getPulseCountColor(int32_t stage, int32_t position) const {
-	if (stage < 0 || stage >= 8) return RGB{0, 0, 0};
-	if (position < 0 || position >= 7) return RGB{0, 0, 0};
-
-	// Check if this position should be lit based on the stage's pulse count
-	if (position < stages[stage].pulseCount) {
-		// Active pulse positions - purple/pink to cyan gradient (reversed)
-		// Position 0 (top) = purple/pink, position 6 (bottom) = cyan
-		int32_t intensity = ((6 - position) * 255) / 6;
-		return RGB{static_cast<uint8_t>(intensity), static_cast<uint8_t>(255 - intensity), 255};
-	}
-	return RGB{0, 0, 0}; // Inactive pulse positions
-}
 
 bool KeyboardLayoutPulseSeq::evaluateRhythmPattern(int32_t stage, int32_t pulsePosition) {
 	StageData& stageData = stages[stage];

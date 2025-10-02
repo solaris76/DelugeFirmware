@@ -1015,11 +1015,8 @@ void KeyboardScreen::graphicsRoutine() {
 }
 
 void KeyboardScreen::notifyPulseSeqTick(uint64_t currentTick) {
-	// Forward the 32nd note tick to the pulse sequencer layout
-	KeyboardLayoutType currentLayoutType = getCurrentInstrumentClip()->keyboardState.currentLayout;
-	if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
-		((layout::KeyboardLayoutPulseSeq*)layout_list[currentLayoutType])->handleSwungTick(currentTick);
-	}
+	// Pulse sequencer timing is now handled by doTickForward, not this method
+	// This method is kept for compatibility but does nothing
 }
 
 int32_t KeyboardScreen::doTickForwardForKeyboardScreen(int32_t currentPos, ArpReturnInstruction* instruction) {

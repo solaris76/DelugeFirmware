@@ -49,18 +49,11 @@ public:
 	/// Arpeggiator-style timing - returns ticks until next event
 	int32_t doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed, ArpReturnInstruction* instruction) override;
 
-	/// Handle swung tick for timing
-	void handleSwungTick(uint64_t currentTick);
-
-	/// Generate a note for the current stage
-	void generateNote();
 
 private:
 	/// Get the current arpeggiator settings from the active clip
 	ArpeggiatorSettings* getArpSettings();
 
-	/// Get the current arpeggiator instance from the active instrument
-	Arpeggiator* getArpeggiator();
 
 	/// Generate note using ArpReturnInstruction
 	void switchNoteOn(ArpReturnInstruction* instruction);
@@ -114,29 +107,6 @@ private:
 	void advanceStage();
 	void resetSequencerState();
 
-	/// Get gate type color for a specific stage
-	RGB getGateTypeColor(int32_t stage) const;
-
-	/// Get note selection color for a specific stage
-	RGB getNoteSelectionColor(int32_t stage) const;
-
-	/// Get octave control color
-	RGB getOctaveControlColor() const;
-
-	/// Get pulse count color for a specific stage and position
-	RGB getPulseCountColor(int32_t stage, int32_t position) const;
-
-	/// Get gate control color for performance pad
-	RGB getGateControlColor(int32_t gateIndex) const;
-
-	/// Get play order preset color
-	RGB getPlayOrderColor(int32_t playOrderIndex) const;
-
-	/// Get transpose control color
-	RGB getTransposeColor(int32_t direction) const;
-
-	/// Get octave control color
-	RGB getOctaveControlColor(int32_t direction) const;
 
 
 public:
