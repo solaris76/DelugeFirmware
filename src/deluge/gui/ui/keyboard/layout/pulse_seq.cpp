@@ -231,6 +231,10 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
     if (sequencerState.gateCurrentlyActive) {
         sequencerState.gatePos++;
         uint32_t gateLength = calculateGateLength();
+        // Debug: show gate length and position
+        if (sequencerState.gatePos == 1) {
+            display->displayPopup("GATE LEN");
+        }
         if (sequencerState.gatePos >= gateLength) {
             // Debug: show when note-off is triggered
             display->displayPopup("NOTE OFF");
@@ -254,6 +258,9 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
             // Generate note for the CURRENT stage (before advancement)
             switchNoteOn(instruction);
             sequencerState.gateCurrentlyActive = true;
+            sequencerState.gatePos = 0;
+            // Debug: show when note is generated
+            display->displayPopup("NOTE ON");
         }
 
 
@@ -317,15 +324,19 @@ void KeyboardLayoutPulseSeq::switchNoteOn(ArpReturnInstruction* instruction) {
     // Get default velocity
     uint8_t velocity = getDefaultVelocity();
 
-    // Set up the arpeggiator note for the instruction system
-    currentNote.velocity = velocity;
-    currentNote.baseVelocity = velocity;
-    currentNote.noteCodeOnPostArp[0] = note;
-    currentNote.outputMemberChannel[0] = MIDI_CHANNEL_NONE;
-
-    // Use arpeggiator instruction system (applies randomizer settings automatically)
-    instruction->arpNoteOn = &currentNote;
-    instruction->sampleSyncLengthOn = calculateGateLength();
+    // Add note to arpeggiator's internal list first
+    InstrumentClip* clip = getCurrentInstrumentClip();
+    if (clip) {
+        MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
+        if (melodicInstrument) {
+            NonAudioInstrument* nonAudioInstrument = (NonAudioInstrument*)melodicInstrument;
+            if (nonAudioInstrument) {
+                // Add note to arpeggiator's internal list
+                ArpeggiatorSettings* arpSettings = getArpSettings();
+                nonAudioInstrument->arpeggiator.noteOn(arpSettings, note, velocity, instruction, MIDI_CHANNEL_NONE, nullptr);
+            }
+        }
+    }
 
     // Store note for note-off tracking (matches arpeggiator format)
     sequencerState.noteCodeCurrentlyOnPostArp[0] = note;
@@ -347,17 +358,35 @@ void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction)
         return;
     }
 
-    // Use arpeggiator instruction system for note-off (applies randomizer settings automatically)
-    int32_t note = sequencerState.noteCodeCurrentlyOnPostArp[0];
-    if (note != ARP_NOTE_NONE) {
-        instruction->noteCodeOffPostArp[0] = note;
-        instruction->outputMIDIChannelOff[0] = sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[0];
+    // Debug: show note-off attempt
+    display->displayPopup("NOTE OFF CALL");
 
-        // Clear remaining slots
-        for (int32_t n = 1; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
-            instruction->noteCodeOffPostArp[n] = ARP_NOTE_NONE;
-            instruction->outputMIDIChannelOff[n] = MIDI_CHANNEL_NONE;
+    // Call arpeggiator's noteOff method to properly handle note-off
+    InstrumentClip* clip = getCurrentInstrumentClip();
+    if (clip) {
+        MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
+        if (melodicInstrument) {
+            NonAudioInstrument* nonAudioInstrument = (NonAudioInstrument*)melodicInstrument;
+            if (nonAudioInstrument) {
+                // Get the original note that was played (before arpeggiation)
+                int32_t originalNote = sequencerState.noteCodeCurrentlyOnPostArp[0];
+                if (originalNote != ARP_NOTE_NONE) {
+                    // Debug: show note being turned off
+                    display->displayPopup("NOTE OFF");
+                    // Call arpeggiator's noteOff method
+                    ArpeggiatorSettings* arpSettings = getArpSettings();
+                    nonAudioInstrument->arpeggiator.noteOff(arpSettings, originalNote, instruction);
+                } else {
+                    display->displayPopup("NO NOTE");
+                }
+            } else {
+                display->displayPopup("NO INST");
+            }
+        } else {
+            display->displayPopup("NO MEL");
         }
+    } else {
+        display->displayPopup("NO CLIP");
     }
 
     // Clear sequencer state
@@ -411,6 +440,11 @@ uint32_t KeyboardLayoutPulseSeq::calculateGateLength() {
 
     // Scale to base gate length (1-50 becomes 2%-100% of base gate length)
     uint32_t gateLength = (gatePercent * baseGateLength) / 50;
+
+    // Debug: ensure minimum gate length
+    if (gateLength < 10) {
+        gateLength = 10; // Minimum 10 ticks
+    }
 
     return gateLength;
 }

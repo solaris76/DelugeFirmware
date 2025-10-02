@@ -197,10 +197,10 @@ int32_t NonAudioInstrument::doTickForwardForArp(ModelStack* modelStack, int32_t 
 		// Use the shorter timing
 		ticksTilNextArpEvent = std::min(ticksTilNextArpEvent, layoutTicks);
 
-		// If layout generated a note, use it instead of arpeggiator
-		if (layoutInstruction.arpNoteOn != nullptr) {
-			instruction = layoutInstruction;
-		}
+	// If layout generated a note or note-off, use it instead of arpeggiator
+	if (layoutInstruction.arpNoteOn != nullptr || layoutInstruction.noteCodeOffPostArp[0] != ARP_NOTE_NONE) {
+		instruction = layoutInstruction;
+	}
 	}
 
 	for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
