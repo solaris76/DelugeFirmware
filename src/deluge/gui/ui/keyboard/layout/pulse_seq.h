@@ -107,6 +107,9 @@ private:
 	void advanceStage();
 	void resetSequencerState();
 
+	/// Note handling methods
+	void switchNoteOff(ArpReturnInstruction* instruction, int32_t noteSlot);
+
 
 
 public:
@@ -168,9 +171,11 @@ private:
 		uint32_t flashDuration = 50; // Flash duration in milliseconds (shorter for multiple notes)
 		int32_t flashPosition = 0;    // Position across the gate pad (0-7)
 
-		// Note tracking for proper note-off handling (matches arpeggiator format)
+		// Per-note tracking for proper note-off handling
 		std::array<int16_t, ARP_MAX_INSTRUCTION_NOTES> noteCodeCurrentlyOnPostArp = {ARP_NOTE_NONE};
 		std::array<uint8_t, ARP_MAX_INSTRUCTION_NOTES> outputMIDIChannelForNoteCurrentlyOnPostArp = {MIDI_CHANNEL_NONE};
+		std::array<uint32_t, ARP_MAX_INSTRUCTION_NOTES> noteGatePos = {0}; // Track gate position for each note
+		std::array<bool, ARP_MAX_INSTRUCTION_NOTES> noteActive = {false}; // Track if each note is active
 	} sequencerState;
 
 	// Stage data (8 stages, one per column)

@@ -227,21 +227,25 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 
     int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
 
-    // Check for note-off first (when gate expires, like arpeggiator)
-    if (sequencerState.gateCurrentlyActive) {
-        sequencerState.gatePos++;
-        uint32_t gateLength = calculateGateLength();
-        // Debug: show gate length and position
-        if (sequencerState.gatePos == 1) {
-            display->displayPopup("GATE LEN");
-        }
-        if (sequencerState.gatePos >= gateLength) {
-            // Debug: show when note-off is triggered
-            display->displayPopup("NOTE OFF");
-            switchAnyNoteOff(instruction);
-            sequencerState.gateCurrentlyActive = false;
+    // Check for note-off when gate expires (per-note tracking)
+    bool anyNoteActive = false;
+    uint32_t gateLength = calculateGateLength();
+
+    for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
+        if (sequencerState.noteActive[n]) {
+            anyNoteActive = true;
+            sequencerState.noteGatePos[n]++;
+
+            if (sequencerState.noteGatePos[n] >= gateLength) {
+                // Debug: show when note-off is triggered
+                display->displayPopup("NOTE OFF");
+                switchNoteOff(instruction, n);
+            }
         }
     }
+
+    // Update overall gate state
+    sequencerState.gateCurrentlyActive = anyNoteActive;
 
     if (!howFarIntoPeriod) {
 
@@ -257,8 +261,6 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
         if (shouldPlayNote) {
             // Generate note for the CURRENT stage (before advancement)
             switchNoteOn(instruction);
-            sequencerState.gateCurrentlyActive = true;
-            sequencerState.gatePos = 0;
             // Debug: show when note is generated
             display->displayPopup("NOTE ON");
         }
@@ -338,112 +340,95 @@ void KeyboardLayoutPulseSeq::switchNoteOn(ArpReturnInstruction* instruction) {
         }
     }
 
-    // Store note for note-off tracking (matches arpeggiator format)
-    sequencerState.noteCodeCurrentlyOnPostArp[0] = note;
-    sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[0] = MIDI_CHANNEL_NONE;
-
-    // Clear remaining slots
-    for (int32_t n = 1; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
-        sequencerState.noteCodeCurrentlyOnPostArp[n] = ARP_NOTE_NONE;
-        sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[n] = MIDI_CHANNEL_NONE;
+    // Find an available slot for this note (for MULTIPLE gate type)
+    int32_t noteSlot = -1;
+    for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
+        if (!sequencerState.noteActive[n]) {
+            noteSlot = n;
+            break;
+        }
     }
 
-    // Update sequencer state
-    sequencerState.gateCurrentlyActive = true;
-    sequencerState.gatePos = 0;
+    // If no slot available, find the oldest note to replace
+    if (noteSlot == -1) {
+        // Find the note with the highest gate position (oldest)
+        uint32_t maxGatePos = 0;
+        for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
+            if (sequencerState.noteGatePos[n] > maxGatePos) {
+                maxGatePos = sequencerState.noteGatePos[n];
+                noteSlot = n;
+            }
+        }
+        // If still no slot found, use slot 0
+        if (noteSlot == -1) {
+            noteSlot = 0;
+        }
+    }
+
+    // Store note for note-off tracking
+    sequencerState.noteCodeCurrentlyOnPostArp[noteSlot] = note;
+    sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[noteSlot] = MIDI_CHANNEL_NONE;
+    sequencerState.noteGatePos[noteSlot] = 0;
+    sequencerState.noteActive[noteSlot] = true;
 }
 
-void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction) {
-    if (!sequencerState.gateCurrentlyActive) {
+void KeyboardLayoutPulseSeq::switchNoteOff(ArpReturnInstruction* instruction, int32_t noteSlot) {
+    if (noteSlot < 0 || noteSlot >= ARP_MAX_INSTRUCTION_NOTES) {
         return;
     }
 
-    // Debug: show note-off attempt
-    display->displayPopup("NOTE OFF CALL");
+    if (!sequencerState.noteActive[noteSlot]) {
+        return;
+    }
 
-    // Call arpeggiator's noteOff method to properly handle note-off
+    // Send note-off via arpeggiator - it already handles note-off when OFF
     InstrumentClip* clip = getCurrentInstrumentClip();
     if (clip) {
         MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
         if (melodicInstrument) {
             NonAudioInstrument* nonAudioInstrument = (NonAudioInstrument*)melodicInstrument;
             if (nonAudioInstrument) {
-                // Get the original note that was played (before arpeggiation)
-                int32_t originalNote = sequencerState.noteCodeCurrentlyOnPostArp[0];
-                if (originalNote != ARP_NOTE_NONE) {
-                    // Debug: show note being turned off
-                    display->displayPopup("NOTE OFF");
-                    // Call arpeggiator's noteOff method
+                // Get the note that was played
+                int32_t note = sequencerState.noteCodeCurrentlyOnPostArp[noteSlot];
+                if (note != ARP_NOTE_NONE) {
+                    // Call arpeggiator's noteOff - it will send note-off when ArpMode::OFF
                     ArpeggiatorSettings* arpSettings = getArpSettings();
-                    nonAudioInstrument->arpeggiator.noteOff(arpSettings, originalNote, instruction);
-                } else {
-                    display->displayPopup("NO NOTE");
+                    nonAudioInstrument->arpeggiator.noteOff(arpSettings, note, instruction);
                 }
-            } else {
-                display->displayPopup("NO INST");
             }
-        } else {
-            display->displayPopup("NO MEL");
         }
-    } else {
-        display->displayPopup("NO CLIP");
     }
 
-    // Clear sequencer state
-    sequencerState.gateCurrentlyActive = false;
-    sequencerState.gatePos = 0;
-    sequencerState.lastPlayedStage = -1;
-    sequencerState.gatePadFlashing = false;
+    // Clear this note's state
+    sequencerState.noteCodeCurrentlyOnPostArp[noteSlot] = ARP_NOTE_NONE;
+    sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[noteSlot] = MIDI_CHANNEL_NONE;
+    sequencerState.noteGatePos[noteSlot] = 0;
+    sequencerState.noteActive[noteSlot] = false;
+}
 
-    // Clear the stored note data
+void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction) {
+    // Turn off all active notes
     for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
-        sequencerState.noteCodeCurrentlyOnPostArp[n] = ARP_NOTE_NONE;
-        sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[n] = MIDI_CHANNEL_NONE;
+        if (sequencerState.noteActive[n]) {
+            switchNoteOff(instruction, n);
+        }
     }
 }
 
 uint32_t KeyboardLayoutPulseSeq::calculateGateLength() {
-    // Get gate length from arpeggiator settings
+    // Simple gate length calculation based on arp settings
     ArpeggiatorSettings* arpSettings = getArpSettings();
-    if (!arpSettings) return 0;
+    if (!arpSettings) return 24; // Default 24 ticks
 
-    // Get current stage data
-    StageData& currentStageData = stages[sequencerState.currentStage];
-
-    // Base gate length in ticks (same as arpeggiator)
-    uint32_t syncLevel = arpSettings->syncLevel;
-    uint32_t ticksPerPeriod = 3 << (9 - syncLevel);
-    ticksPerPeriod *= performanceControls.clockDivider;
-
-    // Calculate base gate length based on gate type
-    uint32_t baseGateLength;
-    switch (currentStageData.gateType) {
-        case GateType::SINGLE:
-            // Single notes last for 1 timing period (will be shortened by arp gate setting)
-            baseGateLength = ticksPerPeriod;
-            break;
-        case GateType::MULTIPLE:
-            // Multiple notes last for the full clock period (16th note)
-            baseGateLength = ticksPerPeriod;
-            break;
-        case GateType::HELD:
-            // Held notes extend for the full stage duration (pulse count * period)
-            baseGateLength = ticksPerPeriod * currentStageData.pulseCount;
-            break;
-        case GateType::OFF:
-        default:
-            return 0; // No gate length for OFF
-    }
-
-    // Get gate length from arp settings (1-50, where 50 = 100% of base gate length)
+    // Get gate length from arp settings (1-50, where 50 = 100%)
     uint32_t gatePercent = computeFinalValueForStandardMenuItem(arpSettings->gate);
 
-    // Scale to base gate length (1-50 becomes 2%-100% of base gate length)
-    uint32_t gateLength = (gatePercent * baseGateLength) / 50;
+    // Convert to ticks (50 = 24 ticks, 25 = 12 ticks, etc.)
+    uint32_t gateLength = (gatePercent * 24) / 50;
 
-    // Debug: ensure minimum gate length
-    if (gateLength < 10) {
-        gateLength = 10; // Minimum 10 ticks
+    // Ensure minimum gate length
+    if (gateLength < 5) {
+        gateLength = 5;
     }
 
     return gateLength;
