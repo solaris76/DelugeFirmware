@@ -1,5 +1,4 @@
-# Core Features Library CMakeLists.txt
-
+# Core Features Library - Modern C++ Implementation
 add_library(deluge_keyboard_core STATIC
     core_features.cpp
 )
@@ -14,3 +13,6 @@ target_include_directories(deluge_keyboard_core PUBLIC
 target_link_libraries(deluge_keyboard_core PUBLIC
     deluge_dsp
 )
+
+# Modern C++ features
+target_compile_features(deluge_keyboard_core PUBLIC cxx_std_17)

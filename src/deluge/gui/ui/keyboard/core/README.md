@@ -1,137 +1,329 @@
-# Core Features Library
-
-A clean, well-defined library that provides keyboard layouts with easy access to Deluge's core functionality.
+# Core Features Library - Modern C++ Implementation
 
 ## Overview
 
-The Core Features library is designed to give keyboard layout developers simple, safe access to Deluge's core systems without having to understand the complex internal architecture.
+The Core Features Library provides a modern, C++-idiomatic API for keyboard layouts to access Deluge's core functionalities. This implementation follows C++ best practices including RAII, dependency injection, and proper encapsulation.
 
-## Features
+## Key Benefits
 
-### Timing and Playback
-- `isPlaying()` - Check if playback is active
-- `getCurrentBPM()` - Get current tempo
-- `getBeatPosition()` - Get current beat position
-- `getCurrentTick()` - Get current tick count
-- `getTicksPerBeat()` - Get ticks per beat
-- `getTicksPerBar()` - Get ticks per bar
+### 🎯 **Modern C++ Design**
+- **RAII Compliant**: Automatic resource management
+- **Dependency Injection**: Easy testing and configuration
+- **Clear Ownership**: Smart pointers instead of raw pointers
+- **Exception Safety**: Proper error handling
+- **Const Correctness**: Immutable interfaces where appropriate
 
-### Audio Clip Information
-- `isCurrentClipAudio()` - Check if current clip is audio
-- `isCurrentClipInstrument()` - Check if current clip is instrument
-- `isCurrentClipKit()` - Check if current clip is kit
-- `isCurrentClipMidi()` - Check if current clip is MIDI
-- `isCurrentClipCV()` - Check if current clip is CV
+### 🧪 **Testability**
+- **Mockable Controllers**: Each controller can be easily mocked for testing
+- **Isolated Dependencies**: Clear separation of concerns
+- **Factory Pattern**: Controlled object creation
 
-### Waveform Rendering
-- `renderWaveform()` - Render waveform data to LED grid
-
-### Arpeggiator Access
-- `isArpeggiatorEnabled()` - Check if arpeggiator is on
-- `sendNoteToCurrentInstrument()` - Send notes to current instrument
-
-### Arpeggiator Settings Access
-- `getArpeggiatorMode()` / `setArpeggiatorMode()` - Enable/disable arpeggiator
-- `getArpeggiatorPreset()` / `setArpeggiatorPreset()` - Get/set arpeggiator preset
-- `getArpeggiatorOctaveMode()` / `setArpeggiatorOctaveMode()` - Get/set octave mode
-- `getArpeggiatorNoteMode()` / `setArpeggiatorNoteMode()` - Get/set note mode
-- `getArpeggiatorNumOctaves()` / `setArpeggiatorNumOctaves()` - Get/set number of octaves
-- `getArpeggiatorSyncLevel()` / `setArpeggiatorSyncLevel()` - Get/set sync level
-- `getArpeggiatorSyncType()` / `setArpeggiatorSyncType()` - Get/set sync type
-- `getArpeggiatorStepRepeats()` / `setArpeggiatorStepRepeats()` - Get/set step repeats
-- `getArpeggiatorRandomizerLock()` / `setArpeggiatorRandomizerLock()` - Get/set randomizer lock
-
-### Arpeggiator Note Management
-- `addNoteToArpeggiator()` - Add note to arpeggiator
-- `removeNoteFromArpeggiator()` - Remove note from arpeggiator
-- `clearArpeggiatorNotes()` - Clear all arpeggiator notes
-- `getArpeggiatorActiveNoteCount()` - Get number of active notes
-- `isNoteActiveInArpeggiator()` - Check if note is active
-
-### Arpeggiator Playback Control
-- `resetArpeggiator()` - Reset arpeggiator state
-- `triggerArpeggiatorStep()` - Trigger arpeggiator step
-- `isArpeggiatorGateActive()` - Check if gate is active
-- `getArpeggiatorCurrentNote()` - Get current note index
-- `getArpeggiatorCurrentOctave()` - Get current octave
-
-### Scale and Key Information
-- `isScaleModeEnabled()` - Check if scale mode is enabled
-- `getRootNote()` - Get current root note
-- `getCurrentScale()` - Get current scale
-- `getSongRootNote()` - Get song root note
-- `getSongScale()` - Get song scale
-
-### UI Feedback
-- `showPopup()` - Show popup message on OLED
+### 🔒 **Safety**
+- **No Global State**: Each instance is independent
+- **Memory Safety**: Automatic cleanup with smart pointers
+- **Thread Safety**: Designed for safe concurrent access
 
 ## Usage
 
+### Basic Usage
+
 ```cpp
-#include "gui/ui/keyboard/core/core_features.h"
+#include "core_features.h"
 
-// In your keyboard layout:
-void MyLayout::renderPads(RGB image[][kDisplayWidth + kSideBarWidth]) {
-    // Check if playing
-    if (CoreFeatures::isPlaying()) {
-        // Show play indicator
-        image[0][0] = RGB(255, 255, 0); // Yellow
-    }
+// Create an instance (RAII)
+auto core = CoreFeatures::create();
 
-    // Get timing info
-    uint32_t beat = CoreFeatures::getBeatPosition();
-    float bpm = CoreFeatures::getCurrentBPM();
+// Access controllers
+if (core->timing().isPlaying()) {
+    core->display().setPadLED(0, 0, RGB_RED);
+    core->display().showPopup("Playing!");
+}
 
-    // Show popup
-    CoreFeatures::showPopup("Layout Active");
+// Direct access to settings
+core->arpeggiator().settings().mode = ArpMode::ARP;
+core->arpeggiator().settings().numOctaves = 2;
 
-    // Arpeggiator control
-    if (CoreFeatures::isArpeggiatorEnabled()) {
-        // Show arpeggiator status
-        image[1][0] = RGB(0, 255, 0); // Green for active
+// Effect control
+core->effects().reverb().setEnabled(true);
+core->effects().reverb().setRoomSize(0.8f);
+core->effects().delay().setSyncLevel(2);
+```
 
-        // Display current settings
-        int32_t numOctaves = CoreFeatures::getArpeggiatorNumOctaves();
-        int32_t syncLevel = CoreFeatures::getArpeggiatorSyncLevel();
+### Advanced Usage
 
-        // Visualize octaves (rows 2-5)
-        for (int i = 0; i < numOctaves && i < 4; i++) {
-            image[2 + i][0] = RGB(255, 255, 0); // Yellow for each octave
-        }
+```cpp
+// Const access for read-only operations
+const auto& timing = core->timing();
+if (timing.isPlaying()) {
+    int32_t currentTick = timing.getCurrentTick();
+    int32_t bpm = timing.getCurrentBPM();
+}
 
-        // Visualize sync level (columns 1-15)
-        for (int i = 0; i < syncLevel && i < 15; i++) {
-            image[0][1 + i] = RGB(0, 0, 255); // Blue for sync level
-        }
-    }
+// Effect chaining
+auto& effects = core->effects();
+effects.reverb().setEnabled(true);
+effects.delay().setEnabled(true);
+effects.filter().setEnabled(true);
 
-    // Add notes to arpeggiator
-    CoreFeatures::addNoteToArpeggiator(60, 100); // Middle C
-    CoreFeatures::addNoteToArpeggiator(64, 100); // E
-    CoreFeatures::addNoteToArpeggiator(67, 100); // G
+// Arpeggiator control
+auto& arp = core->arpeggiator();
+arp.addNote(60, 127); // Middle C
+arp.setEnabled(true);
+arp.settings().mode = ArpMode::ARP;
+arp.settings().numOctaves = 3;
+```
 
-    // Control arpeggiator settings
-    CoreFeatures::setArpeggiatorMode(true);
-    CoreFeatures::setArpeggiatorNumOctaves(3);
-    CoreFeatures::setArpeggiatorSyncLevel(8);
+## Architecture
+
+### Controller Pattern
+
+Each controller is responsible for a specific domain:
+
+- **`TimingController`**: Playback state, BPM, tick management
+- **`DisplayController`**: LED control, popups, rendering
+- **`AudioController`**: Note sending, waveform rendering
+- **`ArpeggiatorController`**: Arpeggiator settings and operations
+- **`EffectsController`**: Audio effects (reverb, delay, filter)
+- **`ScaleController`**: Scale and key information
+
+### Factory Pattern
+
+```cpp
+// Factory method ensures proper initialization
+auto core = CoreFeatures::create();
+
+// Private constructor prevents direct instantiation
+// CoreFeatures core; // ❌ Compilation error
+```
+
+### RAII and Smart Pointers
+
+```cpp
+class CoreFeatures {
+private:
+    std::unique_ptr<TimingController> timing_;
+    std::unique_ptr<DisplayController> display_;
+    // ... other controllers
+
+public:
+    // Automatic cleanup when CoreFeatures goes out of scope
+    ~CoreFeatures() = default; // Smart pointers handle cleanup
+};
+```
+
+## API Reference
+
+### CoreFeatures
+
+```cpp
+class CoreFeatures {
+public:
+    // Factory method
+    static std::unique_ptr<CoreFeatures> create();
+
+    // Controller access
+    TimingController& timing();
+    DisplayController& display();
+    AudioController& audio();
+    ArpeggiatorController& arpeggiator();
+    EffectsController& effects();
+    ScaleController& scale();
+
+    // Const access
+    const TimingController& timing() const;
+    const DisplayController& display() const;
+    // ... etc
+};
+```
+
+### TimingController
+
+```cpp
+class TimingController {
+public:
+    bool isPlaying() const;
+    int32_t getCurrentTick() const;
+    int32_t getCurrentBPM() const;
+
+    void setBPM(int32_t bpm);
+    void play();
+    void pause();
+    void stop();
+    void doTickForward();
+    void doTickBackward();
+};
+```
+
+### ArpeggiatorController
+
+```cpp
+class ArpeggiatorController {
+public:
+    // Direct access to settings
+    ArpeggiatorSettings& settings();
+    const ArpeggiatorSettings& settings() const;
+
+    // High-level operations
+    void addNote(int32_t noteCode, uint8_t velocity, int32_t fromMIDIChannel = 0);
+    void removeNote(int32_t noteCode);
+    void clearNotes();
+    void reset();
+    void triggerStep();
+
+    // State queries
+    bool isEnabled() const;
+    void setEnabled(bool enabled);
+    // ... more methods
+};
+```
+
+### EffectsController
+
+```cpp
+class EffectsController {
+public:
+    // Effect objects
+    ReverbEffect& reverb();
+    DelayEffect& delay();
+    FilterEffect& filter();
+
+    // Const access
+    const ReverbEffect& reverb() const;
+    const DelayEffect& delay() const;
+    const FilterEffect& filter() const;
+};
+
+// Individual effect classes
+class ReverbEffect {
+public:
+    bool isEnabled() const;
+    void setEnabled(bool enabled);
+    float getRoomSize() const;
+    void setRoomSize(float roomSize);
+    // ... more methods
+};
+```
+
+## Migration from Static Approach
+
+### Before (Static Objects)
+```cpp
+// Global static objects - can cause initialization issues
+CoreFeatures::timing.isPlaying();
+CoreFeatures::reverb.setEnabled(true);
+CoreFeatures::arpeggiator.settings->mode = ArpMode::ARP;
+```
+
+### After (RAII + Dependency Injection)
+```cpp
+// Create instance with proper initialization
+auto core = CoreFeatures::create();
+
+// Clean, safe access
+if (core->timing().isPlaying()) {
+    core->display().setPadLED(0, 0, RGB_RED);
+}
+
+core->effects().reverb().setEnabled(true);
+core->arpeggiator().settings().mode = ArpMode::ARP;
+
+// Automatic cleanup when core goes out of scope
+```
+
+## Testing
+
+### Unit Testing Example
+
+```cpp
+#include <gtest/gtest.h>
+#include "core_features.h"
+
+class MockTimingController : public TimingController {
+public:
+    MOCK_METHOD(bool, isPlaying, (), (const, override));
+    MOCK_METHOD(int32_t, getCurrentTick, (), (const, override));
+    // ... mock other methods
+};
+
+TEST(CoreFeaturesTest, PlaybackState) {
+    auto core = CoreFeatures::create();
+    auto mockTiming = std::make_unique<MockTimingController>();
+
+    EXPECT_CALL(*mockTiming, isPlaying())
+        .WillOnce(Return(true));
+
+    // Test with mock
+    ASSERT_TRUE(core->timing().isPlaying());
 }
 ```
 
-## Benefits
+## Performance Considerations
 
-1. **Clean API** - Simple, intuitive function names
-2. **Safe Access** - No need to understand complex internal systems
-3. **Consistent** - Same interface across all keyboard layouts
-4. **Extensible** - Easy to add new features
-5. **Well-Documented** - Clear documentation and examples
+### Memory Usage
+- **Smart Pointers**: Minimal overhead compared to raw pointers
+- **RAII**: Automatic cleanup prevents memory leaks
+- **Stack Allocation**: Controllers are allocated on the heap but managed automatically
+
+### Runtime Performance
+- **Virtual Calls**: Minimal overhead for controller access
+- **Const Correctness**: Compiler optimizations for const methods
+- **Move Semantics**: Efficient object transfers
+
+## Best Practices
+
+### 1. Use RAII
+```cpp
+// ✅ Good - automatic cleanup
+{
+    auto core = CoreFeatures::create();
+    // ... use core
+} // Automatic cleanup here
+
+// ❌ Bad - manual management
+CoreFeatures* core = new CoreFeatures();
+// ... use core
+delete core; // Easy to forget
+```
+
+### 2. Prefer Const Access
+```cpp
+// ✅ Good - const access for read-only operations
+const auto& timing = core->timing();
+if (timing.isPlaying()) {
+    // ... read-only operations
+}
+
+// ❌ Bad - non-const access when not needed
+auto& timing = core->timing();
+if (timing.isPlaying()) {
+    // ... read-only operations
+}
+```
+
+### 3. Use Factory Pattern
+```cpp
+// ✅ Good - controlled creation
+auto core = CoreFeatures::create();
+
+// ❌ Bad - direct instantiation
+CoreFeatures core; // Compilation error - constructor is private
+```
 
 ## Future Enhancements
 
-- Real-time audio analysis
-- MIDI input/output handling
-- Advanced waveform rendering
-- Scale-aware note generation
-- Performance monitoring
-- Custom UI elements
+### Planned Features
+- **Async Operations**: Non-blocking audio operations
+- **Event System**: Observer pattern for state changes
+- **Plugin Architecture**: Dynamic loading of custom controllers
+- **Configuration**: Runtime configuration of controller behavior
 
-This library makes it much easier to create powerful, feature-rich keyboard layouts that integrate seamlessly with Deluge's core functionality.
+### Extension Points
+- **Custom Controllers**: Implement your own controllers
+- **Middleware**: Add logging, profiling, or other cross-cutting concerns
+- **Testing**: Comprehensive mock framework
+
+## Conclusion
+
+This modern C++ implementation provides a robust, maintainable, and testable foundation for keyboard layouts. The RAII approach ensures proper resource management, while the controller pattern provides clear separation of concerns. The factory pattern enables controlled object creation and easy testing.
+
+The API is designed to be intuitive while following C++ best practices, making it easy for developers to create sophisticated keyboard layouts that integrate seamlessly with Deluge's core functionality.
