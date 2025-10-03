@@ -52,8 +52,6 @@
 #include "gui/ui/keyboard/layout/norns.h"
 #include "gui/ui/keyboard/layout/piano.h"
 #include "gui/ui/keyboard/layout/velocity_drums.h"
-#include "gui/ui/keyboard/modules/module_control.h"
-#include "gui/ui/keyboard/modules/module_manager.h"
 
 PLACE_SDRAM_BSS deluge::gui::ui::keyboard::KeyboardScreen keyboardScreen{};
 
@@ -81,8 +79,7 @@ KeyboardScreen::KeyboardScreen() {
 	currentNotesState = {0};
 	lastNotesState = {0};
 
-	// Initialize module system
-	modules::moduleManager.init();
+	// Module system removed - clean keyboard screen
 }
 
 static const uint32_t padActionUIModes[] = {UI_MODE_AUDITIONING, UI_MODE_RECORD_COUNT_IN,
@@ -111,24 +108,7 @@ ActionResult KeyboardScreen::padAction(int32_t x, int32_t y, int32_t velocity) {
 		return soundEditorResult;
 	}
 
-	// Handle module control (Control columns for module selection)
-	if (velocity != 0 && x >= kDisplayWidth) {
-		if (y == 16 || y == 17) {
-			// Cycle through modules
-			modules::ModuleControl::cycleModules();
-		}
-		else if (y < modules::moduleManager.getAllModules().size()) {
-			// Toggle individual module
-			modules::ModuleControl::toggleModule(modules::moduleManager.getAllModules()[y]->getName());
-		}
-		requestRendering(); // Ensure display updates
-		return ActionResult::DEALT_WITH;
-	}
-
-	// Handle module pad events (modules get first chance to handle events)
-	if (modules::moduleManager.handlePadPress(x, y, velocity)) {
-		return ActionResult::DEALT_WITH;
-	}
+	// Module system removed - clean pad handling
 
 	int32_t markDead = -1;
 
@@ -182,8 +162,7 @@ ActionResult KeyboardScreen::padAction(int32_t x, int32_t y, int32_t velocity) {
 		}
 	}
 
-	// DISABLED: Keyboard layout note evaluation - modules only
-	// evaluateActiveNotes();
+	evaluateActiveNotes();
 
 	if (markDead != -1) {
 		pressedPads[markDead].dead = true;
@@ -640,23 +619,17 @@ ActionResult KeyboardScreen::verticalEncoderAction(int32_t offset, bool inCardRo
 		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE; // Allow sometimes.
 	}
 
-	// Handle module encoder events (modules get first chance to handle events)
-	if (modules::moduleManager.handleEncoder(offset, true)) {
-		return ActionResult::DEALT_WITH;
+	if (Buttons::isShiftButtonPressed() && currentUIMode == UI_MODE_NONE) {
+		getCurrentInstrumentClip()->colourOffset += offset;
+		layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->precalculate();
 	}
-
-	// DISABLED: Keyboard layout encoder handling - modules only
-	// if (Buttons::isShiftButtonPressed() && currentUIMode == UI_MODE_NONE) {
-	// 	getCurrentInstrumentClip()->colourOffset += offset;
-	// 	layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->precalculate();
-	// }
-	// else {
-	// 	layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->handleVerticalEncoder(offset);
-	// 	if (isUIModeWithinRange(padActionUIModes)) {
-	// 		evaluateActiveNotes();
-	// 		updateActiveNotes();
-	// 	}
-	// }
+	else {
+		layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->handleVerticalEncoder(offset);
+		if (isUIModeWithinRange(padActionUIModes)) {
+			evaluateActiveNotes();
+			updateActiveNotes();
+		}
+	}
 
 	requestRendering();
 	return ActionResult::DEALT_WITH;
@@ -664,20 +637,14 @@ ActionResult KeyboardScreen::verticalEncoderAction(int32_t offset, bool inCardRo
 
 ActionResult KeyboardScreen::horizontalEncoderAction(int32_t offset) {
 
-	// Handle module encoder events (modules get first chance to handle events)
-	if (modules::moduleManager.handleEncoder(offset, false)) {
-		return ActionResult::DEALT_WITH;
+	layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->handleHorizontalEncoder(
+	    offset, (Buttons::isShiftButtonPressed() && isUIModeWithinRange(padActionUIModes)), pressedPads,
+	    xEncoderActive);
+
+	if (isUIModeWithinRange(padActionUIModes)) {
+		evaluateActiveNotes();
+		updateActiveNotes();
 	}
-
-	// DISABLED: Keyboard layout horizontal encoder handling - modules only
-	// layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->handleHorizontalEncoder(
-	//     offset, (Buttons::isShiftButtonPressed() && isUIModeWithinRange(padActionUIModes)), pressedPads,
-	//     xEncoderActive);
-
-	// if (isUIModeWithinRange(padActionUIModes)) {
-	// 	evaluateActiveNotes();
-	// 	updateActiveNotes();
-	// }
 
 	requestRendering();
 	return ActionResult::DEALT_WITH;
@@ -850,11 +817,7 @@ bool KeyboardScreen::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidt
 	// We assume the whole screen is occupied
 	memset(occupancyMask, 64, sizeof(uint8_t) * kDisplayHeight * (kDisplayWidth + kSideBarWidth));
 
-	// DISABLED: Keyboard layout rendering - modules only
-	// layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->renderPads(image);
-
-	// Render all active modules - now they have the full screen!
-	modules::moduleManager.render(image, occupancyMask);
+	layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->renderPads(image);
 
 	PadLEDs::renderingLock = false;
 
@@ -871,11 +834,7 @@ bool KeyboardScreen::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth
 		return true;
 	}
 
-	// DISABLED: Original control column rendering
-	// layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->renderSidebarPads(image);
-
-	// Render module selection controls in control columns
-	modules::moduleManager.renderModuleControls(image);
+	layout_list[getCurrentInstrumentClip()->keyboardState.currentLayout]->renderSidebarPads(image);
 
 	return true;
 }
@@ -959,8 +918,7 @@ const uint8_t keyboardTickColoursBasicRecording[kDisplayHeight] = {0, 0, 0, 0, 0
 const uint8_t keyboardTickColoursLinearRecording[kDisplayHeight] = {0, 0, 0, 0, 0, 0, 0, 2};
 
 void KeyboardScreen::graphicsRoutine() {
-	// Update modules
-	modules::moduleManager.update(1); // Simple delta time for now
+	// Module system removed - no module updates needed
 
 	int32_t newTickSquare;
 
