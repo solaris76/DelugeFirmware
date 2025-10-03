@@ -24,9 +24,11 @@
 #include "hid/display/display.h"
 #include "hid/display/oled.h"
 #include "io/midi/midi_device_manager.h"
+#include "model/clip/instrument_clip.h"
 #include "model/drum/drum.h"
 #include "model/drum/midi_drum.h"
 #include "model/instrument/kit.h"
+#include "model/model_stack.h"
 #include "model/song/song.h"
 #include "processing/sound/sound.h"
 #include "processing/sound/sound_drum.h"
@@ -39,7 +41,23 @@ public:
 	[[nodiscard]] int32_t getMinValue() const override { return 0; }
 	[[nodiscard]] int32_t getMaxValue() const override { return 16; }
 	void readCurrentValue() override {
-		int32_t value = soundEditor.currentSound->outputMidiChannel;
+		int32_t value;
+
+		// Check if we're editing a kit row with a MIDI drum
+		if (soundEditor.editingKitRow()) {
+			auto* kit = getCurrentKit();
+			if (kit && kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+				auto* midiDrum = static_cast<MIDIDrum*>(kit->selectedDrum);
+				value = midiDrum->channel;
+			}
+			else {
+				value = soundEditor.currentSound->outputMidiChannel;
+			}
+		}
+		else {
+			value = soundEditor.currentSound->outputMidiChannel;
+		}
+
 		if (value == MIDI_CHANNEL_NONE) {
 			value = 0;
 		}
@@ -67,11 +85,29 @@ public:
 					auto* soundDrum = static_cast<SoundDrum*>(thisDrum);
 					soundDrum->outputMidiChannel = value;
 				}
+				else if (thisDrum->type == DrumType::MIDI) {
+					auto* midiDrum = static_cast<MIDIDrum*>(thisDrum);
+					midiDrum->channel = value;
+				}
 			}
 		}
 		// Or, the normal case of just one sound
 		else {
-			soundEditor.currentSound->outputMidiChannel = value;
+			// Check if we're editing a single MIDI drum in a kit row
+			if (soundEditor.editingKitRow()) {
+				auto* kit = getCurrentKit();
+				if (kit && kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+					// Simply update the selected drum's channel
+					auto* midiDrum = static_cast<MIDIDrum*>(kit->selectedDrum);
+					midiDrum->channel = value;
+				}
+				else {
+					soundEditor.currentSound->outputMidiChannel = value;
+				}
+			}
+			else {
+				soundEditor.currentSound->outputMidiChannel = value;
+			}
 		}
 	}
 

@@ -300,6 +300,11 @@ bool MIDIInstrument::writeDataToFile(Serializer& writer, Clip* clipForSavingOutp
 	// below call
 	writeMelodicInstrumentAttributesToFile(writer, clipForSavingOutputOnly, song);
 
+	// Always write outputDevice attribute for MIDI instruments before ending the opening tag
+	if (clipForSavingOutputOnly) {
+		writer.writeAttribute("outputDevice", outputDeviceMask);
+	}
+
 	if (editedByUser || clipForSavingOutputOnly) { // Otherwise, there'll be nothing in here
 		writer.writeOpeningTagEnd();
 		writer.writeOpeningTag("modKnobs");
@@ -333,10 +338,12 @@ bool MIDIInstrument::writeDataToFile(Serializer& writer, Clip* clipForSavingOutp
 		writeDeviceDefinitionFile(writer, true);
 	}
 	else {
-		if (!clipForSavingOutputOnly && !midiInput.containsSomething()) {
-			// If we don't need to write a "device" tag, opt not to end the opening tag, unless we're saving the output
-			// since then it's the whole tag
-			return false;
+		if (clipForSavingOutputOnly && !midiInput.containsSomething()) {
+			// If we don't need to write a "device" tag, make it self-closing since we wrote the outputDevice attribute
+			writer.closeTag();
+			// Still call the parent method to ensure consistency
+			MelodicInstrument::writeMelodicInstrumentTagsToFile(writer, clipForSavingOutputOnly, song);
+			return true;
 		}
 
 		writer.writeOpeningTagEnd();
@@ -436,6 +443,21 @@ bool MIDIInstrument::readTagFromFile(Deserializer& reader, char const* tagName) 
 	}
 	else if (!strcmp(tagName, subSlotXMLTag)) {
 		channelSuffix = reader.readTagOrAttributeValueInt();
+	}
+	else if (!strcmp(tagName, "outputDevice")) {
+		outputDeviceMask = reader.readTagOrAttributeValueInt();
+	}
+	else if (!strcmp(tagName, "isArmedForRecording")) {
+		// Read but don't store - this might be handled by parent classes
+		reader.readTagOrAttributeValueInt();
+	}
+	else if (!strcmp(tagName, "activeModFunction")) {
+		// Read but don't store - this might be handled by parent classes
+		reader.readTagOrAttributeValueInt();
+	}
+	else if (!strcmp(tagName, "colour")) {
+		// Read but don't store - this might be handled by parent classes
+		reader.readTagOrAttributeValueInt();
 	}
 	else if (!strcmp(tagName, "midiDevice")) {
 		readDeviceDefinitionFile(reader, true);

@@ -17,11 +17,15 @@
 
 #include "modulation/midi/midi_param_collection.h"
 #include "definitions_cxx.hpp"
+#include "gui/ui/ui.h"
 #include "gui/views/automation_view.h"
+#include "hid/display/oled.h"
 #include "io/midi/midi_engine.h"
 #include "model/action/action_logger.h"
 #include "model/clip/instrument_clip.h"
+#include "model/drum/midi_drum.h"
 #include "model/instrument/instrument.h"
+#include "model/instrument/kit.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/model_stack.h"
 #include "model/song/song.h"
@@ -286,7 +290,16 @@ void MIDIParamCollection::notifyParamModifiedInSomeWay(ModelStackWithAutoParam c
 	ParamCollection::notifyParamModifiedInSomeWay(modelStack, oldValue, automationChanged, automatedBefore,
 	                                              automatedNow);
 
-	if (modelStack->song->isOutputActiveInArrangement((MIDIInstrument*)modelStack->modControllable)) {
+	// Determine if this is a MIDI instrument or MIDI drum for proper channel routing
+	// For MIDI CC parameters in kit rows, the modControllable is the MIDIDrum itself
+	// For standalone MIDI instruments, the modControllable is the MIDIInstrument
+	// Check if we have a NoteRow - this indicates we're dealing with a drum in a kit
+	NoteRow* noteRow = modelStack->getNoteRowAllowNull();
+	bool isMIDIInstrument = noteRow == nullptr; // If no NoteRow, it's a MIDI instrument
+	bool isMIDIDrum = noteRow != nullptr;       // If NoteRow exists, it's a MIDI drum
+
+	if (isMIDIInstrument
+	    && modelStack->song->isOutputActiveInArrangement((MIDIInstrument*)modelStack->modControllable)) {
 		auto new_v = modelStack->autoParam->getCurrentValue();
 		bool current_value_changed = modelStack->modControllable->valueChangedEnoughToMatter(
 		    oldValue, new_v, getParamKind(), modelStack->paramId);
@@ -296,6 +309,28 @@ void MIDIParamCollection::notifyParamModifiedInSomeWay(ModelStackWithAutoParam c
 			int32_t masterChannel = instrument->getOutputMasterChannel();
 			sendMIDI(instrument, masterChannel, modelStack->paramId, modelStack->autoParam->getCurrentValue(),
 			         midiOutputFilter);
+		}
+	}
+	else if (isMIDIDrum) {
+		// For MIDI drums in kit rows, the modControllable is the MIDIDrum itself
+		// This ensures MIDI CC automation uses the same channel as the kit row's channel setting
+		MIDIDrum* midiDrum = static_cast<MIDIDrum*>(modelStack->modControllable);
+
+		auto new_v = modelStack->autoParam->getCurrentValue();
+		bool current_value_changed = modelStack->modControllable->valueChangedEnoughToMatter(
+		    oldValue, new_v, getParamKind(), modelStack->paramId);
+		if (current_value_changed) {
+			// Check if the note row is muted - if so, don't send MIDI CC
+			NoteRow* noteRow = modelStack->getNoteRowAllowNull();
+			if (noteRow && noteRow->muted) {
+				return; // Don't send MIDI CC if note row is muted
+			}
+
+			// Send MIDI CC using the drum's channel (matches kit row channel setting)
+			// Add safety check to prevent potential memory issues
+			if (midiDrum && midiDrum->type == DrumType::MIDI) {
+				midiDrum->sendCC(modelStack->paramId, modelStack->autoParam->getCurrentValue());
+			}
 		}
 	}
 }
@@ -342,6 +377,50 @@ void MIDIParamCollection::writeToFile(Serializer& writer) {
 		}
 
 		writer.writeClosingTag("midiParams");
+	}
+}
+
+void MIDIParamCollection::readFromFile(Deserializer& reader, int32_t readAutomationUpToPos) {
+	char const* tagName;
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "param")) {
+			int32_t cc = CC_NUMBER_NONE;
+
+			// Read the cc value
+			char const* ccTagName;
+			while (*(ccTagName = reader.readNextTagOrAttributeName())) {
+				if (!strcmp(ccTagName, "cc")) {
+					char const* ccValue = reader.readTagOrAttributeValue();
+					if (!strcasecmp(ccValue, "none")) {
+						cc = CC_NUMBER_NONE;
+					}
+					else {
+						cc = stringToInt(ccValue);
+					}
+					reader.exitTag("cc");
+				}
+				else if (!strcmp(ccTagName, "value")) {
+					// Get or create the MIDI parameter for this CC
+					MIDIParam* midiParam = params.getOrCreateParamFromCC(cc, 0);
+					if (midiParam) {
+						Error error = midiParam->param.readFromFile(reader, readAutomationUpToPos);
+						if (error != Error::NONE) {
+							reader.exitTag("value");
+							reader.exitTag("param");
+							return;
+						}
+					}
+					reader.exitTag("value");
+				}
+				else {
+					reader.exitTag(ccTagName);
+				}
+			}
+			reader.exitTag("param");
+		}
+		else {
+			reader.exitTag(tagName);
+		}
 	}
 }
 

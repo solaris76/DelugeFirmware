@@ -403,6 +403,10 @@ bool AutomationView::opened() {
 
 	focusRegained();
 
+	// Ensure display is updated immediately when opening automation view
+	// This fixes blank display issues when entering automation mode
+	displayAutomation(true);
+
 	return true;
 }
 
@@ -526,6 +530,14 @@ void AutomationView::focusRegained() {
 		soundEditor.resetSourceBlinks();
 		// possibly restablish parameter shortcut blinking (if parameter is selected)
 		blinkShortcuts();
+
+		// Ensure display is rendered immediately when entering automation view
+		// This fixes the blank OLED display issue for kit rows
+		// renderDisplay();
+
+		// Force display update for automation editor mode
+		// This fixes the blank display when entering automation CC edit mode for the first time
+		displayAutomation(true);
 	}
 }
 
@@ -728,15 +740,24 @@ void AutomationView::performActualRender(RGB image[][kDisplayWidth + kSideBarWid
 		// you're not in a kit where no sound drum has been selected and you're not editing velocity
 		// you're in a kit where midi or CV sound drum has been selected and you're editing velocity
 		if (onArrangerView || !(outputType == OutputType::KIT && !getAffectEntire() && !((Kit*)output)->selectedDrum)) {
-			bool isMIDICVDrum = false;
+			bool isGateDrum = false;
+			bool isMIDIDrum = false;
 			if (outputType == OutputType::KIT && !getAffectEntire()) {
-				isMIDICVDrum = (((Kit*)output)->selectedDrum
-				                && ((((Kit*)output)->selectedDrum->type == DrumType::MIDI)
-				                    || (((Kit*)output)->selectedDrum->type == DrumType::GATE)));
+				if (((Kit*)output)->selectedDrum) {
+					if (((Kit*)output)->selectedDrum->type == DrumType::MIDI) {
+						isMIDIDrum = true;
+					}
+					else if (((Kit*)output)->selectedDrum->type == DrumType::GATE) {
+						isGateDrum = true;
+					}
+				}
 			}
 
 			// if parameter has been selected, show Automation Editor
-			if (inAutomationEditor() && !isMIDICVDrum) {
+			// Allow MIDI drums to show automation editor (but not CV drums)
+			bool isCVDrum = (outputType == OutputType::KIT && !getAffectEntire() && ((Kit*)output)->selectedDrum
+			                 && ((Kit*)output)->selectedDrum->type == DrumType::GATE);
+			if (inAutomationEditor() && !isCVDrum) {
 				automationEditorLayoutModControllable.renderAutomationEditor(
 				    modelStackWithParam, clip, image, occupancyMask, renderWidth, xScroll, xZoom, effectiveLength,
 				    xDisplay, drawUndefinedArea, kind, isBipolar);
@@ -752,7 +773,7 @@ void AutomationView::performActualRender(RGB image[][kDisplayWidth + kSideBarWid
 			// if not editing a parameter, show Automation Overview
 			else {
 				renderAutomationOverview(modelStackWithTimelineCounter, modelStackWithThreeMainThings, clip, outputType,
-				                         image, occupancyMask, xDisplay, isMIDICVDrum);
+				                         image, occupancyMask, xDisplay, isGateDrum, isMIDIDrum);
 			}
 		}
 		else {
@@ -766,14 +787,14 @@ void AutomationView::renderAutomationOverview(ModelStackWithTimelineCounter* mod
                                               ModelStackWithThreeMainThings* modelStackWithThreeMainThings, Clip* clip,
                                               OutputType outputType, RGB image[][kDisplayWidth + kSideBarWidth],
                                               uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth], int32_t xDisplay,
-                                              bool isMIDICVDrum) {
-	bool singleSoundDrum = (outputType == OutputType::KIT && !getAffectEntire()) && !isMIDICVDrum;
+                                              bool isGateDrum, bool isMIDIDrum) {
+	bool singleSoundDrum = (outputType == OutputType::KIT && !getAffectEntire()) && !isGateDrum && !isMIDIDrum;
 	bool affectEntireKit = (outputType == OutputType::KIT && getAffectEntire());
 	for (int32_t yDisplay = 0; yDisplay < kDisplayHeight; yDisplay++) {
 
 		RGB& pixel = image[yDisplay][xDisplay];
 
-		if (!isMIDICVDrum) {
+		if (!isGateDrum) {
 			ModelStackWithAutoParam* modelStackWithParam = nullptr;
 
 			if (!onArrangerView && (outputType == OutputType::SYNTH || singleSoundDrum)) {
@@ -848,6 +869,14 @@ void AutomationView::renderAutomationOverview(ModelStackWithTimelineCounter* mod
 				if (midiCCShortcutsForAutomation[xDisplay][yDisplay] != kNoParamID) {
 					modelStackWithParam = getModelStackWithParamForClip(
 					    modelStackWithTimelineCounter, clip, midiCCShortcutsForAutomation[xDisplay][yDisplay]);
+				}
+			}
+			else if (isMIDIDrum) {
+				// For MIDI drums in kit rows, show MIDI CC parameters
+				if (midiCCShortcutsForAutomation[xDisplay][yDisplay] != kNoParamID) {
+					modelStackWithParam = getModelStackWithParamForClip(
+					    modelStackWithTimelineCounter, clip, midiCCShortcutsForAutomation[xDisplay][yDisplay],
+					    params::Kind::MIDI);
 				}
 			}
 			else if (outputType == OutputType::CV) {
@@ -1037,6 +1066,8 @@ void AutomationView::renderAutomationOverviewDisplayOLED(deluge::hid::display::o
 		deluge::hid::display::OLED::drawPermanentPopupLookingText(overviewText);
 	}
 	else {
+		// Automation overview should just show "Automation Overview" text
+		// CC names are only displayed in the automation editor, not in the overview
 		overviewText = l10n::get(l10n::String::STRING_FOR_AUTOMATION_OVERVIEW);
 		canvas.drawStringCentred(overviewText, yPos, kTextSpacingX, kTextSpacingY);
 	}
@@ -1065,6 +1096,8 @@ void AutomationView::renderAutomationOverviewDisplay7SEG(Output* output, OutputT
 		overviewText = l10n::get(l10n::String::STRING_FOR_SELECT_A_ROW_OR_AFFECT_ENTIRE);
 	}
 	else {
+		// Automation overview should just show "AUTOMATION" text
+		// CC names are only displayed in the automation editor, not in the overview
 		overviewText = l10n::get(l10n::String::STRING_FOR_AUTOMATION);
 	}
 	display->setScrollingText(overviewText);
@@ -1173,6 +1206,7 @@ ActionResult AutomationView::buttonAction(hid::Button b, bool on, bool inCardRou
 	// automation view reset parameter selection and short blinking instead
 	else if (b == CLIP_VIEW) {
 		handleClipButtonAction(on, isAudioClip);
+		return ActionResult::DEALT_WITH;
 	}
 
 	// Auto scrolling
@@ -1335,7 +1369,9 @@ void AutomationView::handleClipButtonAction(bool on, bool isAudioClip) {
 		uiNeedsRendering(&automationView);
 	}
 	// go back to clip view
-	else if (on && (currentUIMode == UI_MODE_NONE || (currentUIMode == UI_MODE_NOTES_PRESSED && padSelectionOn))) {
+	else if (on
+	         && (currentUIMode == UI_MODE_NONE || currentUIMode == UI_MODE_SELECTING_MIDI_CC
+	             || (currentUIMode == UI_MODE_NOTES_PRESSED && padSelectionOn))) {
 		if (padSelectionOn) {
 			initPadSelection();
 		}
@@ -1343,6 +1379,11 @@ void AutomationView::handleClipButtonAction(bool on, bool isAudioClip) {
 			changeRootUI(&audioClipView);
 		}
 		else {
+			// Clear the automation flag before transitioning to prevent immediate re-transition
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip) {
+				clip->onAutomationClipView = false;
+			}
 			changeRootUI(&instrumentClipView);
 		}
 		resetShortcutBlinking();
@@ -1684,11 +1725,25 @@ ActionResult AutomationView::padAction(int32_t x, int32_t y, int32_t velocity) {
 
 	// if we're in a midi clip, with a midi cc selected and we press the name shortcut
 	// while holding shift, then enter the rename midi cc UI
+	// Also handle MIDI drums in kit rows
 	if (outputType == OutputType::MIDI_OUT) {
 		if (Buttons::isShiftButtonPressed() && x == 11 && y == 5) {
 			if (!onAutomationOverview()) {
 				openUI(&renameMidiCCUI);
 				return ActionResult::DEALT_WITH;
+			}
+		}
+	}
+	else if (outputType == OutputType::KIT && !((InstrumentClip*)clip)->affectEntire) {
+		// Check if we have a MIDI drum selected and a MIDI CC parameter selected
+		Kit* kit = (Kit*)output;
+		if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI
+		    && clip->lastSelectedParamKind == params::Kind::MIDI) {
+			if (Buttons::isShiftButtonPressed() && x == 11 && y == 5) {
+				if (!onAutomationOverview()) {
+					openUI(&renameMidiCCUI);
+					return ActionResult::DEALT_WITH;
+				}
 			}
 		}
 	}
@@ -1952,6 +2007,19 @@ void AutomationView::handleParameterSelection(Clip* clip, Output* output, Output
 
 		// if you are in a midi clip and the shortcut is valid, set the current selected ParamID
 		clip->lastSelectedParamID = midiCCShortcutsForAutomation[xDisplay][yDisplay];
+
+		displayAutomation(true);
+	}
+	else if (outputType == OutputType::KIT && !getAffectEntire() && ((Kit*)output)->selectedDrum
+	         && ((Kit*)output)->selectedDrum->type == DrumType::MIDI
+	         && midiCCShortcutsForAutomation[xDisplay][yDisplay] != kNoParamID) {
+
+		// if you are in a kit with a MIDI drum selected and the shortcut is valid, set the current selected ParamID
+		clip->lastSelectedParamID = midiCCShortcutsForAutomation[xDisplay][yDisplay];
+		clip->lastSelectedParamKind = params::Kind::MIDI;
+		// Force display update when selecting MIDI CC parameter for kit row
+		renderDisplay();
+		displayAutomation(true);
 	}
 	// expression params, so sounds or midi/cv, or a single drum
 	else if ((util::one_of(outputType, {OutputType::MIDI_OUT, OutputType::CV, OutputType::SYNTH})
@@ -2157,7 +2225,8 @@ ActionResult AutomationView::auditionPadAction(InstrumentClip* clip, Output* out
 		}
 	}
 
-	if (selectedRowChanged || (selectedDrumChanged && (!getAffectEntire() || inNoteEditor()))) {
+	if (selectedRowChanged
+	    || (selectedDrumChanged && (!getAffectEntire() || inNoteEditor() || onAutomationOverview()))) {
 		if (inNoteEditor()) {
 			renderDisplay();
 			instrumentClipView.resetSelectedNoteRowBlinking();
@@ -2165,6 +2234,12 @@ ActionResult AutomationView::auditionPadAction(InstrumentClip* clip, Output* out
 			doRender = false;
 		}
 		else if (selectedDrumChanged) {
+			// Update the selected drum to match the drum assigned to this note row
+			instrumentClipView.setSelectedDrum(drum, false, (Kit*)output, false);
+
+			// Refresh the automation view state to reflect the new drum's channel setting
+			displayAutomation(false, true);
+
 			initParameterSelection();
 			uiNeedsRendering(getRootUI());
 			doRender = false;
@@ -2589,6 +2664,16 @@ void AutomationView::selectEncoderAction(int8_t offset) {
 	else if (outputType == OutputType::MIDI_OUT) {
 		selectMIDICC(offset, clip);
 		getLastSelectedParamShortcut(clip);
+		// Force immediate display update to show current MIDI CC
+		renderDisplay();
+	}
+	// if you're in a kit with a MIDI drum selected, handle MIDI CC selection
+	else if (outputType == OutputType::KIT && !getAffectEntire() && ((Kit*)output)->selectedDrum
+	         && ((Kit*)output)->selectedDrum->type == DrumType::MIDI) {
+		selectMIDICC(offset, clip);
+		getLastSelectedParamShortcut(clip);
+		// Force immediate display update to show current MIDI CC
+		renderDisplay();
 	}
 	// if you're in arranger view or in a non-midi, non-cv clip (e.g. audio, synth, kit)
 	else if (onArrangerView || outputType != OutputType::CV) {
@@ -2847,10 +2932,12 @@ bool AutomationView::selectPatchCableAtIndex(Clip* clip, PatchCableSet* set, int
 
 // used with SelectEncoderAction to get the next midi CC
 void AutomationView::selectMIDICC(int32_t offset, Clip* clip) {
-	if (onAutomationOverview()) {
-		clip->lastSelectedParamID = CC_NUMBER_NONE;
-	}
 	auto newCC = clip->lastSelectedParamID;
+
+	// If we're in automation overview mode and no CC is selected, start from CC 0
+	if (onAutomationOverview() && newCC == CC_NUMBER_NONE) {
+		newCC = 0;
+	}
 	newCC += offset;
 	if (newCC < 0) {
 		newCC = CC_NUMBER_Y_AXIS;
@@ -2863,6 +2950,13 @@ void AutomationView::selectMIDICC(int32_t offset, Clip* clip) {
 		newCC += offset;
 	}
 	clip->lastSelectedParamID = newCC;
+
+	// Set the correct param kind based on output type
+	if (clip->output->type == OutputType::KIT && !getAffectEntire() && ((Kit*)clip->output)->selectedDrum
+	    && ((Kit*)clip->output)->selectedDrum->type == DrumType::MIDI) {
+		clip->lastSelectedParamKind = params::Kind::MIDI;
+	}
+
 	automationParamType = AutomationParamType::PER_SOUND;
 }
 
@@ -2903,6 +2997,16 @@ void AutomationView::getLastSelectedParamShortcut(Clip* clip) {
 				}
 			}
 			else if (clip->output->type == OutputType::MIDI_OUT) {
+				if (midiCCShortcutsForAutomation[x][y] == clip->lastSelectedParamID) {
+					clip->lastSelectedParamShortcutX = x;
+					clip->lastSelectedParamShortcutY = y;
+					paramShortcutFound = true;
+					break;
+				}
+			}
+			else if (clip->output->type == OutputType::KIT && !getAffectEntire() && ((Kit*)clip->output)->selectedDrum
+			         && ((Kit*)clip->output)->selectedDrum->type == DrumType::MIDI) {
+				// For MIDI drums in kit rows, handle MIDI CC shortcuts
 				if (midiCCShortcutsForAutomation[x][y] == clip->lastSelectedParamID) {
 					clip->lastSelectedParamShortcutX = x;
 					clip->lastSelectedParamShortcutY = y;
