@@ -64,10 +64,17 @@ private:
  */
 class TimingController {
 public:
+	// Direct property access - much simpler!
+	bool playing = false;
+	int32_t currentTick = 0;
+	int32_t bpm = 120;
+	bool paused = false;
+	bool stopped = true;
+
+	// Methods for Deluge integration
 	bool isPlaying() const;
 	int32_t getCurrentTick() const;
 	int32_t getCurrentBPM() const;
-
 	void setBPM(int32_t bpm);
 	void play();
 	void pause();
@@ -87,6 +94,14 @@ private:
  */
 class DisplayController {
 public:
+	// Direct property access - much simpler!
+	bool needsRendering = false;
+	int32_t padColors[16][8]; // Store current pad colors
+	bool padStates[16][8];    // Store current pad states
+	int32_t popupText[32];    // Store popup text
+	bool popupVisible = false;
+
+	// Methods for Deluge integration
 	void requestRendering();
 	void setPadLED(int32_t x, int32_t y, int32_t color);
 	void setPadLEDBrightness(int32_t x, int32_t y, int32_t brightness);
@@ -94,9 +109,47 @@ public:
 	void showPopup(const char* message);
 	void showPopup(int32_t number);
 
+	// Fader functionality
+	class Fader {
+	public:
+		// Direct property access for fader state
+		bool horizontalActive = false;
+		bool verticalActive = false;
+		bool shortHorizontalActive = false;
+		int32_t horizontalStartX = 0;
+		int32_t verticalStartY = 0;
+		int32_t shortHorizontalStartX = 0;
+		uint32_t dimmedColor = 0x404040;
+		uint32_t litColor = 0xFFFFFF;
+
+		// Horizontal fader (y0-7, x0-15)
+		void setHorizontalFader(int32_t startX, int32_t y, int32_t value, int32_t maxValue, uint32_t dimmedColor,
+		                        uint32_t litColor);
+
+		// Vertical fader (x0-7, y0-15)
+		void setVerticalFader(int32_t x, int32_t startY, int32_t value, int32_t maxValue, uint32_t dimmedColor,
+		                      uint32_t litColor);
+
+		// Short horizontal fader (x0-7 only)
+		void setShortHorizontalFader(int32_t startX, int32_t y, int32_t value, int32_t maxValue, uint32_t dimmedColor,
+		                             uint32_t litColor);
+
+		// Get fader value from pad position
+		int32_t getValueFromHorizontalFader(int32_t startX, int32_t y, int32_t padX, int32_t maxValue);
+		int32_t getValueFromVerticalFader(int32_t x, int32_t startY, int32_t padY, int32_t maxValue);
+		int32_t getValueFromShortHorizontalFader(int32_t startX, int32_t y, int32_t padX, int32_t maxValue);
+
+	private:
+		Fader() = default;
+		friend class DisplayController;
+	};
+
+	Fader& fader() { return fader_; }
+
 private:
 	// Display state management
 	bool needsRendering_ = false;
+	Fader fader_;
 };
 
 /**
@@ -104,15 +157,28 @@ private:
  */
 class AudioController {
 public:
+	// Direct property access - much simpler!
+	OutputType outputType = OutputType::NONE;
+	bool hasEffects = false;
+	bool isValidClip = false;
+	int32_t currentNote = 0;
+	uint8_t currentVelocity = 0;
+
+	// Methods for Deluge integration
 	bool isCurrentClipInstrument() const;
 	bool isCurrentClipAudio() const;
+	OutputType getCurrentClipOutputType() const;
 	void sendNoteToCurrentInstrument(int32_t noteCode, uint8_t velocity, int32_t fromMIDIChannel = 0);
 	void stopNoteOnCurrentInstrument(int32_t noteCode, int32_t fromMIDIChannel = 0);
-	class InstrumentClip* getCurrentInstrumentClip();
+	class InstrumentClip* getCurrentInstrumentClip() const;
 	void renderWaveform(RGB image[][kDisplayWidth + kSideBarWidth],
 	                    uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth], int32_t xScroll, int32_t xZoom,
 	                    int32_t whichKernel, int32_t whichKernelStartedThis);
 	bool isAudioClip() const;
+
+	// Helper functions for internal use
+	bool hasEffectsSupport() const;
+	bool isValidInstrumentClip() const;
 
 private:
 	// Audio state management
@@ -124,9 +190,13 @@ private:
  */
 class ArpeggiatorController {
 public:
-	// Direct access to settings (with proper encapsulation)
-	ArpeggiatorSettings& settings() { return settings_; }
-	const ArpeggiatorSettings& settings() const { return settings_; }
+	// Direct property access - much simpler!
+	ArpeggiatorSettings settings;
+	bool enabled = false;
+	bool gateActive = false;
+	int32_t currentNote = 0;
+	int32_t currentOctave = 0;
+	int32_t activeNoteCount = 0;
 
 	// High-level operations
 	void addNote(int32_t noteCode, uint8_t velocity, int32_t fromMIDIChannel = 0);
@@ -135,7 +205,7 @@ public:
 	void reset();
 	void triggerStep();
 
-	// State queries
+	// State queries (for Deluge integration)
 	int32_t getActiveNoteCount() const;
 	bool isNoteActive(int32_t noteCode) const;
 	bool isGateActive() const;
@@ -147,6 +217,10 @@ public:
 private:
 	ArpeggiatorSettings settings_;
 	// Additional internal state as needed
+
+	// Helper functions
+	ArpeggiatorSettings* getCurrentArpSettings() const;
+	ArpeggiatorBase* getCurrentArpeggiator() const;
 };
 
 /**
@@ -157,91 +231,72 @@ public:
 	// Reverb control
 	class ReverbEffect {
 	public:
+		// Direct property access - much simpler!
+		bool enabled = false;
+		int32_t sendAmount = 0;
+		float roomSize = 0.5f;
+		float damping = 0.5f;
+		float width = 1.0f;
+		float lpf = 0.0f;
+		float hpf = 0.0f;
+
+		// Methods for actual Deluge integration
 		bool isEnabled() const;
 		void setEnabled(bool enabled);
-		float getRoomSize() const;
-		void setRoomSize(float roomSize);
-		float getDamping() const;
-		void setDamping(float damping);
-		float getWidth() const;
-		void setWidth(float width);
-		float getLPF() const;
-		void setLPF(float lpf);
-		float getHPF() const;
-		void setHPF(float hpf);
 		int32_t getSendAmount() const;
 		void setSendAmount(int32_t amount);
-
-	private:
-		bool enabled_ = false;
-		float roomSize_ = 0.5f;
-		float damping_ = 0.5f;
-		float width_ = 1.0f;
-		float lpf_ = 0.0f;
-		float hpf_ = 0.0f;
-		int32_t sendAmount_ = 0;
 	};
 
 	// Delay control
 	class DelayEffect {
 	public:
+		// Direct property access - much simpler!
+		bool enabled = false;
+		int32_t syncLevel = 0;
+		int32_t syncType = 0;
+		int32_t feedbackAmount = 0;
+		bool pingPong = false;
+		bool analog = false;
+
+		// Methods for actual Deluge integration
 		bool isEnabled() const;
 		void setEnabled(bool enabled);
 		int32_t getSyncLevel() const;
 		void setSyncLevel(int32_t syncLevel);
-		int32_t getSyncType() const;
-		void setSyncType(int32_t syncType);
 		int32_t getFeedbackAmount() const;
 		void setFeedbackAmount(int32_t amount);
-		bool isPingPong() const;
-		void setPingPong(bool pingPong);
-		bool isAnalog() const;
-		void setAnalog(bool analog);
-
-	private:
-		bool enabled_ = false;
-		int32_t syncLevel_ = 0;
-		int32_t syncType_ = 0;
-		int32_t feedbackAmount_ = 0;
-		bool pingPong_ = false;
-		bool analog_ = false;
 	};
 
 	// Filter control
 	class FilterEffect {
 	public:
+		// Direct property access - much simpler!
+		bool enabled = false;
+		int32_t lpfFrequency = 0;
+		int32_t lpfResonance = 0;
+		int32_t lpfMode = 0;
+		int32_t lpfMorph = 0;
+		int32_t hpfFrequency = 0;
+		int32_t hpfResonance = 0;
+		int32_t hpfMode = 0;
+		int32_t hpfMorph = 0;
+		int32_t routing = 0;
+
+		// Methods for actual Deluge integration
 		bool isEnabled() const;
 		void setEnabled(bool enabled);
 		int32_t getLPFFrequency() const;
 		void setLPFFrequency(int32_t frequency);
 		int32_t getLPFResonance() const;
 		void setLPFResonance(int32_t resonance);
-		int32_t getLPFMode() const;
-		void setLPFMode(int32_t mode);
 		int32_t getLPFMorph() const;
 		void setLPFMorph(int32_t morph);
 		int32_t getHPFFrequency() const;
 		void setHPFFrequency(int32_t frequency);
 		int32_t getHPFResonance() const;
 		void setHPFResonance(int32_t resonance);
-		int32_t getHPFMode() const;
-		void setHPFMode(int32_t mode);
 		int32_t getHPFMorph() const;
 		void setHPFMorph(int32_t morph);
-		int32_t getRouting() const;
-		void setRouting(int32_t routing);
-
-	private:
-		bool enabled_ = false;
-		int32_t lpfFrequency_ = 0;
-		int32_t lpfResonance_ = 0;
-		int32_t lpfMode_ = 0;
-		int32_t lpfMorph_ = 0;
-		int32_t hpfFrequency_ = 0;
-		int32_t hpfResonance_ = 0;
-		int32_t hpfMode_ = 0;
-		int32_t hpfMorph_ = 0;
-		int32_t routing_ = 0;
 	};
 
 	// Effect objects
@@ -252,6 +307,9 @@ public:
 	const ReverbEffect& reverb() const { return reverb_; }
 	const DelayEffect& delay() const { return delay_; }
 	const FilterEffect& filter() const { return filter_; }
+
+	// Helper function for internal use
+	bool isValidForEffects() const;
 
 private:
 	ReverbEffect reverb_;
@@ -264,6 +322,14 @@ private:
  */
 class ScaleController {
 public:
+	// Direct property access - much simpler!
+	bool scaleModeEnabled = true;
+	int32_t rootNote = 0;
+	int32_t currentScale = 0;
+	int32_t songRootNote = 0;
+	int32_t songScale = 0;
+
+	// Methods for Deluge integration
 	bool isScaleModeEnabled() const;
 	int32_t getRootNote() const;
 	int32_t getCurrentScale() const;

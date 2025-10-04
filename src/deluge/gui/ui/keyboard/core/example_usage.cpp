@@ -1,10 +1,190 @@
 // Example: How to retrieve effect parameters using CoreFeatures
 // This shows practical usage patterns for keyboard layouts
 
-#include "core/core_features.h"
+#include "core_features.h"
 #include <cstdio>
 
 using namespace deluge::gui::ui::keyboard::core;
+
+void demonstrateDirectPropertyAccess() {
+	auto core = CoreFeatures::create();
+
+	// Direct property access - much simpler!
+	bool reverbEnabled = core->effects().reverb().enabled;
+	int32_t reverbAmount = core->effects().reverb().sendAmount;
+	float roomSize = core->effects().reverb().roomSize;
+
+	// Safe parameter access
+	if (core->effects().isValidForEffects()) {
+		core->effects().reverb().enabled = true;
+		core->effects().reverb().sendAmount = 75;
+		core->effects().reverb().roomSize = 0.8f;
+	}
+
+	// Complete effect status check
+	auto& reverb = core->effects().reverb();
+	if (reverb.enabled) {
+		int32_t amount = reverb.sendAmount;
+		float room = reverb.roomSize;
+		// Use the values...
+	}
+}
+
+void demonstrateOutputTypeUsage() {
+	auto core = CoreFeatures::create();
+
+	// Get the current clip's output type
+	OutputType outputType = core->audio().getCurrentClipOutputType();
+
+	switch (outputType) {
+	case OutputType::SYNTH:
+		printf("Current clip is a SYNTH\n");
+		// Send notes to synth
+		core->audio().sendNoteToCurrentInstrument(60, 100); // C4, velocity 100
+		break;
+
+	case OutputType::KIT:
+		printf("Current clip is a KIT\n");
+		// Send notes to kit (drum sounds)
+		core->audio().sendNoteToCurrentInstrument(36, 80); // Kick drum
+		break;
+
+	case OutputType::CV:
+		printf("Current clip is CV output\n");
+		// Send CV notes
+		core->audio().sendNoteToCurrentInstrument(60, 100);
+		break;
+
+	case OutputType::AUDIO:
+		printf("Current clip is AUDIO\n");
+		// Audio clips don't support note sending, but effects are available
+		core->effects().reverb().setEnabled(true);
+		break;
+
+	case OutputType::MIDI_OUT:
+		printf("Current clip is MIDI output\n");
+		// Send MIDI notes
+		core->audio().sendNoteToCurrentInstrument(60, 100); // C4
+		break;
+
+	case OutputType::NONE:
+	default:
+		printf("No current clip or invalid output type\n");
+		break;
+	}
+
+	// You can also use the boolean convenience methods
+	if (core->audio().isCurrentClipInstrument()) {
+		printf("Current clip supports note sending\n");
+		// Effects are also available on instrument tracks (SYNTH, KIT, AUDIO)
+		if (outputType == OutputType::SYNTH || outputType == OutputType::KIT) {
+			printf("Effects are available on this instrument track\n");
+			core->effects().reverb().setEnabled(true);
+		}
+	}
+
+	if (core->audio().isCurrentClipAudio()) {
+		printf("Current clip is an audio clip\n");
+	}
+}
+
+void demonstrateFaderUsage() {
+	// Create a CoreFeatures instance
+	auto core = CoreFeatures::create();
+
+	// Clear all pads first
+	core->display().clearAllPads();
+
+	// ============================================================================
+	// HORIZONTAL FADER EXAMPLES (y0-7, x0-15)
+	// ============================================================================
+
+	// Volume fader on row 0 (x0-15)
+	int32_t volume = 75; // 75% volume
+	int32_t maxVolume = 100;
+	uint32_t dimmedColor = 0x001100; // Dark green
+	uint32_t litColor = 0x00FF00;    // Bright green
+	core->display().fader().setHorizontalFader(0, 0, volume, maxVolume, dimmedColor, litColor);
+
+	// Reverb send fader on row 1 (x0-15)
+	int32_t reverbSend = 50;                                                                     // 50% reverb send
+	core->display().fader().setHorizontalFader(0, 1, reverbSend, maxVolume, 0x110011, 0xFF00FF); // Purple
+
+	// ============================================================================
+	// VERTICAL FADER EXAMPLES (x0-7, y0-15)
+	// ============================================================================
+
+	// Filter cutoff fader on column 0 (y0-15)
+	int32_t filterCutoff = 80;                                                                   // 80% cutoff
+	core->display().fader().setVerticalFader(0, 0, filterCutoff, maxVolume, 0x111100, 0xFFFF00); // Yellow
+
+	// Resonance fader on column 1 (y0-15)
+	int32_t resonance = 30;                                                                   // 30% resonance
+	core->display().fader().setVerticalFader(1, 0, resonance, maxVolume, 0x110000, 0xFF0000); // Red
+
+	// ============================================================================
+	// SHORT HORIZONTAL FADER EXAMPLES (x0-7 only)
+	// ============================================================================
+
+	// Attack fader on row 2 (x0-7)
+	int32_t attack = 25;                                                                          // 25% attack
+	core->display().fader().setShortHorizontalFader(0, 2, attack, maxVolume, 0x001111, 0x00FFFF); // Cyan
+
+	// Decay fader on row 3 (x0-7)
+	int32_t decay = 60;                                                                          // 60% decay
+	core->display().fader().setShortHorizontalFader(0, 3, decay, maxVolume, 0x111100, 0xFFFF00); // Yellow
+
+	// ============================================================================
+	// READING FADER VALUES FROM PAD POSITIONS
+	// ============================================================================
+
+	// Simulate user touching pad at x=8, y=0 (should be 50% of max value for horizontal fader)
+	int32_t padX = 8;
+	int32_t padY = 0;
+	int32_t faderValue = core->display().fader().getValueFromHorizontalFader(0, 0, padX, maxVolume);
+	printf("Pad at x=%d, y=%d gives fader value: %d%%\n", padX, padY, faderValue);
+
+	// Simulate user touching pad at x=0, y=12 (should be 75% of max value for vertical fader)
+	padX = 0;
+	padY = 12;
+	faderValue = core->display().fader().getValueFromVerticalFader(0, 0, padY, maxVolume);
+	printf("Pad at x=%d, y=%d gives fader value: %d%%\n", padX, padY, faderValue);
+
+	// Simulate user touching pad at x=4, y=2 (should be 50% of max value for short horizontal fader)
+	padX = 4;
+	padY = 2;
+	faderValue = core->display().fader().getValueFromShortHorizontalFader(0, 2, padX, maxVolume);
+	printf("Pad at x=%d, y=%d gives fader value: %d%%\n", padX, padY, faderValue);
+
+	// ============================================================================
+	// DYNAMIC FADER UPDATES
+	// ============================================================================
+
+	// Update volume fader based on current BPM
+	int32_t currentBPM = core->timing().getCurrentBPM();
+	int32_t bpmPercentage = (currentBPM * 100) / 200; // Scale 0-200 BPM to 0-100%
+	core->display().fader().setHorizontalFader(0, 7, bpmPercentage, 100, 0x000011, 0x0000FF); // Blue
+
+	// Update reverb fader based on arpeggiator state
+	if (core->arpeggiator().isEnabled()) {
+		int32_t activeNotes = core->arpeggiator().getActiveNoteCount();
+		int32_t notePercentage = (activeNotes * 100) / 8; // Scale 0-8 notes to 0-100%
+		core->display().fader().setHorizontalFader(0, 6, notePercentage, 100, 0x110000, 0xFF0000); // Red
+	}
+
+	// Request rendering to update the display
+	core->display().requestRendering();
+
+	printf("Fader demonstration complete!\n");
+	printf("- Row 0: Volume fader (green)\n");
+	printf("- Row 1: Reverb send fader (purple)\n");
+	printf("- Row 2: Attack fader (cyan, short)\n");
+	printf("- Row 3: Decay fader (yellow, short)\n");
+	printf("- Row 6: Arpeggiator notes fader (red)\n");
+	printf("- Row 7: BPM fader (blue)\n");
+	printf("- Column 0: Filter cutoff fader (yellow, vertical)\n");
+	printf("- Column 1: Resonance fader (red, vertical)\n");
+}
 
 void demonstrateEffectParameterRetrieval() {
 	// Create a CoreFeatures instance
@@ -24,9 +204,10 @@ void demonstrateEffectParameterRetrieval() {
 		printf("Reverb send amount: %d%%\n", reverbAmount);
 
 		// Get other reverb parameters (currently placeholders)
-		float roomSize = core->effects().reverb().getRoomSize();
-		float damping = core->effects().reverb().getDamping();
-		float width = core->effects().reverb().getWidth();
+		// Direct property access - much simpler!
+		float roomSize = core->effects().reverb().roomSize;
+		float damping = core->effects().reverb().damping;
+		float width = core->effects().reverb().width;
 
 		printf("Room size: %.2f, Damping: %.2f, Width: %.2f\n", roomSize, damping, width);
 	}
@@ -49,9 +230,10 @@ void demonstrateEffectParameterRetrieval() {
 		printf("Delay feedback: %d%%\n", feedbackAmount);
 
 		// Get other delay parameters (currently placeholders)
-		int32_t syncType = core->effects().delay().getSyncType();
-		bool pingPong = core->effects().delay().isPingPong();
-		bool analog = core->effects().delay().isAnalog();
+		// Direct property access - much simpler!
+		int32_t syncType = core->effects().delay().syncType;
+		bool pingPong = core->effects().delay().pingPong;
+		bool analog = core->effects().delay().analog;
 
 		printf("Sync type: %d, Ping-pong: %s, Analog: %s\n", syncType, pingPong ? "Yes" : "No", analog ? "Yes" : "No");
 	}
@@ -80,7 +262,8 @@ void demonstrateEffectParameterRetrieval() {
 		printf("HPF - Freq: %d%%, Resonance: %d%%, Morph: %d%%\n", hpfFreq, hpfRes, hpfMorph);
 
 		// Filter routing (currently placeholder)
-		int32_t routing = core->effects().filter().getRouting();
+		// Direct property access - much simpler!
+		int32_t routing = core->effects().filter().routing;
 		printf("Filter routing: %d\n", routing);
 	}
 }

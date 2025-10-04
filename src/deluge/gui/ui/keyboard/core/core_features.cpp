@@ -4,12 +4,14 @@
 #include "hid/display/oled.h"
 #include "hid/led/pad_leds.h"
 #include "io/debug/print.h"
+#include "io/midi/midi_device_manager.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
 #include "model/instrument/kit.h"
 #include "model/instrument/melodic_instrument.h"
 #include "model/instrument/non_audio_instrument.h"
 #include "model/song/song.h"
+#include "modulation/arpeggiator.h"
 #include "modulation/params/param.h"
 #include "modulation/params/param_manager.h"
 #include "modulation/params/param_set.h"
@@ -46,17 +48,15 @@ bool TimingController::isPlaying() const {
 }
 
 int32_t TimingController::getCurrentTick() const {
-	// TODO: Find correct API for getting current tick
-	return 0;
+	return (int32_t)playbackHandler.getCurrentInternalTickCount();
 }
 
 int32_t TimingController::getCurrentBPM() const {
-	// TODO: Find correct API for getting BPM
-	return 120;
+	return (int32_t)playbackHandler.calculateBPMForDisplay();
 }
 
 void TimingController::setBPM(int32_t bpm) {
-	// TODO: Find correct API for setting BPM
+	currentSong->setBPM((float)bpm, true);
 }
 
 void TimingController::play() {
@@ -110,30 +110,196 @@ void DisplayController::showPopup(int32_t number) {
 }
 
 // ============================================================================
+// Fader Implementation
+// ============================================================================
+
+void DisplayController::Fader::setHorizontalFader(int32_t startX, int32_t y, int32_t value, int32_t maxValue,
+                                                  uint32_t dimmedColor, uint32_t litColor) {
+	// Clamp value to valid range
+	value = etl::clamp(value, (int32_t)0, maxValue);
+
+	// Calculate how many pads should be lit
+	int32_t totalPads = 16; // x0-15
+	int32_t litPads = (value * totalPads) / maxValue;
+
+	// Set all pads in the fader range
+	for (int32_t x = startX; x < startX + totalPads && x < 16; x++) {
+		if (x - startX < litPads) {
+			// Lit portion
+			PadLEDs::set({x, y}, RGB(litColor));
+		}
+		else {
+			// Dimmed portion
+			PadLEDs::set({x, y}, RGB(dimmedColor));
+		}
+	}
+}
+
+void DisplayController::Fader::setVerticalFader(int32_t x, int32_t startY, int32_t value, int32_t maxValue,
+                                                uint32_t dimmedColor, uint32_t litColor) {
+	// Clamp value to valid range
+	value = etl::clamp(value, (int32_t)0, maxValue);
+
+	// Calculate how many pads should be lit
+	int32_t totalPads = 16; // y0-15
+	int32_t litPads = (value * totalPads) / maxValue;
+
+	// Set all pads in the fader range
+	for (int32_t y = startY; y < startY + totalPads && y < 16; y++) {
+		if (y - startY < litPads) {
+			// Lit portion
+			PadLEDs::set({x, y}, RGB(litColor));
+		}
+		else {
+			// Dimmed portion
+			PadLEDs::set({x, y}, RGB(dimmedColor));
+		}
+	}
+}
+
+void DisplayController::Fader::setShortHorizontalFader(int32_t startX, int32_t y, int32_t value, int32_t maxValue,
+                                                       uint32_t dimmedColor, uint32_t litColor) {
+	// Clamp value to valid range
+	value = etl::clamp(value, (int32_t)0, maxValue);
+
+	// Calculate how many pads should be lit
+	int32_t totalPads = 8; // x0-7
+	int32_t litPads = (value * totalPads) / maxValue;
+
+	// Set all pads in the fader range
+	for (int32_t x = startX; x < startX + totalPads && x < 8; x++) {
+		if (x - startX < litPads) {
+			// Lit portion
+			PadLEDs::set({x, y}, RGB(litColor));
+		}
+		else {
+			// Dimmed portion
+			PadLEDs::set({x, y}, RGB(dimmedColor));
+		}
+	}
+}
+
+int32_t DisplayController::Fader::getValueFromHorizontalFader(int32_t startX, int32_t y, int32_t padX,
+                                                              int32_t maxValue) {
+	// Calculate relative position within fader
+	int32_t relativeX = padX - startX;
+	int32_t totalPads = 16; // x0-15
+
+	// Clamp relative position
+	relativeX = etl::clamp(relativeX, (int32_t)0, totalPads - 1);
+
+	// Convert pad position to value
+	return (relativeX * maxValue) / (totalPads - 1);
+}
+
+int32_t DisplayController::Fader::getValueFromVerticalFader(int32_t x, int32_t startY, int32_t padY, int32_t maxValue) {
+	// Calculate relative position within fader
+	int32_t relativeY = padY - startY;
+	int32_t totalPads = 16; // y0-15
+
+	// Clamp relative position
+	relativeY = etl::clamp(relativeY, (int32_t)0, totalPads - 1);
+
+	// Convert pad position to value
+	return (relativeY * maxValue) / (totalPads - 1);
+}
+
+int32_t DisplayController::Fader::getValueFromShortHorizontalFader(int32_t startX, int32_t y, int32_t padX,
+                                                                   int32_t maxValue) {
+	// Calculate relative position within fader
+	int32_t relativeX = padX - startX;
+	int32_t totalPads = 8; // x0-7
+
+	// Clamp relative position
+	relativeX = etl::clamp(relativeX, (int32_t)0, totalPads - 1);
+
+	// Convert pad position to value
+	return (relativeX * maxValue) / (totalPads - 1);
+}
+
+// ============================================================================
 // AudioController Implementation
 // ============================================================================
 
 bool AudioController::isCurrentClipInstrument() const {
-	// TODO: Find correct API for accessing current clip
-	return false;
+	return getCurrentClipOutputType() == OutputType::SYNTH || getCurrentClipOutputType() == OutputType::KIT
+	       || getCurrentClipOutputType() == OutputType::CV || getCurrentClipOutputType() == OutputType::MIDI_OUT;
 }
 
 bool AudioController::isCurrentClipAudio() const {
-	// TODO: Find correct API for accessing current clip
-	return false;
+	return getCurrentClipOutputType() == OutputType::AUDIO;
 }
 
 void AudioController::sendNoteToCurrentInstrument(int32_t noteCode, uint8_t velocity, int32_t fromMIDIChannel) {
-	// TODO: Find correct API for sending notes
+	OutputType outputType = getCurrentClipOutputType();
+	if (outputType == OutputType::NONE) {
+		return;
+	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip || !clip->output) {
+		return;
+	}
+
+	Output* output = clip->output;
+	if (outputType == OutputType::KIT) {
+		// For kits, we need to use the unscrolledPadAudition method
+		// This is a simplified approach - in practice you'd need more context
+		Kit* kit = (Kit*)output;
+		kit->receivedNoteForKit(nullptr, MIDIDeviceManager::root_din.cable, true, fromMIDIChannel, noteCode, velocity,
+		                        false, nullptr, clip);
+	}
+	else if (outputType == OutputType::SYNTH || outputType == OutputType::CV) {
+		MelodicInstrument* melodicInstrument = (MelodicInstrument*)output;
+		melodicInstrument->beginAuditioningForNote(nullptr, noteCode, velocity, nullptr);
+	}
+	else if (outputType == OutputType::MIDI_OUT) {
+		NonAudioInstrument* midiInstrument = (NonAudioInstrument*)output;
+		midiInstrument->receivedNote(nullptr, MIDIDeviceManager::root_din.cable, true, fromMIDIChannel,
+		                             MIDIMatchType::NO_MATCH, noteCode, velocity, false, nullptr);
+	}
 }
 
 void AudioController::stopNoteOnCurrentInstrument(int32_t noteCode, int32_t fromMIDIChannel) {
-	// TODO: Find correct API for stopping notes
+	OutputType outputType = getCurrentClipOutputType();
+	if (outputType == OutputType::NONE) {
+		return;
+	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip || !clip->output) {
+		return;
+	}
+
+	Output* output = clip->output;
+	if (outputType == OutputType::KIT) {
+		Kit* kit = (Kit*)output;
+		kit->receivedNoteForKit(nullptr, MIDIDeviceManager::root_din.cable, false, fromMIDIChannel, noteCode, 0, false,
+		                        nullptr, clip);
+	}
+	else if (outputType == OutputType::SYNTH || outputType == OutputType::CV) {
+		MelodicInstrument* melodicInstrument = (MelodicInstrument*)output;
+		melodicInstrument->endAuditioningForNote(nullptr, noteCode);
+	}
+	else if (outputType == OutputType::MIDI_OUT) {
+		NonAudioInstrument* midiInstrument = (NonAudioInstrument*)output;
+		midiInstrument->receivedNote(nullptr, MIDIDeviceManager::root_din.cable, false, fromMIDIChannel,
+		                             MIDIMatchType::NO_MATCH, noteCode, 0, false, nullptr);
+	}
 }
 
-class InstrumentClip* AudioController::getCurrentInstrumentClip() {
-	// TODO: Find correct API for getting current instrument clip
-	return nullptr;
+class InstrumentClip* AudioController::getCurrentInstrumentClip() const {
+	return ::getCurrentInstrumentClip();
+}
+
+bool AudioController::hasEffectsSupport() const {
+	OutputType outputType = getCurrentClipOutputType();
+	return outputType == OutputType::SYNTH || outputType == OutputType::KIT || outputType == OutputType::AUDIO;
+}
+
+bool AudioController::isValidInstrumentClip() const {
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	return clip != nullptr && clip->output != nullptr;
 }
 
 void AudioController::renderWaveform(RGB image[][kDisplayWidth + kSideBarWidth],
@@ -143,96 +309,310 @@ void AudioController::renderWaveform(RGB image[][kDisplayWidth + kSideBarWidth],
 	// This would integrate with the existing waveform rendering system
 }
 
-bool AudioController::isAudioClip() const {
-	// TODO: Find correct API for checking audio clip
-	return false;
+OutputType AudioController::getCurrentClipOutputType() const {
+	Clip* currentClip = getCurrentClip();
+	if (!currentClip || !currentClip->output) {
+		return OutputType::NONE;
+	}
+	return currentClip->output->type;
 }
 
 // ============================================================================
 // ArpeggiatorController Implementation
 // ============================================================================
 
+// Helper function to get current arpeggiator settings
+ArpeggiatorSettings* ArpeggiatorController::getCurrentArpSettings() const {
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip || !clip->output) {
+		return nullptr;
+	}
+
+	Output* output = clip->output;
+
+	// Get arp settings from the instrument
+	if (output->type == OutputType::SYNTH || output->type == OutputType::CV) {
+		MelodicInstrument* melodicInstrument = (MelodicInstrument*)output;
+		return melodicInstrument->getArpSettings(clip);
+	}
+	else if (output->type == OutputType::KIT) {
+		Kit* kit = (Kit*)output;
+		// Access arp settings directly from the clip since getArpSettings is private
+		return &clip->arpSettings;
+	}
+	else if (output->type == OutputType::MIDI_OUT) {
+		NonAudioInstrument* midiInstrument = (NonAudioInstrument*)output;
+		return midiInstrument->getArpSettings(clip);
+	}
+
+	return nullptr;
+}
+
+// Helper function to get current arpeggiator instance
+ArpeggiatorBase* ArpeggiatorController::getCurrentArpeggiator() const {
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip || !clip->output) {
+		return nullptr;
+	}
+
+	Output* output = clip->output;
+
+	// Get arpeggiator from the instrument
+	if (output->type == OutputType::SYNTH || output->type == OutputType::CV) {
+		MelodicInstrument* melodicInstrument = (MelodicInstrument*)output;
+		return &melodicInstrument->arpeggiator;
+	}
+	else if (output->type == OutputType::KIT) {
+		Kit* kit = (Kit*)output;
+		return &kit->arpeggiator;
+	}
+	else if (output->type == OutputType::MIDI_OUT) {
+		NonAudioInstrument* midiInstrument = (NonAudioInstrument*)output;
+		return &midiInstrument->arpeggiator;
+	}
+
+	return nullptr;
+}
+
 void ArpeggiatorController::addNote(int32_t noteCode, uint8_t velocity, int32_t fromMIDIChannel) {
-	// TODO: Implement proper note addition to arpeggiator
-	// This would integrate with the actual arpeggiator system
+	ArpeggiatorSettings* arpSettings = getCurrentArpSettings();
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpSettings || !arpeggiator) {
+		return;
+	}
+
+	// Create instruction for note on
+	ArpReturnInstruction instruction;
+	instruction.sampleSyncLengthOn = 0;
+
+	// Add note to arpeggiator
+	arpeggiator->noteOn(arpSettings, noteCode, velocity, &instruction, fromMIDIChannel, nullptr);
 }
 
 void ArpeggiatorController::removeNote(int32_t noteCode) {
-	// TODO: Implement proper note removal from arpeggiator
+	ArpeggiatorSettings* arpSettings = getCurrentArpSettings();
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpSettings || !arpeggiator) {
+		return;
+	}
+
+	// Create instruction for note off
+	ArpReturnInstruction instruction;
+
+	// Remove note from arpeggiator
+	arpeggiator->noteOff(arpSettings, noteCode, &instruction);
 }
 
 void ArpeggiatorController::clearNotes() {
-	// TODO: Implement proper note clearing
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpeggiator) {
+		return;
+	}
+
+	// Reset the arpeggiator which clears all notes
+	arpeggiator->reset();
 }
 
 void ArpeggiatorController::reset() {
-	// TODO: Implement proper arpeggiator reset
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpeggiator) {
+		return;
+	}
+
+	// Reset the arpeggiator
+	arpeggiator->reset();
 }
 
 void ArpeggiatorController::triggerStep() {
-	// TODO: Implement proper arpeggiator step triggering
+	ArpeggiatorSettings* arpSettings = getCurrentArpSettings();
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpSettings || !arpeggiator) {
+		return;
+	}
+
+	// Trigger a step by calling doTickForward
+	ArpReturnInstruction instruction;
+	arpeggiator->doTickForward(arpSettings, &instruction, 0, false);
 }
 
 int32_t ArpeggiatorController::getActiveNoteCount() const {
-	// TODO: Implement proper note count retrieval
-	return 0;
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpeggiator) {
+		return 0;
+	}
+
+	// Check if any notes are active using the base class method
+	return arpeggiator->hasAnyInputNotesActive() ? 1 : 0;
 }
 
 bool ArpeggiatorController::isNoteActive(int32_t noteCode) const {
-	// TODO: Implement proper note active check
-	return false;
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpeggiator) {
+		return false;
+	}
+
+	// For now, use a simplified approach since we can't use dynamic_cast
+	// Check if any notes are active and assume the note is active if arpeggiator is active
+	return arpeggiator->hasAnyInputNotesActive();
 }
 
 bool ArpeggiatorController::isGateActive() const {
-	// TODO: Implement proper gate active check
-	return false;
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpeggiator) {
+		return false;
+	}
+
+	return arpeggiator->gateCurrentlyActive;
 }
 
 int32_t ArpeggiatorController::getCurrentNote() const {
-	// TODO: Implement proper current note retrieval
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpeggiator) {
+		return 0;
+	}
+
+	// Return the first currently playing note
+	if (arpeggiator->noteCodeCurrentlyOnPostArp[0] != ARP_NOTE_NONE) {
+		return arpeggiator->noteCodeCurrentlyOnPostArp[0];
+	}
+
 	return 0;
 }
 
 int32_t ArpeggiatorController::getCurrentOctave() const {
-	// TODO: Implement proper current octave retrieval
-	return 0;
+	ArpeggiatorBase* arpeggiator = getCurrentArpeggiator();
+
+	if (!arpeggiator) {
+		return 0;
+	}
+
+	return arpeggiator->currentOctave;
 }
 
 bool ArpeggiatorController::isEnabled() const {
-	return settings_.mode != ArpMode::OFF;
+	ArpeggiatorSettings* arpSettings = getCurrentArpSettings();
+	if (!arpSettings) {
+		return settings_.mode != ArpMode::OFF;
+	}
+	return arpSettings->mode != ArpMode::OFF;
 }
 
 void ArpeggiatorController::setEnabled(bool enabled) {
-	settings_.mode = enabled ? ArpMode::ARP : ArpMode::OFF;
-	settings_.updatePresetFromCurrentSettings();
+	ArpeggiatorSettings* arpSettings = getCurrentArpSettings();
+	if (arpSettings) {
+		arpSettings->mode = enabled ? ArpMode::ARP : ArpMode::OFF;
+		arpSettings->updatePresetFromCurrentSettings();
+	}
+	else {
+		settings_.mode = enabled ? ArpMode::ARP : ArpMode::OFF;
+		settings_.updatePresetFromCurrentSettings();
+	}
 }
 
 // ============================================================================
 // EffectsController Implementation
 // ============================================================================
 
-// ReverbEffect Implementation
-bool EffectsController::ReverbEffect::isEnabled() const {
-	// Check if we have an audio output with effects
+bool EffectsController::isValidForEffects() const {
 	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!clip) {
 		return false;
 	}
 
-	// Get the param manager for the clip
-	ParamManagerForTimeline& paramManager = clip->paramManager;
+	OutputType outputType = clip->output->type;
+	return outputType == OutputType::SYNTH || outputType == OutputType::KIT || outputType == OutputType::AUDIO;
+}
+
+// Static helper function for nested effect classes
+static bool isValidForEffectsStatic() {
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip) {
+		return false;
+	}
+
+	OutputType outputType = clip->output->type;
+	return outputType == OutputType::SYNTH || outputType == OutputType::KIT || outputType == OutputType::AUDIO;
+}
+
+// Static helper function for parameter access
+static ParamManagerForTimeline* getParamManagerStatic() {
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip) {
+		return nullptr;
+	}
+	return &clip->paramManager;
+}
+
+// Q31 conversion utilities
+namespace Q31Utils {
+// Convert percentage (0-100) to Q31 format
+static int32_t percentageToQ31(int32_t percentage) {
+	return (percentage * 4294967296) / 100 - 2147483648;
+}
+
+// Convert Q31 format to percentage (0-100)
+static int32_t q31ToPercentage(int32_t q31Value) {
+	return ((q31Value + 2147483648) * 100) / 4294967296;
+}
+} // namespace Q31Utils
+
+// Parameter setting utilities
+namespace ParamUtils {
+// Set a parameter value safely
+static void setParameter(UnpatchedParamSet* unpatchedParams, int32_t paramId, int32_t q31Value) {
+	if (unpatchedParams) {
+		unpatchedParams->params[paramId].setCurrentValueBasicForSetup(q31Value);
+	}
+}
+
+// Set a parameter from percentage
+static void setParameterFromPercentage(UnpatchedParamSet* unpatchedParams, int32_t paramId, int32_t percentage) {
+	setParameter(unpatchedParams, paramId, Q31Utils::percentageToQ31(percentage));
+}
+
+// Get a parameter as percentage
+static int32_t getParameterAsPercentage(UnpatchedParamSet* unpatchedParams, int32_t paramId) {
+	if (!unpatchedParams) {
+		return 0;
+	}
+	int32_t rawValue = unpatchedParams->getValue(paramId);
+	return Q31Utils::q31ToPercentage(rawValue);
+}
+} // namespace ParamUtils
+
+// ReverbEffect Implementation
+bool EffectsController::ReverbEffect::isEnabled() const {
+	// Use helper function to check if effects are supported
+	if (!isValidForEffectsStatic()) {
+		return false;
+	}
+
+	ParamManagerForTimeline* paramManager = getParamManagerStatic();
+	if (!paramManager) {
+		return false;
+	}
 
 	// Check if reverb send amount is greater than minimum (disabled)
-	UnpatchedParamSet* unpatchedParams = paramManager.getUnpatchedParamSet();
+	UnpatchedParamSet* unpatchedParams = paramManager->getUnpatchedParamSet();
 	int32_t reverbAmount = unpatchedParams->getValue(UNPATCHED_REVERB_SEND_AMOUNT);
 	return reverbAmount > std::numeric_limits<q31_t>::min();
 }
 
 void EffectsController::ReverbEffect::setEnabled(bool enabled) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -248,61 +628,12 @@ void EffectsController::ReverbEffect::setEnabled(bool enabled) {
 	}
 }
 
-float EffectsController::ReverbEffect::getRoomSize() const {
-	// TODO: Implement room size access - this would require accessing reverb engine parameters
-	return roomSize_;
-}
-
-void EffectsController::ReverbEffect::setRoomSize(float roomSize) {
-	roomSize_ = roomSize;
-	// TODO: Implement room size setting - this would require accessing reverb engine parameters
-}
-
-float EffectsController::ReverbEffect::getDamping() const {
-	// TODO: Implement damping access - this would require accessing reverb engine parameters
-	return damping_;
-}
-
-void EffectsController::ReverbEffect::setDamping(float damping) {
-	damping_ = damping;
-	// TODO: Implement damping setting - this would require accessing reverb engine parameters
-}
-
-float EffectsController::ReverbEffect::getWidth() const {
-	// TODO: Implement width access - this would require accessing reverb engine parameters
-	return width_;
-}
-
-void EffectsController::ReverbEffect::setWidth(float width) {
-	width_ = width;
-	// TODO: Implement width setting - this would require accessing reverb engine parameters
-}
-
-float EffectsController::ReverbEffect::getLPF() const {
-	// TODO: Implement LPF access - this would require accessing reverb engine parameters
-	return lpf_;
-}
-
-void EffectsController::ReverbEffect::setLPF(float lpf) {
-	lpf_ = lpf;
-	// TODO: Implement LPF setting - this would require accessing reverb engine parameters
-}
-
-float EffectsController::ReverbEffect::getHPF() const {
-	// TODO: Implement HPF access - this would require accessing reverb engine parameters
-	return hpf_;
-}
-
-void EffectsController::ReverbEffect::setHPF(float hpf) {
-	hpf_ = hpf;
-	// TODO: Implement HPF setting - this would require accessing reverb engine parameters
-}
-
 int32_t EffectsController::ReverbEffect::getSendAmount() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -315,14 +646,15 @@ int32_t EffectsController::ReverbEffect::getSendAmount() const {
 	}
 
 	// Convert Q31 to percentage
-	return ((rawValue + 2147483648) * 100) / 4294967296;
+	return Q31Utils::q31ToPercentage(rawValue);
 }
 
 void EffectsController::ReverbEffect::setSendAmount(int32_t amount) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -335,15 +667,20 @@ void EffectsController::ReverbEffect::setSendAmount(int32_t amount) {
 	}
 	else {
 		// Convert percentage to Q31
-		int32_t q31Value = (amount * 4294967296) / 100 - 2147483648;
-		unpatchedParams->params[UNPATCHED_REVERB_SEND_AMOUNT].setCurrentValueBasicForSetup(q31Value);
+		ParamUtils::setParameterFromPercentage(unpatchedParams, UNPATCHED_REVERB_SEND_AMOUNT, amount);
 	}
 }
 
 // DelayEffect Implementation
 bool EffectsController::DelayEffect::isEnabled() const {
 	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!clip) {
+		return false;
+	}
+
+	// Effects are available on SYNTH, KIT, and AUDIO output types
+	OutputType outputType = clip->output->type;
+	if (outputType != OutputType::SYNTH && outputType != OutputType::KIT && outputType != OutputType::AUDIO) {
 		return false;
 	}
 
@@ -355,10 +692,11 @@ bool EffectsController::DelayEffect::isEnabled() const {
 }
 
 void EffectsController::DelayEffect::setEnabled(bool enabled) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -374,10 +712,11 @@ void EffectsController::DelayEffect::setEnabled(bool enabled) {
 }
 
 int32_t EffectsController::DelayEffect::getSyncLevel() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -390,10 +729,11 @@ int32_t EffectsController::DelayEffect::getSyncLevel() const {
 }
 
 void EffectsController::DelayEffect::setSyncLevel(int32_t syncLevel) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -404,21 +744,12 @@ void EffectsController::DelayEffect::setSyncLevel(int32_t syncLevel) {
 	unpatchedParams->params[UNPATCHED_DELAY_RATE].setCurrentValueBasicForSetup(q31Value);
 }
 
-int32_t EffectsController::DelayEffect::getSyncType() const {
-	// TODO: Implement sync type access - this would require accessing delay engine parameters
-	return syncType_;
-}
-
-void EffectsController::DelayEffect::setSyncType(int32_t syncType) {
-	syncType_ = syncType;
-	// TODO: Implement sync type setting - this would require accessing delay engine parameters
-}
-
 int32_t EffectsController::DelayEffect::getFeedbackAmount() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -431,14 +762,15 @@ int32_t EffectsController::DelayEffect::getFeedbackAmount() const {
 	}
 
 	// Convert Q31 to percentage
-	return ((rawValue + 2147483648) * 100) / 4294967296;
+	return Q31Utils::q31ToPercentage(rawValue);
 }
 
 void EffectsController::DelayEffect::setFeedbackAmount(int32_t amount) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -450,29 +782,9 @@ void EffectsController::DelayEffect::setFeedbackAmount(int32_t amount) {
 	}
 	else {
 		// Convert percentage to Q31
-		int32_t q31Value = (amount * 4294967296) / 100 - 2147483648;
+		int32_t q31Value = Q31Utils::percentageToQ31(amount);
 		unpatchedParams->params[UNPATCHED_DELAY_AMOUNT].setCurrentValueBasicForSetup(q31Value);
 	}
-}
-
-bool EffectsController::DelayEffect::isPingPong() const {
-	// TODO: Implement ping pong access - this would require accessing delay engine parameters
-	return pingPong_;
-}
-
-void EffectsController::DelayEffect::setPingPong(bool pingPong) {
-	pingPong_ = pingPong;
-	// TODO: Implement ping pong setting - this would require accessing delay engine parameters
-}
-
-bool EffectsController::DelayEffect::isAnalog() const {
-	// TODO: Implement analog access - this would require accessing delay engine parameters
-	return analog_;
-}
-
-void EffectsController::DelayEffect::setAnalog(bool analog) {
-	analog_ = analog;
-	// TODO: Implement analog setting - this would require accessing delay engine parameters
 }
 
 // FilterEffect Implementation
@@ -494,10 +806,11 @@ bool EffectsController::FilterEffect::isEnabled() const {
 }
 
 void EffectsController::FilterEffect::setEnabled(bool enabled) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -518,10 +831,11 @@ void EffectsController::FilterEffect::setEnabled(bool enabled) {
 }
 
 int32_t EffectsController::FilterEffect::getLPFFrequency() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -537,10 +851,11 @@ int32_t EffectsController::FilterEffect::getLPFFrequency() const {
 }
 
 void EffectsController::FilterEffect::setLPFFrequency(int32_t frequency) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -552,16 +867,17 @@ void EffectsController::FilterEffect::setLPFFrequency(int32_t frequency) {
 	}
 	else {
 		// Convert percentage to Q31
-		int32_t q31Value = (frequency * 4294967296) / 100 - 2147483648;
+		int32_t q31Value = Q31Utils::percentageToQ31(frequency);
 		unpatchedParams->params[UNPATCHED_LPF_FREQ].setCurrentValueBasicForSetup(q31Value);
 	}
 }
 
 int32_t EffectsController::FilterEffect::getLPFResonance() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -573,35 +889,27 @@ int32_t EffectsController::FilterEffect::getLPFResonance() const {
 }
 
 void EffectsController::FilterEffect::setLPFResonance(int32_t resonance) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
 	UnpatchedParamSet* unpatchedParams = paramManager.getUnpatchedParamSet();
 
 	// Convert percentage to Q31
-	int32_t q31Value = (resonance * 4294967296) / 100 - 2147483648;
+	int32_t q31Value = Q31Utils::percentageToQ31(resonance);
 	unpatchedParams->params[UNPATCHED_LPF_RES].setCurrentValueBasicForSetup(q31Value);
 }
 
-int32_t EffectsController::FilterEffect::getLPFMode() const {
-	// TODO: Implement LPF mode access - this would require accessing filter engine parameters
-	return lpfMode_;
-}
-
-void EffectsController::FilterEffect::setLPFMode(int32_t mode) {
-	lpfMode_ = mode;
-	// TODO: Implement LPF mode setting - this would require accessing filter engine parameters
-}
-
 int32_t EffectsController::FilterEffect::getLPFMorph() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -613,25 +921,27 @@ int32_t EffectsController::FilterEffect::getLPFMorph() const {
 }
 
 void EffectsController::FilterEffect::setLPFMorph(int32_t morph) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
 	UnpatchedParamSet* unpatchedParams = paramManager.getUnpatchedParamSet();
 
 	// Convert percentage to Q31
-	int32_t q31Value = (morph * 4294967296) / 100 - 2147483648;
+	int32_t q31Value = Q31Utils::percentageToQ31(morph);
 	unpatchedParams->params[UNPATCHED_LPF_MORPH].setCurrentValueBasicForSetup(q31Value);
 }
 
 int32_t EffectsController::FilterEffect::getHPFFrequency() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -647,10 +957,11 @@ int32_t EffectsController::FilterEffect::getHPFFrequency() const {
 }
 
 void EffectsController::FilterEffect::setHPFFrequency(int32_t frequency) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -662,16 +973,17 @@ void EffectsController::FilterEffect::setHPFFrequency(int32_t frequency) {
 	}
 	else {
 		// Convert percentage to Q31
-		int32_t q31Value = (frequency * 4294967296) / 100 - 2147483648;
+		int32_t q31Value = Q31Utils::percentageToQ31(frequency);
 		unpatchedParams->params[UNPATCHED_HPF_FREQ].setCurrentValueBasicForSetup(q31Value);
 	}
 }
 
 int32_t EffectsController::FilterEffect::getHPFResonance() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -683,35 +995,27 @@ int32_t EffectsController::FilterEffect::getHPFResonance() const {
 }
 
 void EffectsController::FilterEffect::setHPFResonance(int32_t resonance) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
 	UnpatchedParamSet* unpatchedParams = paramManager.getUnpatchedParamSet();
 
 	// Convert percentage to Q31
-	int32_t q31Value = (resonance * 4294967296) / 100 - 2147483648;
+	int32_t q31Value = Q31Utils::percentageToQ31(resonance);
 	unpatchedParams->params[UNPATCHED_HPF_RES].setCurrentValueBasicForSetup(q31Value);
 }
 
-int32_t EffectsController::FilterEffect::getHPFMode() const {
-	// TODO: Implement HPF mode access - this would require accessing filter engine parameters
-	return hpfMode_;
-}
-
-void EffectsController::FilterEffect::setHPFMode(int32_t mode) {
-	hpfMode_ = mode;
-	// TODO: Implement HPF mode setting - this would require accessing filter engine parameters
-}
-
 int32_t EffectsController::FilterEffect::getHPFMorph() const {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return 0;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
@@ -723,28 +1027,19 @@ int32_t EffectsController::FilterEffect::getHPFMorph() const {
 }
 
 void EffectsController::FilterEffect::setHPFMorph(int32_t morph) {
-	InstrumentClip* clip = getCurrentInstrumentClip();
-	if (!clip || clip->output->type != OutputType::AUDIO) {
+	if (!isValidForEffectsStatic()) {
 		return;
 	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
 	ParamManagerForTimeline& paramManager = clip->paramManager;
 
 	UnpatchedParamSet* unpatchedParams = paramManager.getUnpatchedParamSet();
 
 	// Convert percentage to Q31
-	int32_t q31Value = (morph * 4294967296) / 100 - 2147483648;
+	int32_t q31Value = Q31Utils::percentageToQ31(morph);
 	unpatchedParams->params[UNPATCHED_HPF_MORPH].setCurrentValueBasicForSetup(q31Value);
-}
-
-int32_t EffectsController::FilterEffect::getRouting() const {
-	// TODO: Implement routing access - this would require accessing filter engine parameters
-	return routing_;
-}
-
-void EffectsController::FilterEffect::setRouting(int32_t routing) {
-	routing_ = routing;
-	// TODO: Implement routing setting - this would require accessing filter engine parameters
 }
 
 // ============================================================================
