@@ -121,6 +121,9 @@ private:
 	void renderFaderControl(RGB image[][kDisplayWidth + kSideBarWidth], int32_t row, const int32_t* values,
 	                        int32_t lastTouchedPad, RGB activeColor, RGB dimColor);
 
+	/// Display popup with automatic timer
+	void showPopupWithTimer(const char* message);
+
 public:
 	/// Evaluate rhythm pattern to determine if note should play (auto-generated from gate type and pulse count)
 	bool evaluateRhythmPattern(int32_t stage, int32_t pulsePosition);

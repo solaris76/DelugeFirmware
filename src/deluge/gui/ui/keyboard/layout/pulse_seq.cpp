@@ -1544,4 +1544,9 @@ void KeyboardLayoutPulseSeq::renderFaderControl(RGB image[][kDisplayWidth + kSid
 	}
 }
 
+void KeyboardLayoutPulseSeq::showPopupWithTimer(const char* message) {
+	display->displayPopup(message);
+	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
+}
+
 } // namespace deluge::gui::ui::keyboard::layout
