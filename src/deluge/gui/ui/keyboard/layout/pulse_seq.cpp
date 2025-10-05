@@ -97,10 +97,13 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			else if (y == 6 && x >= 8 && x < kDisplayWidth) {
 				handleNoteProbability(x - 8); // 0-7
 			}
-			// y7: Reset button and transpose/octave controls
+			// y7: Reset button, randomize button, and transpose/octave controls
 			else if (y == 7 && x >= 8 && x < kDisplayWidth) {
 				if (x == 8) {
 					resetToDefaults(); // Reset all settings
+				}
+				else if (x == 9) {
+					randomizeSequence(); // Randomize sequence settings
 				}
 				else if (x == 12) {
 					handleTransposeChange(-1); // Transpose -1
@@ -259,7 +262,7 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 
 	// Calculate ticks per period based on clock divider
 	// Use the same sync level as the arpeggiator for consistency
-	uint32_t syncLevel = arpSettings ? arpSettings->syncLevel : 4; // Default to 16th notes if no arp settings
+	uint32_t syncLevel = arpSettings ? arpSettings->syncLevel : 6; // Default to 16th notes if no arp settings
 	uint32_t ticksPerPeriod = 3 << (9 - syncLevel);
 	ticksPerPeriod *= performanceControls.clockDivider; // Scale by clock divider
 	ticksPerPeriod /= 2;                                // Correct timing - was running at half speed
@@ -804,9 +807,11 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 	}
 
-	// y7: Reset button (x8) and transpose/octave controls (x12-15)
+	// y7: Reset button (x8), randomize button (x9), and transpose/octave controls (x12-15)
 	// Reset button - purple
 	image[7][8] = RGB{128, 0, 255}; // Purple reset button
+	// Randomize button - bright magenta
+	image[7][9] = RGB{255, 0, 128}; // Bright magenta randomize button
 
 	// Transpose controls with direction-specific colors
 	if (performanceControls.transpose != 0) {
@@ -1392,7 +1397,7 @@ void KeyboardLayoutPulseSeq::resetToDefaults() {
 			// Reset MIDI/CV parameters directly
 			settings->spreadVelocity = 0;
 			settings->noteProbability = 4294967295u;                   // Max value = 100%
-			settings->syncLevel = static_cast<SyncLevel>(4);           // 16th notes
+			settings->syncLevel = static_cast<SyncLevel>(6);           // 16th notes
 			settings->gate = computeFinalValueForStandardMenuItem(25); // Default gate 25 (50%)
 		}
 	}
@@ -1402,6 +1407,58 @@ void KeyboardLayoutPulseSeq::resetToDefaults() {
 
 	// Show confirmation popup
 	display->displayPopup("RESET TO DEFAULTS");
+	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+
+	// Force UI update
+	displayState.needsRefresh = true;
+}
+
+void KeyboardLayoutPulseSeq::randomizeSequence() {
+	// Get current scale info for note randomization
+	NoteSet& scaleNotes = getScaleNotes();
+	uint8_t scaleNoteCount = getScaleNoteCount();
+
+	// Randomize all stage data (but keep performance controls unchanged)
+	for (int32_t i = 0; i < 8; i++) {
+		// Randomize gate type (avoid OFF for more interesting patterns)
+		int32_t gateTypeIndex = getRandom255() % 3;                    // 0-2 (SINGLE, MULTIPLE, HELD - skip OFF)
+		stages[i].gateType = static_cast<GateType>(gateTypeIndex + 1); // +1 to skip OFF
+
+		// Randomize note index within current scale
+		if (scaleNoteCount > 0) {
+			stages[i].noteIndex = getRandom255() % scaleNoteCount;
+		}
+
+		// Randomize octave (-2 to +3)
+		stages[i].octave = (getRandom255() % 6) - 2; // -2 to +3
+
+		// Randomize pulse count (1-7, with bias toward lower values)
+		uint8_t random = getRandom255();
+		if (random < 128) {
+			stages[i].pulseCount = 1; // 50% chance of 1 pulse
+		}
+		else if (random < 192) {
+			stages[i].pulseCount = 2; // 25% chance of 2 pulses
+		}
+		else if (random < 224) {
+			stages[i].pulseCount = 3; // 12.5% chance of 3 pulses
+		}
+		else if (random < 240) {
+			stages[i].pulseCount = 4; // 6.25% chance of 4 pulses
+		}
+		else {
+			stages[i].pulseCount = (getRandom255() % 3) + 5; // 6.25% chance of 5-7 pulses
+		}
+
+		// Reset accumulator
+		stages[i].accumulator = 0;
+	}
+
+	// Recalculate pattern length
+	sequencerState.totalPatternLength = calculateTotalPatternLength();
+
+	// Show confirmation popup
+	display->displayPopup("SEQUENCE RANDOMIZED");
 	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 
 	// Force UI update

@@ -107,6 +107,9 @@ private:
 	/// Reset all performance controls to default values
 	void resetToDefaults();
 
+	/// Randomize sequence settings (notes, octaves, pulse counts, gate types)
+	void randomizeSequence();
+
 	/// Evaluate rhythm pattern to determine if note should play (auto-generated from gate type and pulse count)
 	bool evaluateRhythmPattern(int32_t stage, int32_t pulsePosition);
 
