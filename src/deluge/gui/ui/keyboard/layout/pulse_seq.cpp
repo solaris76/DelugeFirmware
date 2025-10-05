@@ -1054,18 +1054,15 @@ void KeyboardLayoutPulseSeq::handleVelocitySpread(int32_t x) {
 	// Set velocity spread parameter using helper function
 	setArpParameter(modulation::params::UNPATCHED_SPREAD_VELOCITY, newVelocity, true);
 
-	// Display "OFF" for value 0, otherwise show the value
+	// Display the value with automatic timer
 	if (newVelocity == 0) {
-		display->displayPopup("Vel. Spread: OFF");
+		showPopupWithTimer("Vel. Spread: OFF");
 	}
 	else {
 		char buffer[30];
 		sprintf(buffer, "Vel. Spread: %d", newVelocity);
-		display->displayPopup(buffer);
+		showPopupWithTimer(buffer);
 	}
-
-	// Set custom 2-second timeout for OLED
-	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
@@ -1081,18 +1078,15 @@ void KeyboardLayoutPulseSeq::handleNoteProbability(int32_t x) {
 	// Set note probability parameter using helper function
 	setArpParameter(modulation::params::UNPATCHED_NOTE_PROBABILITY, newProbability, false);
 
-	// Display the percentage (100% = always play, 0% = never play)
+	// Display the percentage with automatic timer
 	if (newProbability == 100) {
-		display->displayPopup("Probability: 100%");
+		showPopupWithTimer("Probability: 100%");
 	}
 	else {
 		char buffer[30];
 		sprintf(buffer, "Probability: %d%%", newProbability);
-		display->displayPopup(buffer);
+		showPopupWithTimer(buffer);
 	}
-
-	// Set custom 2-second timeout for OLED
-	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
@@ -1108,13 +1102,10 @@ void KeyboardLayoutPulseSeq::handleGate(int32_t x) {
 	// Set gate parameter using helper function
 	setArpParameter(modulation::params::UNPATCHED_ARP_GATE, newGate, true);
 
-	// Display the gate value
+	// Display the gate value with automatic timer
 	char buffer[30];
 	sprintf(buffer, "Gate: %d", newGate);
-	display->displayPopup(buffer);
-
-	// Set custom 2-second timeout for OLED
-	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
+	showPopupWithTimer(buffer);
 
 	// Force UI update
 	displayState.needsRefresh = true;
@@ -1127,20 +1118,10 @@ void KeyboardLayoutPulseSeq::handleStageToggle(int32_t stage) {
 	// Toggle the stage enabled state
 	performanceControls.stageEnabled[stage] = !performanceControls.stageEnabled[stage];
 
-	// Display the new state
-	if (performanceControls.stageEnabled[stage]) {
-		char buffer[30];
-		sprintf(buffer, "Stage %d: ON", stage + 1);
-		display->displayPopup(buffer);
-	}
-	else {
-		char buffer[30];
-		sprintf(buffer, "Stage %d: OFF", stage + 1);
-		display->displayPopup(buffer);
-	}
-
-	// Set custom 2-second timeout for OLED
-	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
+	// Display the new state with automatic timer
+	char buffer[30];
+	sprintf(buffer, "Stage %d: %s", stage + 1, performanceControls.stageEnabled[stage] ? "ON" : "OFF");
+	showPopupWithTimer(buffer);
 
 	// Force UI update
 	displayState.needsRefresh = true;
