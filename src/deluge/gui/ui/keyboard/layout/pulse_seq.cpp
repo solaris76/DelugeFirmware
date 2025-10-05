@@ -38,6 +38,10 @@ constexpr int32_t kMaxStages = 8;
 constexpr int32_t kMaxPulseCount = 7;
 constexpr int32_t kPopupTimeoutMs = 2000;
 
+// ================================================================================================
+// MAIN INTERFACE FUNCTIONS
+// ================================================================================================
+
 void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadPresses]) {
 	currentNotesState = NotesState{}; // Reset active notes
 
@@ -226,6 +230,10 @@ void KeyboardLayoutPulseSeq::precalculate() {
 		sequencerState.totalPatternLength = calculateTotalPatternLength();
 	}
 }
+
+// ================================================================================================
+// SEQUENCER ENGINE
+// ================================================================================================
 
 int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed,
                                               ArpReturnInstruction* instruction) {
@@ -610,6 +618,10 @@ void KeyboardLayoutPulseSeq::resetSequencerState() {
 	// All stages start as OFF by default - user must enable them manually
 }
 
+// ================================================================================================
+// VISUAL RENDERING
+// ================================================================================================
+
 void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidth]) {
 	// Clear all pads first
 	for (int32_t y = 0; y < kDisplayHeight; y++) {
@@ -891,6 +903,10 @@ int32_t KeyboardLayoutPulseSeq::getGateLineY() const {
 	return displayState.gateLineOffset + 4; // y4-y7 (bottom left is y0 x0)
 }
 
+// ================================================================================================
+// PERFORMANCE CONTROL HANDLERS
+// ================================================================================================
+
 void KeyboardLayoutPulseSeq::handleGateType(int32_t stage) {
 	if (stage < 0 || stage >= kMaxStages)
 		return; // Gate line only on first 8 columns
@@ -1052,7 +1068,7 @@ void KeyboardLayoutPulseSeq::handleOctaveChange(int32_t direction) {
 void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 	if (stage < 0 || stage >= kMaxStages)
 		return;
-	if (position < 0 || position >= 7)
+	if (position < 0 || position >= kMaxPulseCount)
 		return;
 
 	// Set pulse count to position + 1 (position 0 = pulse count 1, position 6 = pulse count 7)
