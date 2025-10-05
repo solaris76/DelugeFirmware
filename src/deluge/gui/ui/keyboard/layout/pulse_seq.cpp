@@ -137,47 +137,16 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 }
 
 void KeyboardLayoutPulseSeq::handleVerticalEncoder(int32_t offset) {
-	// If a note pad is being held, adjust that stage's accumulator instead of scrolling
-	if (heldNotePad >= 0 && heldNotePad < 8) {
-		// Adjust accumulator value (-7 to +7)
-		int32_t newAccumulator = stages[heldNotePad].accumulator + offset;
+	// Vertical encoder only handles gate line scrolling
+	int32_t newOffset = displayState.gateLineOffset + offset;
+	if (newOffset < 0)
+		newOffset = 0;
+	if (newOffset > 4)
+		newOffset = 4; // 0-4 for proper scrolling range
 
-		// Clamp to range -7 to +7
-		if (newAccumulator < -7)
-			newAccumulator = -7;
-		if (newAccumulator > 7)
-			newAccumulator = 7;
-
-		if (stages[heldNotePad].accumulator != newAccumulator) {
-			stages[heldNotePad].accumulator = newAccumulator;
-
-			// Show accumulator popup
-			if (display->haveOLED()) {
-				char text[30];
-				strcpy(text, "Accumulator: ");
-				if (newAccumulator >= 0) {
-					strcat(text, "+");
-				}
-				intToString(newAccumulator, text + strlen(text));
-				display->displayPopup(text);
-				uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
-			}
-
-			displayState.needsRefresh = true;
-		}
-	}
-	else {
-		// No pad held - scroll the gate line to reveal pulse count pads below
-		int32_t newOffset = displayState.gateLineOffset + offset;
-		if (newOffset < 0)
-			newOffset = 0;
-		if (newOffset > 4)
-			newOffset = 4; // 0-3 maps to y4-y7
-
-		if (newOffset != displayState.gateLineOffset) {
-			displayState.gateLineOffset = newOffset;
-			displayState.needsRefresh = true;
-		}
+	if (newOffset != displayState.gateLineOffset) {
+		displayState.gateLineOffset = newOffset;
+		displayState.needsRefresh = true;
 	}
 }
 
@@ -408,16 +377,8 @@ void KeyboardLayoutPulseSeq::playNoteForStage(ArpReturnInstruction* instruction,
 	// Start from C3 (MIDI note 48) as base octave for better range
 	constexpr int32_t kBaseOctave = 48; // C3
 
-	// Calculate base note index with accumulator applied
-	int32_t noteIndexWithAccumulator = stageData.noteIndex + stageData.accumulator;
-
-	// Wrap around the scale if needed
-	while (noteIndexWithAccumulator < 0)
-		noteIndexWithAccumulator += scaleNoteCount;
-	while (noteIndexWithAccumulator >= scaleNoteCount)
-		noteIndexWithAccumulator -= scaleNoteCount;
-
-	int32_t note = kBaseOctave + getRootNote() + scaleNotes[noteIndexWithAccumulator] + (stageData.octave * kOctaveSize)
+	// Get note from stage's noteIndex (no accumulator)
+	int32_t note = kBaseOctave + getRootNote() + scaleNotes[stageData.noteIndex] + (stageData.octave * kOctaveSize)
 	               + performanceControls.transpose               // Apply transpose (within scale)
 	               + (performanceControls.octave * kOctaveSize); // Apply global octave shift
 
@@ -709,8 +670,8 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 	// Render note selection pads (above gate line) - 8 columns only
 	for (int32_t x = 0; x < 8; x++) {
 		if (gateLineY + 1 < kDisplayHeight) {
-			// Note selection colors - magenta when accumulator is non-zero, pink when zero
-			RGB color = (stages[x].accumulator != 0) ? RGB{255, 0, 255} : RGB{255, 100, 150};
+			// Note selection colors - pink
+			RGB color = RGB{255, 100, 150};
 
 			// Dim if stage is disabled OR beyond active stage count
 			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
@@ -1338,7 +1299,6 @@ void KeyboardLayoutPulseSeq::resetToDefaults() {
 		stages[i].noteIndex = 0;
 		stages[i].octave = 0;
 		stages[i].pulseCount = 1;
-		stages[i].accumulator = 0;
 	}
 
 	// Reset arpeggiator settings to defaults
@@ -1439,9 +1399,6 @@ void KeyboardLayoutPulseSeq::randomizeSequence() {
 		else {
 			stages[i].pulseCount = (getRandom255() % 3) + 5; // 6.25% chance of 5-7 pulses
 		}
-
-		// Reset accumulator
-		stages[i].accumulator = 0;
 	}
 
 	// Recalculate pattern length

@@ -211,10 +211,9 @@ private:
 	// Stage data (8 stages, one per column)
 	struct StageData {
 		GateType gateType = GateType::OFF;
-		int32_t noteIndex = 0;   // Index in current scale
-		int32_t octave = 0;      // Octave offset from base
-		int32_t pulseCount = 1;  // 1-8, default is 1
-		int32_t accumulator = 0; // -7 to +7, pitch accumulator for this stage
+		int32_t noteIndex = 0;  // Index in current scale
+		int32_t octave = 0;     // Octave offset from base
+		int32_t pulseCount = 1; // 1-8, default is 1
 	};
 
 	StageData stages[8];
