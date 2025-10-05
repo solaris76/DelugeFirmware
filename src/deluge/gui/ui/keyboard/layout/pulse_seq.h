@@ -159,7 +159,11 @@ public:
 		FORWARDS = 0,  // 1,2,3,4,5,6,7,8
 		BACKWARDS = 1, // 8,7,6,5,4,3,2,1
 		PING_PONG = 2, // 1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,2,3...
-		RANDOM = 3     // Random order each cycle
+		RANDOM = 3,    // Random order each cycle
+		PEDAL = 4,     // Always return to 1: 1,2,1,3,1,4,1,5,1,6,1,7,1,8
+		SKIP_2 = 5,    // Skip every 2nd: 1,3,5,7,2,4,6,8
+		PENDULUM = 6,  // Swing pattern: 1,2,3,2,3,4,3,4,5,4,5,6,5,6,7,6,7,8
+		SPIRAL = 7     // Spiral inward: 1,8,2,7,3,6,4,5
 	};
 
 	// OLED display helpers
@@ -209,7 +213,7 @@ private:
 		GateType gateType = GateType::OFF;
 		int32_t noteIndex = 0;   // Index in current scale
 		int32_t octave = 0;      // Octave offset from base
-		int32_t pulseCount = 1;  // 1-7, default is 1
+		int32_t pulseCount = 1;  // 1-8, default is 1
 		int32_t accumulator = 0; // -7 to +7, pitch accumulator for this stage
 	};
 

@@ -34,7 +34,7 @@
 namespace deluge::gui::ui::keyboard::layout {
 
 // Constants for better code readability
-constexpr int32_t kMaxPulseCount = 7;
+constexpr int32_t kMaxPulseCount = 8;
 constexpr int32_t kPopupTimeoutMs = 2000;
 
 // ================================================================================================
@@ -171,8 +171,8 @@ void KeyboardLayoutPulseSeq::handleVerticalEncoder(int32_t offset) {
 		int32_t newOffset = displayState.gateLineOffset + offset;
 		if (newOffset < 0)
 			newOffset = 0;
-		if (newOffset > 3)
-			newOffset = 3; // 0-3 maps to y4-y7
+		if (newOffset > 4)
+			newOffset = 4; // 0-3 maps to y4-y7
 
 		if (newOffset != displayState.gateLineOffset) {
 			displayState.gateLineOffset = newOffset;
@@ -747,14 +747,14 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 	// Rhythm pattern selection removed - patterns are auto-generated from gate type and pulse count
 
-	// Render pulse count display (below gate line, 7 pads with gradient on all 8 columns)
-	for (int32_t i = 0; i < 7; i++) {
+	// Render pulse count display (below gate line, 8 pads with gradient on all 8 columns)
+	for (int32_t i = 0; i < 8; i++) {
 		if (gateLineY - 1 - i >= 0) {
 			for (int32_t x = 0; x < 8; x++) {
 				// Inline pulse count color calculation
 				if (i < stages[x].pulseCount) {
-					// Active pulse positions - purple/pink to cyan gradient (reversed)
-					int32_t intensity = ((6 - i) * 255) / 6;
+					// Active pulse positions - cyan to purple/pink gradient (reversed)
+					int32_t intensity = (i * 255) / 7;
 					RGB color = RGB{static_cast<uint8_t>(intensity), static_cast<uint8_t>(255 - intensity), 255};
 
 					// Dim if stage is disabled OR beyond active stage count
@@ -807,7 +807,7 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 			image[3][x] = RGB{255, 128, 0}; // Bright orange for enabled stages
 		}
 		else {
-			image[3][x] = RGB{64, 32, 0}; // Dim orange for disabled stages
+			image[3][x] = RGB{0, 0, 0}; // Black for disabled stages
 		}
 	}
 
@@ -964,7 +964,8 @@ void KeyboardLayoutPulseSeq::handlePlayOrderChange(int32_t playOrderIndex) {
 
 		// Show popup
 		if (display->haveOLED()) {
-			const char* orderNames[] = {"FORWARDS", "BACKWARDS", "PING PONG", "RANDOM"};
+			const char* orderNames[] = {"FORWARDS", "BACKWARDS", "PING PONG", "RANDOM",
+			                            "PEDAL",    "SKIP 2",    "PENDULUM",  "SPIRAL"};
 			char text[20];
 			strcpy(text, "Order: ");
 			strcat(text, orderNames[playOrderIndex]);
@@ -1159,7 +1160,7 @@ void KeyboardLayoutPulseSeq::advanceToNextEnabledStage() {
 	case PlayOrder::PING_PONG:
 		direction = performanceControls.pingPongDirection;
 		break;
-	case PlayOrder::RANDOM:
+	case PlayOrder::RANDOM: {
 		// Handle random separately
 		int32_t enabledStages[8];
 		int32_t enabledCount = 0;
@@ -1173,6 +1174,95 @@ void KeyboardLayoutPulseSeq::advanceToNextEnabledStage() {
 		if (enabledCount > 0) {
 			int32_t randomIndex = getRandom255() % enabledCount;
 			performanceControls.currentStage = enabledStages[randomIndex];
+		}
+		return;
+	}
+
+	case PlayOrder::PEDAL:
+		// Always return to stage 1: 1,2,1,3,1,4,1,5,1,6,1,7,1,8
+		if (performanceControls.currentStage == 0) {
+			// From stage 1, go to next stage
+			performanceControls.currentStage = (performanceControls.currentStage + 1) % performanceControls.numStages;
+		}
+		else {
+			// From any other stage, return to stage 1
+			performanceControls.currentStage = 0;
+		}
+		return;
+
+	case PlayOrder::SKIP_2:
+		// Skip every 2nd: 1,3,5,7,2,4,6,8
+		{
+			static bool oddPhase = true;
+			if (oddPhase) {
+				// Odd stages: 1,3,5,7
+				performanceControls.currentStage += 2;
+				if (performanceControls.currentStage >= performanceControls.numStages) {
+					performanceControls.currentStage = 1; // Start even phase at stage 2
+					oddPhase = false;
+				}
+			}
+			else {
+				// Even stages: 2,4,6,8
+				performanceControls.currentStage += 2;
+				if (performanceControls.currentStage >= performanceControls.numStages) {
+					performanceControls.currentStage = 0; // Back to stage 1
+					oddPhase = true;
+				}
+			}
+		}
+		return;
+
+	case PlayOrder::PENDULUM:
+		// Swing pattern: 1,2,3,2,3,4,3,4,5,4,5,6,5,6,7,6,7,8
+		{
+			static int32_t pendulumDirection = 1;
+			static int32_t pendulumCenter = 1;
+
+			if (performanceControls.currentStage == pendulumCenter) {
+				// At center, move to next position
+				performanceControls.currentStage += pendulumDirection;
+			}
+			else {
+				// Not at center, return to center or advance center
+				if (pendulumDirection == 1 && performanceControls.currentStage == pendulumCenter + 1) {
+					// Advance center and continue forward
+					pendulumCenter++;
+					if (pendulumCenter >= performanceControls.numStages - 1) {
+						pendulumCenter = 0;
+					}
+					performanceControls.currentStage = pendulumCenter;
+				}
+				else {
+					performanceControls.currentStage = pendulumCenter;
+				}
+			}
+		}
+		return;
+
+	case PlayOrder::SPIRAL:
+		// Spiral inward: 1,8,2,7,3,6,4,5
+		{
+			static int32_t spiralLow = 0;
+			static int32_t spiralHigh = 7;
+			static bool spiralFromLow = true;
+
+			if (spiralFromLow) {
+				performanceControls.currentStage = spiralLow;
+				spiralLow++;
+				spiralFromLow = false;
+			}
+			else {
+				performanceControls.currentStage = spiralHigh;
+				spiralHigh--;
+				spiralFromLow = true;
+			}
+
+			// Reset when spiral meets in middle
+			if (spiralLow > spiralHigh) {
+				spiralLow = 0;
+				spiralHigh = performanceControls.numStages - 1;
+			}
 		}
 		return;
 	}
