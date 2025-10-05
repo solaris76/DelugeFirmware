@@ -110,6 +110,9 @@ private:
 	/// Randomize sequence settings (notes, octaves, pulse counts, gate types)
 	void randomizeSequence();
 
+	/// Evolve sequence with subtle changes to notes only
+	void evolveSequence();
+
 	/// Evaluate rhythm pattern to determine if note should play (auto-generated from gate type and pulse count)
 	bool evaluateRhythmPattern(int32_t stage, int32_t pulsePosition);
 
@@ -200,7 +203,7 @@ private:
 	struct {
 		int32_t transpose = 0;    // Pre-scale transpose
 		int32_t octave = 0;       // Octave shift
-		int32_t clockDivider = 1; // Clock divider (1=16th, 2=8th, 4=quarter, 8=half, 16=whole, 32=double)
+		int32_t clockDivider = 2; // Clock divider (/1=32nd, /2=16th, /4=8th, /8=qtr, /16=half, /32=whole)
 		int32_t numStages = 8;    // Number of active stages (1-8)
 		PlayOrder playOrder = PlayOrder::FORWARDS; // Stage play order
 		int32_t pingPongDirection = 1;             // 1 = forwards, -1 = backwards (for ping pong)

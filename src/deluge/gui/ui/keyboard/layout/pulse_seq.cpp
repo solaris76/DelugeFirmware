@@ -97,13 +97,16 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			else if (y == 6 && x >= 8 && x < kDisplayWidth) {
 				handleNoteProbability(x - 8); // 0-7
 			}
-			// y7: Reset button, randomize button, and transpose/octave controls
+			// y7: Reset button, randomize button, evolve button, and transpose/octave controls
 			else if (y == 7 && x >= 8 && x < kDisplayWidth) {
 				if (x == 8) {
 					resetToDefaults(); // Reset all settings
 				}
 				else if (x == 9) {
 					randomizeSequence(); // Randomize sequence settings
+				}
+				else if (x == 10) {
+					evolveSequence(); // Evolve sequence subtly
 				}
 				else if (x == 12) {
 					handleTransposeChange(-1); // Transpose -1
@@ -177,42 +180,31 @@ void KeyboardLayoutPulseSeq::handleHorizontalEncoder(int32_t offset, bool shiftE
 		return;
 	}
 
-	// Clock divider control: 1 (32nd) to 32 (whole note)
-	// Powers of 2: 1, 2, 4, 8, 16, 32
+	// Clock divider control: 1 (/1 = 32nd notes) to 64 (/64 = ultra slow)
+	// Incremental: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10... up to 64
 	int32_t newDivider = performanceControls.clockDivider;
 
 	if (offset > 0) {
 		// Increase divider (slower tempo)
-		if (newDivider < 32) {
-			newDivider *= 2;
+		if (newDivider < 64) {
+			newDivider++;
 		}
 	}
 	else if (offset < 0) {
 		// Decrease divider (faster tempo)
 		if (newDivider > 1) {
-			newDivider /= 2;
+			newDivider--;
 		}
 	}
 
 	if (newDivider != performanceControls.clockDivider) {
 		performanceControls.clockDivider = newDivider;
 
-		// Show popup with clock divider name
+		// Show popup with clock divider as fraction (all values 1-64)
 		if (display->haveOLED()) {
-			const char* dividerNames[] = {"32nd Notes",    "16th Notes", "8th Notes",
-			                              "Quarter Notes", "Half Notes", "Whole Notes"};
-			// Map divider to array index: 1->0, 2->1, 4->2, 8->3, 16->4, 32->5
-			int32_t nameIndex = 0;
-			int32_t tempDiv = newDivider;
-			while (tempDiv > 1) {
-				nameIndex++;
-				tempDiv /= 2;
-			}
-
-			char text[30];
-			strcpy(text, "Clock: ");
-			strcat(text, dividerNames[nameIndex]);
-			display->displayPopup(text);
+			char text[20];
+			sprintf(text, "Clock: /%d", newDivider);
+			display->popupText(text);
 
 			// Set custom 2-second timeout for OLED
 			uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
@@ -264,7 +256,7 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 	// Use the same sync level as the arpeggiator for consistency
 	uint32_t syncLevel = arpSettings ? arpSettings->syncLevel : 6; // Default to 16th notes if no arp settings
 	uint32_t ticksPerPeriod = 3 << (9 - syncLevel);
-	ticksPerPeriod *= performanceControls.clockDivider; // Scale by clock divider
+	ticksPerPeriod *= performanceControls.clockDivider; // Clock divider - multiply to make slower
 	ticksPerPeriod /= 2;                                // Correct timing - was running at half speed
 
 	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
@@ -289,7 +281,17 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 		if (sequencerState.noteActive[n]) {
 			sequencerState.noteGatePos[n]++;
 
-			if (sequencerState.noteGatePos[n] >= gateLength) {
+			// Check if this note should be turned off
+			uint32_t noteGateLength = gateLength;
+
+			// For HELD gate types, extend gate length to cover entire stage
+			int32_t currentStage = performanceControls.currentStage;
+			if (currentStage >= 0 && currentStage < 8 && stages[currentStage].gateType == GateType::HELD) {
+				// Calculate gate length for entire stage duration
+				noteGateLength = (ticksPerPeriod * stages[currentStage].pulseCount) / 2;
+			}
+
+			if (sequencerState.noteGatePos[n] >= noteGateLength) {
 				switchNoteOff(instruction, n);
 			}
 		}
@@ -758,19 +760,22 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 	}
 
-	// y2: Gate control (x8-15) - Green with intensity based on value
+	// y2: Gate control (x8-15) - Green fader (5 left, 50 right)
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
 		int32_t padIndex = x - 8;
-		int32_t gateValue = performanceControls.gateValues[padIndex];
-
-		// Scale brightness based on gate value (5-50 maps to dim-bright)
-		uint8_t intensity = (gateValue * 255) / 50; // Scale 5-50 to brightness
+		int32_t currentGate = performanceControls.lastTouchedGatePad >= 0
+		                          ? performanceControls.gateValues[performanceControls.lastTouchedGatePad]
+		                          : 25;
+		int32_t thisPadGate = performanceControls.gateValues[padIndex];
 
 		if (performanceControls.lastTouchedGatePad == padIndex) {
 			image[2][x] = RGB{0, 255, 0}; // Bright green for selected
 		}
+		else if (thisPadGate <= currentGate) {
+			image[2][x] = RGB{0, 128, 0}; // Dim green for active range
+		}
 		else {
-			image[2][x] = RGB{0, intensity, 0}; // Green intensity based on gate value
+			image[2][x] = RGB{0, 0, 0}; // Black for inactive range (fader effect)
 		}
 	}
 
@@ -785,33 +790,53 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 	}
 
-	// y5: Velocity spread control (x8-15) - Light blue
+	// y5: Velocity spread control (x8-15) - Light blue fader (0 left, 50 right)
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
 		int32_t padIndex = x - 8;
+		int32_t currentVelocity =
+		    performanceControls.lastTouchedVelocityPad >= 0
+		        ? performanceControls.velocitySpreadValues[performanceControls.lastTouchedVelocityPad]
+		        : 0;
+		int32_t thisPadVelocity = performanceControls.velocitySpreadValues[padIndex];
+
 		if (performanceControls.lastTouchedVelocityPad == padIndex) {
 			image[5][x] = RGB{100, 200, 255}; // Bright light blue for selected
 		}
+		else if (thisPadVelocity <= currentVelocity) {
+			image[5][x] = RGB{50, 100, 128}; // Dim light blue for active range
+		}
 		else {
-			image[5][x] = RGB{50, 100, 128}; // Dim light blue for others
+			image[5][x] = RGB{0, 0, 0}; // Black for inactive range (fader effect)
 		}
 	}
 
-	// y6: Note probability control (x8-15) - Blue
+	// y6: Note probability control (x8-15) - Blue fader (0% left, 100% right)
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
 		int32_t padIndex = x - 8;
+		int32_t currentProbability =
+		    performanceControls.lastTouchedProbabilityPad >= 0
+		        ? performanceControls.noteProbabilityValues[performanceControls.lastTouchedProbabilityPad]
+		        : 100;
+		int32_t thisPadProbability = performanceControls.noteProbabilityValues[padIndex];
+
 		if (performanceControls.lastTouchedProbabilityPad == padIndex) {
-			image[6][x] = RGB{0, 100, 255}; // Bright blue for selected
+			image[6][x] = RGB{0, 150, 255}; // Bright blue for selected
+		}
+		else if (thisPadProbability <= currentProbability) {
+			image[6][x] = RGB{0, 75, 128}; // Dim blue for active range
 		}
 		else {
-			image[6][x] = RGB{0, 50, 128}; // Dim blue for others
+			image[6][x] = RGB{0, 0, 0}; // Black for inactive range (fader effect)
 		}
 	}
 
-	// y7: Reset button (x8), randomize button (x9), and transpose/octave controls (x12-15)
+	// y7: Reset button (x8), randomize button (x9), evolve button (x10), and transpose/octave controls (x12-15)
 	// Reset button - purple
 	image[7][8] = RGB{128, 0, 255}; // Purple reset button
 	// Randomize button - bright magenta
 	image[7][9] = RGB{255, 0, 128}; // Bright magenta randomize button
+	// Evolve button - cyan
+	image[7][10] = RGB{0, 255, 255}; // Cyan evolve button
 
 	// Transpose controls with direction-specific colors
 	if (performanceControls.transpose != 0) {
@@ -1329,7 +1354,7 @@ void KeyboardLayoutPulseSeq::resetToDefaults() {
 	// Reset all performance controls to default values
 	performanceControls.transpose = 0;
 	performanceControls.octave = 0;
-	performanceControls.clockDivider = 1;
+	performanceControls.clockDivider = 2;
 	performanceControls.numStages = 8;
 	performanceControls.playOrder = PlayOrder::FORWARDS;
 	performanceControls.pingPongDirection = 1;
@@ -1459,6 +1484,58 @@ void KeyboardLayoutPulseSeq::randomizeSequence() {
 
 	// Show confirmation popup
 	display->displayPopup("SEQUENCE RANDOMIZED");
+	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+
+	// Force UI update
+	displayState.needsRefresh = true;
+}
+
+void KeyboardLayoutPulseSeq::evolveSequence() {
+	// Get current scale info for note evolution
+	NoteSet& scaleNotes = getScaleNotes();
+	uint8_t scaleNoteCount = getScaleNoteCount();
+
+	// Evolve sequence with subtle changes (only modify some stages)
+	int32_t numStagesToChange = (getRandom255() % 4) + 1; // Change 1-4 stages randomly
+
+	for (int32_t change = 0; change < numStagesToChange; change++) {
+		int32_t stageToChange = getRandom255() % 8; // Pick random stage
+
+		// 70% chance to change note, 30% chance to change octave
+		if (getRandom255() < 179) { // 70% chance (179/255)
+			// Evolve note within a small range (±2 semitones in scale)
+			if (scaleNoteCount > 0) {
+				int32_t currentNote = stages[stageToChange].noteIndex;
+				int32_t noteChange = (getRandom255() % 5) - 2; // -2 to +2
+				int32_t newNote = currentNote + noteChange;
+
+				// Wrap around scale
+				while (newNote < 0)
+					newNote += scaleNoteCount;
+				while (newNote >= scaleNoteCount)
+					newNote -= scaleNoteCount;
+
+				stages[stageToChange].noteIndex = newNote;
+			}
+		}
+		else {
+			// Evolve octave within a small range (±1 octave)
+			int32_t currentOctave = stages[stageToChange].octave;
+			int32_t octaveChange = (getRandom255() < 128) ? -1 : 1; // 50/50 chance up/down
+			int32_t newOctave = currentOctave + octaveChange;
+
+			// Keep within reasonable bounds
+			if (newOctave < -2)
+				newOctave = -2;
+			if (newOctave > 3)
+				newOctave = 3;
+
+			stages[stageToChange].octave = newOctave;
+		}
+	}
+
+	// Show confirmation popup
+	display->displayPopup("SEQUENCE EVOLVED");
 	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 
 	// Force UI update
