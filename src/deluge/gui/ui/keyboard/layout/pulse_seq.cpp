@@ -34,7 +34,6 @@
 namespace deluge::gui::ui::keyboard::layout {
 
 // Constants for better code readability
-constexpr int32_t kMaxStages = 8;
 constexpr int32_t kMaxPulseCount = 7;
 constexpr int32_t kPopupTimeoutMs = 2000;
 

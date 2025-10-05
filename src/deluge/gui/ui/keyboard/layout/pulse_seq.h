@@ -26,6 +26,9 @@ class Arpeggiator;
 
 namespace deluge::gui::ui::keyboard::layout {
 
+// Constants
+constexpr int32_t kMaxStages = 8;
+
 /// Pulse sequence keyboard layout for creating rhythmic pulse patterns
 class KeyboardLayoutPulseSeq : public ColumnControlsKeyboard {
 public:
