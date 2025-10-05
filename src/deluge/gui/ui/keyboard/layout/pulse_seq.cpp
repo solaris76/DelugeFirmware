@@ -77,12 +77,12 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			else if (y == 4 && x >= 8 && x < kDisplayWidth) {
 				handleStageCountChange(x - 7); // 1-8
 			}
-			// y3: Play order presets
-			else if (y == 3 && x >= 8 && x < 12) {
+			// y2: Play order presets
+			else if (y == 2 && x >= 8 && x < 12) {
 				handlePlayOrderChange(x - 8); // 0-3
 			}
-			// y2: Stage enable/disable toggle (x8-15)
-			else if (y == 2 && x >= 8 && x < kDisplayWidth) {
+			// y3: Stage enable/disable toggle (x8-15)
+			else if (y == 3 && x >= 8 && x < kDisplayWidth) {
 				handleStageToggle(x - 8); // 0-7
 			}
 			// y5: Velocity spread control (x8-15)
@@ -228,12 +228,27 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 		return 2147483647; // No timing support when arpeggiator is on
 	}
 
-	// Only reset sequencer once when first called, not on every bar/clip loop
+	// Handle playback start/stop detection
 	static bool hasBeenInitialized = false;
+	static bool wasPlayingLastTime = false;
+	bool isCurrentlyPlaying = (clipCurrentPos > 0);
+
 	if (!hasBeenInitialized) {
 		resetSequencerState();
 		hasBeenInitialized = true;
+		wasPlayingLastTime = isCurrentlyPlaying;
 	}
+	else if (wasPlayingLastTime && !isCurrentlyPlaying) {
+		// Playback just stopped - send all notes off
+		sendAllNotesOff();
+		sequencerState.isPlaying = false;
+	}
+	else if (!wasPlayingLastTime && isCurrentlyPlaying) {
+		// Playback just started
+		sequencerState.isPlaying = true;
+	}
+
+	wasPlayingLastTime = isCurrentlyPlaying;
 
 	// Calculate ticks per period based on clock divider
 	// Use the same sync level as the arpeggiator for consistency
@@ -655,9 +670,9 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 			// Dim the color if stage is disabled OR beyond active stage count
 			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
-				color.r /= 4;
-				color.g /= 4;
-				color.b /= 4;
+				color.r /= 8;
+				color.g /= 8;
+				color.b /= 8;
 			}
 
 			image[gateLineY][x] = color;
@@ -672,9 +687,9 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 			// Dim if stage is disabled OR beyond active stage count
 			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
-				color.r /= 4;
-				color.g /= 4;
-				color.b /= 4;
+				color.r /= 8;
+				color.g /= 8;
+				color.b /= 8;
 			}
 
 			image[gateLineY + 1][x] = color;
@@ -686,18 +701,18 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		if (gateLineY + 2 < kDisplayHeight) {
 			RGB color = RGB{100, 150, 255}; // Octave down
 			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
-				color.r /= 4;
-				color.g /= 4;
-				color.b /= 4;
+				color.r /= 8;
+				color.g /= 8;
+				color.b /= 8;
 			}
 			image[gateLineY + 2][x] = color;
 		}
 		if (gateLineY + 3 < kDisplayHeight) {
 			RGB color = RGB{100, 150, 255}; // Octave up
 			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
-				color.r /= 4;
-				color.g /= 4;
-				color.b /= 4;
+				color.r /= 8;
+				color.g /= 8;
+				color.b /= 8;
 			}
 			image[gateLineY + 3][x] = color;
 		}
@@ -717,9 +732,9 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 
 					// Dim if stage is disabled OR beyond active stage count
 					if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
-						color.r /= 4;
-						color.g /= 4;
-						color.b /= 4;
+						color.r /= 8;
+						color.g /= 8;
+						color.b /= 8;
 					}
 
 					image[gateLineY - 1 - i][x] = color;
@@ -736,32 +751,32 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
 		int32_t stageNum = x - 7; // 1-8 (x8=stage1, x15=stage8)
 		if (stageNum <= performanceControls.numStages) {
-			image[4][x] = RGB{0, 100, 200}; // Blue (active stages)
+			image[4][x] = RGB{255, 255, 0}; // Yellow (active stages)
 		}
 		else {
 			image[4][x] = RGB{0, 0, 0}; // Black (inactive stages)
 		}
 	}
 
-	// y3: Play order presets - 4 pads (x8-11)
+	// y2: Play order presets - 4 pads (x8-11)
 	for (int32_t x = 8; x < 12; x++) {
 		// Play order colors - highlight selected, dim others
 		if (static_cast<int32_t>(performanceControls.playOrder) == (x - 8)) {
-			image[3][x] = RGB{0, 255, 255}; // Bright cyan for selected
+			image[2][x] = RGB{0, 255, 255}; // Bright cyan for selected
 		}
 		else {
-			image[3][x] = RGB{0, 128, 128}; // Dim cyan for others
+			image[2][x] = RGB{0, 128, 128}; // Dim cyan for others
 		}
 	}
 
-	// y2: Stage enable/disable toggle (x8-15) - Orange
+	// y3: Stage enable/disable toggle (x8-15) - Orange
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
 		int32_t stageIndex = x - 8;
 		if (performanceControls.stageEnabled[stageIndex]) {
-			image[2][x] = RGB{255, 128, 0}; // Bright orange for enabled stages
+			image[3][x] = RGB{255, 128, 0}; // Bright orange for enabled stages
 		}
 		else {
-			image[2][x] = RGB{64, 32, 0}; // Dim orange for disabled stages
+			image[3][x] = RGB{64, 32, 0}; // Dim orange for disabled stages
 		}
 	}
 
@@ -889,11 +904,6 @@ void KeyboardLayoutPulseSeq::handleStageCountChange(int32_t numStages) {
 	if (performanceControls.numStages != numStages) {
 		performanceControls.numStages = numStages;
 
-		// Debug: see what's happening
-		char debugMsg[50];
-		sprintf(debugMsg, "Stage count: %d->%d", performanceControls.numStages, numStages);
-		display->displayPopup(debugMsg);
-
 		// Recalculate total pattern length when stage count changes
 		sequencerState.totalPatternLength = calculateTotalPatternLength();
 
@@ -903,6 +913,9 @@ void KeyboardLayoutPulseSeq::handleStageCountChange(int32_t numStages) {
 			strcpy(text, "Stages: ");
 			intToString(numStages, text + strlen(text));
 			display->popupText(text);
+
+			// Set custom 2-second timeout for OLED
+			uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 		}
 
 		displayState.needsRefresh = true;
@@ -1094,9 +1107,40 @@ void KeyboardLayoutPulseSeq::handleNoteProbability(int32_t x) {
 	// Get arpeggiator settings to apply note probability
 	ArpeggiatorSettings* settings = getArpSettings();
 	if (settings) {
-		// Use the same scaling as the official menu system
-		int32_t scaledValue = computeFinalValueForUnsignedMenuItem(newProbability);
-		settings->noteProbability = scaledValue;
+		// Check output type to determine which approach to use
+		OutputType outputType = getCurrentOutputType();
+
+		if (outputType == OutputType::SYNTH) {
+			// Use soundEditor.setup() for synth tracks (works properly)
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip) {
+				UI* originalUI = getCurrentUI();
+
+				// Set up sound editor context like the official menu
+				if (soundEditor.setup(clip, nullptr, 0)) {
+					// Now we're in sound editor context - use the official approach
+					char modelStackMemory[MODEL_STACK_MAX_SIZE];
+					ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+					ModelStackWithAutoParam* modelStackWithParam =
+					    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_NOTE_PROBABILITY);
+
+					if (modelStackWithParam && modelStackWithParam->autoParam) {
+						// Use unsigned scaling like the menu system
+						int32_t finalValue = computeFinalValueForUnsignedMenuItem(newProbability);
+						modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue,
+						                                                                     modelStackWithParam);
+					}
+
+					// Exit sound editor context back to original UI
+					originalUI->focusRegained();
+				}
+			}
+		}
+		else {
+			// For MIDI/CV tracks, use direct parameter setting
+			int32_t scaledValue = computeFinalValueForUnsignedMenuItem(newProbability);
+			settings->noteProbability = scaledValue;
+		}
 	}
 
 	// Display the percentage (100% = always play, 0% = never play)
