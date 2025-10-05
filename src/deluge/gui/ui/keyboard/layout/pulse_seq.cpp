@@ -284,12 +284,14 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 			// Check if this note should be turned off
 			uint32_t noteGateLength = gateLength;
 
-			// For HELD gate types, extend gate length to cover entire stage
-			int32_t currentStage = performanceControls.currentStage;
-			if (currentStage >= 0 && currentStage < 8 && stages[currentStage].gateType == GateType::HELD) {
-				// Calculate gate length for entire stage duration
-				// Each pulse in the stage lasts ticksPerPeriod ticks
-				noteGateLength = ticksPerPeriod * stages[currentStage].pulseCount;
+			// Use the source stage that triggered this note for gate calculation
+			int32_t sourceStage = sequencerState.noteSourceStage[n];
+			if (sourceStage >= 0 && sourceStage < 8) {
+				if (stages[sourceStage].gateType == GateType::HELD) {
+					// For HELD gate types, extend gate length to cover entire stage duration
+					noteGateLength = ticksPerPeriod * stages[sourceStage].pulseCount;
+				}
+				// For other gate types, use normal gate length (already set above)
 			}
 
 			if (sequencerState.noteGatePos[n] >= noteGateLength) {
@@ -433,6 +435,7 @@ void KeyboardLayoutPulseSeq::playNoteForStage(ArpReturnInstruction* instruction,
 	sequencerState.noteActive[noteSlot] = true;
 	sequencerState.noteGatePos[noteSlot] = 0;
 	sequencerState.noteCodeCurrentlyOnPostArp[noteSlot] = note;
+	sequencerState.noteSourceStage[noteSlot] = stage; // Track which stage triggered this note
 }
 
 void KeyboardLayoutPulseSeq::switchNoteOff(ArpReturnInstruction* instruction, int32_t noteSlot) {

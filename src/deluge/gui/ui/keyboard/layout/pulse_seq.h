@@ -181,8 +181,9 @@ private:
 		// Per-note tracking for proper note-off handling
 		std::array<int16_t, ARP_MAX_INSTRUCTION_NOTES> noteCodeCurrentlyOnPostArp = {ARP_NOTE_NONE};
 		std::array<uint8_t, ARP_MAX_INSTRUCTION_NOTES> outputMIDIChannelForNoteCurrentlyOnPostArp = {MIDI_CHANNEL_NONE};
-		std::array<uint32_t, ARP_MAX_INSTRUCTION_NOTES> noteGatePos = {0}; // Track gate position for each note
-		std::array<bool, ARP_MAX_INSTRUCTION_NOTES> noteActive = {false};  // Track if each note is active
+		std::array<uint32_t, ARP_MAX_INSTRUCTION_NOTES> noteGatePos = {0};     // Track gate position for each note
+		std::array<bool, ARP_MAX_INSTRUCTION_NOTES> noteActive = {false};      // Track if each note is active
+		std::array<int32_t, ARP_MAX_INSTRUCTION_NOTES> noteSourceStage = {-1}; // Track which stage triggered each note
 	} sequencerState;
 
 	// Stage data (8 stages, one per column)
