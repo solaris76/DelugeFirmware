@@ -75,8 +75,8 @@ KeyboardScreen::KeyboardScreen() {
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeChord] = &keyboard_layout_chord;
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeChordLibrary] = &keyboard_layout_chord_library;
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeDrums] = &keyboard_layout_velocity_drums;
-	layout_list[KeyboardLayoutType::KeyboardLayoutTypeNorns] = &keyboard_layout_norns;
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq] = &keyboard_layout_pulse_seq;
+	layout_list[KeyboardLayoutType::KeyboardLayoutTypeNorns] = &keyboard_layout_norns;
 
 	memset(&pressedPads, 0, sizeof(pressedPads));
 	currentNotesState = {0};
