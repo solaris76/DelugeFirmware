@@ -33,6 +33,11 @@
 
 namespace deluge::gui::ui::keyboard::layout {
 
+// Constants for better code readability
+constexpr int32_t kMaxStages = 8;
+constexpr int32_t kMaxPulseCount = 7;
+constexpr int32_t kPopupTimeoutMs = 2000;
+
 void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadPresses]) {
 	currentNotesState = NotesState{}; // Reset active notes
 
@@ -152,7 +157,7 @@ void KeyboardLayoutPulseSeq::handleVerticalEncoder(int32_t offset) {
 				}
 				intToString(newAccumulator, text + strlen(text));
 				display->displayPopup(text);
-				uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+				uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 			}
 
 			displayState.needsRefresh = true;
@@ -207,7 +212,7 @@ void KeyboardLayoutPulseSeq::handleHorizontalEncoder(int32_t offset, bool shiftE
 			display->popupText(text);
 
 			// Set custom 2-second timeout for OLED
-			uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+			uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 		}
 
 		displayState.needsRefresh = true;
@@ -484,7 +489,7 @@ void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction)
 
 // OLED display helpers
 void KeyboardLayoutPulseSeq::displayGateTypePopup(int32_t stage) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return;
 
 	const char* gateTypeName = getGateTypeName(stages[stage].gateType);
@@ -495,12 +500,12 @@ void KeyboardLayoutPulseSeq::displayGateTypePopup(int32_t stage) {
 
 	// Set custom 2-second timeout for OLED
 	if (display->haveOLED()) {
-		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+		uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 	}
 }
 
 void KeyboardLayoutPulseSeq::displayNotePopup(int32_t stage) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return;
 
 	const char* noteName = getNoteName(stages[stage].noteIndex, stages[stage].octave);
@@ -511,12 +516,12 @@ void KeyboardLayoutPulseSeq::displayNotePopup(int32_t stage) {
 
 	// Set custom 2-second timeout for OLED
 	if (display->haveOLED()) {
-		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+		uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 	}
 }
 
 void KeyboardLayoutPulseSeq::displayOctavePopup(int32_t stage, int32_t direction) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return;
 
 	const char* noteName = getNoteName(stages[stage].noteIndex, stages[stage].octave);
@@ -527,12 +532,12 @@ void KeyboardLayoutPulseSeq::displayOctavePopup(int32_t stage, int32_t direction
 
 	// Set custom 2-second timeout for OLED
 	if (display->haveOLED()) {
-		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+		uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 	}
 }
 
 void KeyboardLayoutPulseSeq::displayPulseCountPopup(int32_t stage) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return;
 
 	char buffer[32];
@@ -542,7 +547,7 @@ void KeyboardLayoutPulseSeq::displayPulseCountPopup(int32_t stage) {
 
 	// Set custom 2-second timeout for OLED
 	if (display->haveOLED()) {
-		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+		uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 	}
 }
 
@@ -887,7 +892,7 @@ int32_t KeyboardLayoutPulseSeq::getGateLineY() const {
 }
 
 void KeyboardLayoutPulseSeq::handleGateType(int32_t stage) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return; // Gate line only on first 8 columns
 
 	// Cycle through gate types: OFF -> SINGLE -> MULTIPLE -> HELD -> OFF
@@ -900,7 +905,7 @@ void KeyboardLayoutPulseSeq::handleGateType(int32_t stage) {
 }
 
 void KeyboardLayoutPulseSeq::handleNoteSelection(int32_t stage) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return;
 
 	// Get current scale notes
@@ -916,7 +921,7 @@ void KeyboardLayoutPulseSeq::handleNoteSelection(int32_t stage) {
 }
 
 void KeyboardLayoutPulseSeq::handleOctaveAdjustment(int32_t stage, int32_t direction) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return;
 
 	// Adjust octave with reasonable limits
@@ -953,7 +958,7 @@ void KeyboardLayoutPulseSeq::handleStageCountChange(int32_t numStages) {
 			display->popupText(text);
 
 			// Set custom 2-second timeout for OLED
-			uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+			uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 		}
 
 		displayState.needsRefresh = true;
@@ -981,7 +986,7 @@ void KeyboardLayoutPulseSeq::handlePlayOrderChange(int32_t playOrderIndex) {
 			display->popupText(text);
 
 			// Set custom 2-second timeout for OLED
-			uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+			uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 		}
 
 		displayState.needsRefresh = true;
@@ -1010,7 +1015,7 @@ void KeyboardLayoutPulseSeq::handleTransposeChange(int32_t direction) {
 		display->displayPopup(text);
 
 		// Set custom 2-second timeout for OLED
-		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+		uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 	}
 
 	displayState.needsRefresh = true;
@@ -1038,14 +1043,14 @@ void KeyboardLayoutPulseSeq::handleOctaveChange(int32_t direction) {
 		display->displayPopup(text);
 
 		// Set custom 2-second timeout for OLED
-		uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+		uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 	}
 
 	displayState.needsRefresh = true;
 }
 
 void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return;
 	if (position < 0 || position >= 7)
 		return;
@@ -1129,7 +1134,7 @@ void KeyboardLayoutPulseSeq::handleVelocitySpread(int32_t x) {
 	}
 
 	// Set custom 2-second timeout for OLED
-	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
@@ -1192,7 +1197,7 @@ void KeyboardLayoutPulseSeq::handleNoteProbability(int32_t x) {
 	}
 
 	// Set custom 2-second timeout for OLED
-	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
@@ -1250,14 +1255,14 @@ void KeyboardLayoutPulseSeq::handleGate(int32_t x) {
 	display->displayPopup(buffer);
 
 	// Set custom 2-second timeout for OLED
-	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
 }
 
 void KeyboardLayoutPulseSeq::handleStageToggle(int32_t stage) {
-	if (stage < 0 || stage >= 8)
+	if (stage < 0 || stage >= kMaxStages)
 		return;
 
 	// Toggle the stage enabled state
@@ -1276,7 +1281,7 @@ void KeyboardLayoutPulseSeq::handleStageToggle(int32_t stage) {
 	}
 
 	// Set custom 2-second timeout for OLED
-	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
@@ -1435,7 +1440,7 @@ void KeyboardLayoutPulseSeq::resetToDefaults() {
 
 	// Show confirmation popup
 	display->displayPopup("RESET TO DEFAULTS");
-	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
@@ -1487,7 +1492,7 @@ void KeyboardLayoutPulseSeq::randomizeSequence() {
 
 	// Show confirmation popup
 	display->displayPopup("SEQUENCE RANDOMIZED");
-	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
@@ -1539,7 +1544,7 @@ void KeyboardLayoutPulseSeq::evolveSequence() {
 
 	// Show confirmation popup
 	display->displayPopup("SEQUENCE EVOLVED");
-	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+	uiTimerManager.setTimer(TimerName::DISPLAY, kPopupTimeoutMs);
 
 	// Force UI update
 	displayState.needsRefresh = true;
