@@ -228,6 +228,18 @@ void KeyboardLayoutPulseSeq::precalculate() {
 	if (sequencerState.totalPatternLength == 8) {
 		sequencerState.totalPatternLength = calculateTotalPatternLength();
 	}
+
+	// Ensure safe initialization of all state
+	if (performanceControls.currentStage < 0 || performanceControls.currentStage >= kMaxStages) {
+		performanceControls.currentStage = 0;
+	}
+
+	// Initialize all arrays to safe values
+	for (int32_t i = 0; i < ARP_MAX_INSTRUCTION_NOTES; i++) {
+		if (sequencerState.noteSourceStage[i] < -1 || sequencerState.noteSourceStage[i] >= kMaxStages) {
+			sequencerState.noteSourceStage[i] = -1;
+		}
+	}
 }
 
 // ================================================================================================
@@ -236,6 +248,11 @@ void KeyboardLayoutPulseSeq::precalculate() {
 
 int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool currentlyPlayingReversed,
                                               ArpReturnInstruction* instruction) {
+	// Safety check - ensure instruction is valid
+	if (!instruction) {
+		return 2147483647;
+	}
+
 	// Only generate notes if arpeggiator is off
 	ArpeggiatorSettings* arpSettings = getArpSettings();
 	if (arpSettings && arpSettings->mode != ArpMode::OFF) {

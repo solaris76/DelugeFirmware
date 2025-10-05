@@ -950,13 +950,27 @@ void KeyboardScreen::notifyPulseSeqTick(uint64_t currentTick) {
 }
 
 int32_t KeyboardScreen::doTickForwardForKeyboardScreen(int32_t currentPos, ArpReturnInstruction* instruction) {
+	// Safety checks
+	if (!instruction) {
+		return 2147483647;
+	}
+
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (!clip) {
+		return 2147483647;
+	}
+
 	// Handle keyboard screen timing for layouts that support it
-	KeyboardLayoutType currentLayoutType = getCurrentInstrumentClip()->keyboardState.currentLayout;
+	KeyboardLayoutType currentLayoutType = clip->keyboardState.currentLayout;
 
 	if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
-		// Call pulse sequencer's timing function
-		return ((layout::KeyboardLayoutPulseSeq*)layout_list[currentLayoutType])
-		    ->doTickForward(currentPos, false, instruction);
+		// Safety check for valid layout index
+		if (currentLayoutType >= 0 && currentLayoutType < KeyboardLayoutType::KeyboardLayoutTypeMaxElement
+		    && layout_list[currentLayoutType]) {
+			// Call pulse sequencer's timing function
+			return ((layout::KeyboardLayoutPulseSeq*)layout_list[currentLayoutType])
+			    ->doTickForward(currentPos, false, instruction);
+		}
 	}
 
 	// Other layouts don't need timing
