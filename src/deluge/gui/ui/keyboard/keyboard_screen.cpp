@@ -18,8 +18,6 @@
 #include "definitions_cxx.hpp"
 #include "extern.h"
 #include "gui/menu_item/multi_range.h"
-#include "gui/menu_item/menu_item.h"
-#include "gui/menu_item/value_scaling.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/ui_timer_manager.h"
@@ -49,12 +47,11 @@
 #include "gui/ui/keyboard/layout/chord_keyboard.h"
 #include "gui/ui/keyboard/layout/chord_library.h"
 #include "gui/ui/keyboard/layout/column_control_state.h"
-#include "gui/ui/keyboard/layout/arp_control.h"
-#include "gui/ui/keyboard/layout/pulse_seq.h"
 #include "gui/ui/keyboard/layout/in_key.h"
 #include "gui/ui/keyboard/layout/isomorphic.h"
 #include "gui/ui/keyboard/layout/norns.h"
 #include "gui/ui/keyboard/layout/piano.h"
+#include "gui/ui/keyboard/layout/pulse_seq.h"
 #include "gui/ui/keyboard/layout/velocity_drums.h"
 
 PLACE_SDRAM_BSS deluge::gui::ui::keyboard::KeyboardScreen keyboardScreen{};
@@ -67,9 +64,8 @@ PLACE_SDRAM_DATA layout::KeyboardLayoutInKey keyboard_layout_in_key{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutPiano keyboard_layout_piano{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutChord keyboard_layout_chord{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutChordLibrary keyboard_layout_chord_library{};
-PLACE_SDRAM_DATA layout::KeyboardLayoutArpControl keyboard_layout_generative{};
-PLACE_SDRAM_DATA layout::KeyboardLayoutPulseSeq keyboard_layout_pulse_seq{};
 PLACE_SDRAM_DATA layout::KeyboardLayoutNorns keyboard_layout_norns{};
+PLACE_SDRAM_DATA layout::KeyboardLayoutPulseSeq keyboard_layout_pulse_seq{};
 PLACE_SDRAM_DATA std::array<KeyboardLayout*, KeyboardLayoutType::KeyboardLayoutTypeMaxElement> layout_list = {nullptr};
 
 KeyboardScreen::KeyboardScreen() {
@@ -79,9 +75,8 @@ KeyboardScreen::KeyboardScreen() {
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeChord] = &keyboard_layout_chord;
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeChordLibrary] = &keyboard_layout_chord_library;
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeDrums] = &keyboard_layout_velocity_drums;
-	layout_list[KeyboardLayoutType::KeyboardLayoutTypeGenerative] = &keyboard_layout_generative;
-	layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq] = &keyboard_layout_pulse_seq;
 	layout_list[KeyboardLayoutType::KeyboardLayoutTypeNorns] = &keyboard_layout_norns;
+	layout_list[KeyboardLayoutType::KeyboardLayoutTypePulseSeq] = &keyboard_layout_pulse_seq;
 
 	memset(&pressedPads, 0, sizeof(pressedPads));
 	currentNotesState = {0};
@@ -573,61 +568,6 @@ ActionResult KeyboardScreen::buttonAction(deluge::hid::Button b, bool on, bool i
 		xEncoderActive = on;
 	}
 
-	// Handle Y encoder button press for rhythm toggle
-	else if (b == Y_ENC && on) {
-		// Pass Y encoder press to current layout if it supports it
-		KeyboardLayoutType currentLayoutType = getCurrentInstrumentClip()->keyboardState.currentLayout;
-		if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypeGenerative) {
-			// Toggle logic: apply current pattern or turn OFF
-			layout::KeyboardLayoutArpControl* arpLayout = (layout::KeyboardLayoutArpControl*)layout_list[currentLayoutType];
-			if (arpLayout->displayState.appliedRhythm == 0) {
-				// Turn ON: apply the currently selected pattern
-				arpLayout->displayState.appliedRhythm = arpLayout->displayState.currentRhythm;
-				display->displayPopup("Rhythm ON");
-			} else {
-				// Turn OFF: keep current pattern for next time
-				arpLayout->displayState.appliedRhythm = 0;
-				display->displayPopup("Rhythm OFF");
-			}
-
-			// Apply the change to the actual arpeggiator
-			InstrumentClip* clip = getCurrentInstrumentClip();
-			if (clip) {
-				ArpeggiatorSettings* settings = &clip->arpSettings;
-
-				// CRITICAL: Always ensure syncLevel is properly set (never 0)
-				if (settings->syncLevel == 0) {
-					settings->syncLevel = (SyncLevel)(8 - currentSong->insideWorldTickMagnitude - currentSong->insideWorldTickMagnitudeOffsetFromBPM);
-				}
-
-				UI* originalUI = getCurrentUI();
-
-				// Set up sound editor context like the official menu
-				if (soundEditor.setup(clip, nullptr, 0)) {
-					// Now we're in sound editor context - use the official approach
-					char modelStackMemory[MODEL_STACK_MAX_SIZE];
-					ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-					ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_RHYTHM);
-
-					if (modelStackWithParam && modelStackWithParam->autoParam) {
-						// Use appliedRhythm for the actual parameter value
-						int32_t finalValue = computeFinalValueForUnsignedMenuItem(arpLayout->displayState.appliedRhythm);
-						modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue, modelStackWithParam);
-					}
-
-					// Exit sound editor context back to original UI
-					originalUI->focusRegained();
-				}
-			}
-
-			// Update display and pads
-			if (display->haveOLED()) {
-				renderUIsForOled();
-			}
-			requestMainPadsRendering();
-		}
-	}
-
 	// Load / kit button if auditioning
 	else if (currentUIMode == UI_MODE_AUDITIONING && ((b == LOAD) || (b == KIT))
 	         && (!playbackHandler.isEitherClockActive() || !playbackHandler.ticksLeftInCountIn)) {
@@ -1002,16 +942,6 @@ void KeyboardScreen::graphicsRoutine() {
 	keyboardTickSquares[kDisplayHeight - 1] = newTickSquare;
 
 	PadLEDs::setTickSquares(keyboardTickSquares, colours);
-
-	// Update current layout animation if it's the generative sequencer or pulse sequencer
-	KeyboardLayoutType currentLayoutType = getCurrentInstrumentClip()->keyboardState.currentLayout;
-	if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypeGenerative) {
-		((layout::KeyboardLayoutArpControl*)layout_list[currentLayoutType])->updateAnimation();
-	}
-	// Pulse sequencer timing now handled by playback_handler, not updateAnimation
-	// else if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
-	// 	((layout::KeyboardLayoutPulseSeq*)layout_list[currentLayoutType])->updateAnimation();
-	// }
 }
 
 void KeyboardScreen::notifyPulseSeqTick(uint64_t currentTick) {
@@ -1020,26 +950,16 @@ void KeyboardScreen::notifyPulseSeqTick(uint64_t currentTick) {
 }
 
 int32_t KeyboardScreen::doTickForwardForKeyboardScreen(int32_t currentPos, ArpReturnInstruction* instruction) {
-	// Handle timing for all keyboard layouts that support it
+	// Handle keyboard screen timing for layouts that support it
 	KeyboardLayoutType currentLayoutType = getCurrentInstrumentClip()->keyboardState.currentLayout;
 
-	// Check if current layout supports timing
-	if (layout_list[currentLayoutType]->supportsTiming()) {
-		// Create our own instruction for the layout
-		ArpReturnInstruction layoutInstruction;
-
-		// Forward to layout's timing method
-		int32_t ticks = layout_list[currentLayoutType]->doTickForward(currentPos, false, &layoutInstruction);
-
-	// If the layout generated a note or note-off, copy it to the main instruction
-	if (layoutInstruction.arpNoteOn != nullptr || layoutInstruction.noteCodeOffPostArp[0] != ARP_NOTE_NONE) {
-		*instruction = layoutInstruction;
+	if (currentLayoutType == KeyboardLayoutType::KeyboardLayoutTypePulseSeq) {
+		// Call pulse sequencer's timing function
+		return ((layout::KeyboardLayoutPulseSeq*)layout_list[currentLayoutType])
+		    ->doTickForward(currentPos, false, instruction);
 	}
 
-		return ticks;
-	}
-
-	// No timing support
+	// Other layouts don't need timing
 	return 2147483647;
 }
 
