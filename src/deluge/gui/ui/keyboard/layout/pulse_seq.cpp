@@ -81,6 +81,18 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			else if (y == 3 && x >= 8 && x < 12) {
 				handlePlayOrderChange(x - 8); // 0-3
 			}
+			// y2: Stage enable/disable toggle (x8-15)
+			else if (y == 2 && x >= 8 && x < kDisplayWidth) {
+				handleStageToggle(x - 8); // 0-7
+			}
+			// y5: Velocity spread control (x8-15)
+			else if (y == 5 && x >= 8 && x < kDisplayWidth) {
+				handleVelocitySpread(x - 8); // 0-7
+			}
+			// y6: Note probability control (x8-15)
+			else if (y == 6 && x >= 8 && x < kDisplayWidth) {
+				handleNoteProbability(x - 8); // 0-7
+			}
 			// y7: Transpose and octave controls
 			else if (y == 7 && x >= 12 && x < kDisplayWidth) {
 				if (x == 12) {
@@ -270,19 +282,14 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 }
 
 void KeyboardLayoutPulseSeq::generateNotes(ArpReturnInstruction* instruction) {
-	// Find which stage this pulse belongs to
-	int32_t stage = findStageForPulse(sequencerState.currentPulse);
+	// Use current stage directly (skip disabled stages completely)
+	int32_t stage = performanceControls.currentStage;
 
-	if (stage >= 0) {
+	if (stage >= 0 && stage < performanceControls.numStages && performanceControls.stageEnabled[stage]) {
 		StageData& stageData = stages[stage];
 
-		// Calculate pulse position within the stage
-		int32_t pulseInStage = 0;
-		int32_t stageStartPulse = 0;
-		for (int32_t i = 0; i < stage; i++) {
-			stageStartPulse += stages[i].pulseCount;
-		}
-		pulseInStage = sequencerState.currentPulse - stageStartPulse;
+		// Calculate pulse position within the current stage
+		int32_t pulseInStage = sequencerState.currentPulse;
 
 		// Use gate type logic to determine if we should play
 		if (evaluateRhythmPattern(stage, pulseInStage)) {
@@ -291,41 +298,14 @@ void KeyboardLayoutPulseSeq::generateNotes(ArpReturnInstruction* instruction) {
 	}
 
 	// Advance visual stage for pad flashing
-	int32_t visualStage = findStageForPulse(sequencerState.currentPulse);
-	sequencerState.lastPlayedStage = visualStage;
+	sequencerState.lastPlayedStage = performanceControls.currentStage;
 
-	// Advance to next pulse based on play order
-	switch (performanceControls.playOrder) {
-	case PlayOrder::FORWARDS:
-		sequencerState.currentPulse++;
-		if (sequencerState.currentPulse >= sequencerState.totalPatternLength) {
-			sequencerState.currentPulse = 0; // Loop back to start
-		}
-		break;
-
-	case PlayOrder::BACKWARDS:
-		sequencerState.currentPulse--;
-		if (sequencerState.currentPulse < 0) {
-			sequencerState.currentPulse = sequencerState.totalPatternLength - 1; // Loop back to end
-		}
-		break;
-
-	case PlayOrder::PING_PONG:
-		sequencerState.currentPulse += performanceControls.pingPongDirection;
-		if (sequencerState.currentPulse >= sequencerState.totalPatternLength) {
-			sequencerState.currentPulse = sequencerState.totalPatternLength - 2; // Back one step
-			performanceControls.pingPongDirection = -1;                          // Reverse direction
-		}
-		else if (sequencerState.currentPulse < 0) {
-			sequencerState.currentPulse = 1;           // Forward one step
-			performanceControls.pingPongDirection = 1; // Forward direction
-		}
-		break;
-
-	case PlayOrder::RANDOM:
-		// Generate random pulse position every step
-		sequencerState.currentPulse = getRandom255() % sequencerState.totalPatternLength;
-		break;
+	// Advance to next pulse within current stage, or next stage
+	sequencerState.currentPulse++;
+	if (sequencerState.currentPulse >= stages[performanceControls.currentStage].pulseCount) {
+		// Finished current stage, move to next enabled stage
+		sequencerState.currentPulse = 0;
+		advanceToNextEnabledStage();
 	}
 }
 
@@ -653,24 +633,34 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 			}
 		}
 		else {
-			// Normal gate type colors
+			// Normal gate type colors - dim if stage is disabled
+			RGB color;
 			switch (stages[x].gateType) {
 			case GateType::OFF:
-				image[gateLineY][x] = RGB{100, 100, 100}; // Dim white
+				color = RGB{100, 100, 100}; // Dim white
 				break;
 			case GateType::SINGLE:
-				image[gateLineY][x] = RGB{0, 255, 0}; // Green
+				color = RGB{0, 255, 0}; // Green
 				break;
 			case GateType::MULTIPLE:
-				image[gateLineY][x] = RGB{0, 0, 255}; // Blue
+				color = RGB{0, 0, 255}; // Blue
 				break;
 			case GateType::HELD:
-				image[gateLineY][x] = RGB{255, 0, 255}; // Magenta
+				color = RGB{255, 0, 255}; // Magenta
 				break;
 			default:
-				image[gateLineY][x] = RGB{0, 0, 0}; // Black
+				color = RGB{0, 0, 0}; // Black
 				break;
 			}
+
+			// Dim the color if stage is disabled OR beyond active stage count
+			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
+				color.r /= 4;
+				color.g /= 4;
+				color.b /= 4;
+			}
+
+			image[gateLineY][x] = color;
 		}
 	}
 
@@ -678,17 +668,38 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 	for (int32_t x = 0; x < 8; x++) {
 		if (gateLineY + 1 < kDisplayHeight) {
 			// Note selection colors - magenta when accumulator is non-zero, pink when zero
-			image[gateLineY + 1][x] = (stages[x].accumulator != 0) ? RGB{255, 0, 255} : RGB{255, 100, 150};
+			RGB color = (stages[x].accumulator != 0) ? RGB{255, 0, 255} : RGB{255, 100, 150};
+
+			// Dim if stage is disabled OR beyond active stage count
+			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
+				color.r /= 4;
+				color.g /= 4;
+				color.b /= 4;
+			}
+
+			image[gateLineY + 1][x] = color;
 		}
 	}
 
 	// Render octave controls (above note selection) - 8 columns only
 	for (int32_t x = 0; x < 8; x++) {
 		if (gateLineY + 2 < kDisplayHeight) {
-			image[gateLineY + 2][x] = RGB{100, 150, 255}; // Octave down
+			RGB color = RGB{100, 150, 255}; // Octave down
+			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
+				color.r /= 4;
+				color.g /= 4;
+				color.b /= 4;
+			}
+			image[gateLineY + 2][x] = color;
 		}
 		if (gateLineY + 3 < kDisplayHeight) {
-			image[gateLineY + 3][x] = RGB{100, 150, 255}; // Octave up
+			RGB color = RGB{100, 150, 255}; // Octave up
+			if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
+				color.r /= 4;
+				color.g /= 4;
+				color.b /= 4;
+			}
+			image[gateLineY + 3][x] = color;
 		}
 	}
 
@@ -702,8 +713,16 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 				if (i < stages[x].pulseCount) {
 					// Active pulse positions - purple/pink to cyan gradient (reversed)
 					int32_t intensity = ((6 - i) * 255) / 6;
-					image[gateLineY - 1 - i][x] =
-					    RGB{static_cast<uint8_t>(intensity), static_cast<uint8_t>(255 - intensity), 255};
+					RGB color = RGB{static_cast<uint8_t>(intensity), static_cast<uint8_t>(255 - intensity), 255};
+
+					// Dim if stage is disabled OR beyond active stage count
+					if (!performanceControls.stageEnabled[x] || x >= performanceControls.numStages) {
+						color.r /= 4;
+						color.g /= 4;
+						color.b /= 4;
+					}
+
+					image[gateLineY - 1 - i][x] = color;
 				}
 				else {
 					image[gateLineY - 1 - i][x] = RGB{0, 0, 0}; // Inactive pulse positions
@@ -732,6 +751,39 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 		else {
 			image[3][x] = RGB{0, 128, 128}; // Dim cyan for others
+		}
+	}
+
+	// y2: Stage enable/disable toggle (x8-15) - Orange
+	for (int32_t x = 8; x < kDisplayWidth; x++) {
+		int32_t stageIndex = x - 8;
+		if (performanceControls.stageEnabled[stageIndex]) {
+			image[2][x] = RGB{255, 128, 0}; // Bright orange for enabled stages
+		}
+		else {
+			image[2][x] = RGB{64, 32, 0}; // Dim orange for disabled stages
+		}
+	}
+
+	// y5: Velocity spread control (x8-15) - Light blue
+	for (int32_t x = 8; x < kDisplayWidth; x++) {
+		int32_t padIndex = x - 8;
+		if (performanceControls.lastTouchedVelocityPad == padIndex) {
+			image[5][x] = RGB{100, 200, 255}; // Bright light blue for selected
+		}
+		else {
+			image[5][x] = RGB{50, 100, 128}; // Dim light blue for others
+		}
+	}
+
+	// y6: Note probability control (x8-15) - Blue
+	for (int32_t x = 8; x < kDisplayWidth; x++) {
+		int32_t padIndex = x - 8;
+		if (performanceControls.lastTouchedProbabilityPad == padIndex) {
+			image[6][x] = RGB{0, 100, 255}; // Bright blue for selected
+		}
+		else {
+			image[6][x] = RGB{0, 50, 128}; // Dim blue for others
 		}
 	}
 
@@ -767,13 +819,7 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		image[7][15] = RGB{64, 0, 64}; // Dim magenta for inactive
 	}
 
-	// Dim gate pads that are beyond the active stage count (x0-x7 only)
-	for (int32_t x = 0; x < 8; x++) {
-		if (x >= performanceControls.numStages) {
-			// Dim only the gate pad for disabled stages
-			image[gateLineY][x] = RGB{20, 20, 20}; // Very dim for disabled gate pads
-		}
-	}
+	// Stage dimming is now handled comprehensively in each rendering section above
 }
 
 ArpeggiatorSettings* KeyboardLayoutPulseSeq::getArpSettings() {
@@ -971,6 +1017,200 @@ void KeyboardLayoutPulseSeq::handlePulseCount(int32_t stage, int32_t position) {
 		displayPulseCountPopup(stage);
 		displayState.needsRefresh = true;
 	}
+}
+
+void KeyboardLayoutPulseSeq::handleVelocitySpread(int32_t x) {
+	// Track the last touched velocity pad for LED feedback
+	performanceControls.lastTouchedVelocityPad = x;
+
+	// Direct velocity spread control - each pad has its own value
+	int32_t newVelocity = performanceControls.velocitySpreadValues[x];
+
+	// Get arpeggiator settings to apply velocity spread
+	ArpeggiatorSettings* settings = getArpSettings();
+	if (settings) {
+		// Check output type to determine which approach to use
+		OutputType outputType = getCurrentOutputType();
+
+		if (outputType == OutputType::SYNTH) {
+			// Use soundEditor.setup() for synth tracks (works properly)
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip) {
+				UI* originalUI = getCurrentUI();
+
+				// Set up sound editor context like the official menu
+				if (soundEditor.setup(clip, nullptr, 0)) {
+					// Now we're in sound editor context - use the official approach
+					char modelStackMemory[MODEL_STACK_MAX_SIZE];
+					ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+					ModelStackWithAutoParam* modelStackWithParam =
+					    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_SPREAD_VELOCITY);
+
+					if (modelStackWithParam && modelStackWithParam->autoParam) {
+						// Use signed scaling like the menu system
+						int32_t finalValue = computeFinalValueForStandardMenuItem(newVelocity);
+						modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue,
+						                                                                     modelStackWithParam);
+					}
+
+					// Exit sound editor context back to original UI
+					originalUI->focusRegained();
+				}
+			}
+		}
+		else {
+			// For MIDI/CV tracks, spreadVelocity is in the randomizer menu, not the main arp menu
+			// Use direct parameter setting for CV/MIDI tracks (avoids crash)
+			// Use proper value scaling like the official menu system (unsigned scaling)
+			int32_t scaledValue = computeFinalValueForUnsignedMenuItem(newVelocity);
+			settings->spreadVelocity = scaledValue;
+		}
+	}
+
+	// Display "OFF" for value 0, otherwise show the value
+	if (newVelocity == 0) {
+		display->displayPopup("Vel. Spread: OFF");
+	}
+	else {
+		char buffer[30];
+		sprintf(buffer, "Vel. Spread: %d", newVelocity);
+		display->displayPopup(buffer);
+	}
+
+	// Set custom 2-second timeout for OLED
+	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+
+	// Force UI update
+	displayState.needsRefresh = true;
+}
+
+void KeyboardLayoutPulseSeq::handleNoteProbability(int32_t x) {
+	// Track the last touched probability pad for LED feedback
+	performanceControls.lastTouchedProbabilityPad = x;
+
+	// Direct note probability control - each pad has its own value
+	int32_t newProbability = performanceControls.noteProbabilityValues[x];
+
+	// Get arpeggiator settings to apply note probability
+	ArpeggiatorSettings* settings = getArpSettings();
+	if (settings) {
+		// Use the same scaling as the official menu system
+		int32_t scaledValue = computeFinalValueForUnsignedMenuItem(newProbability);
+		settings->noteProbability = scaledValue;
+	}
+
+	// Display the percentage (100% = always play, 0% = never play)
+	if (newProbability == 100) {
+		display->displayPopup("Probability: 100%");
+	}
+	else {
+		char buffer[30];
+		sprintf(buffer, "Probability: %d%%", newProbability);
+		display->displayPopup(buffer);
+	}
+
+	// Set custom 2-second timeout for OLED
+	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+
+	// Force UI update
+	displayState.needsRefresh = true;
+}
+
+void KeyboardLayoutPulseSeq::handleStageToggle(int32_t stage) {
+	if (stage < 0 || stage >= 8)
+		return;
+
+	// Toggle the stage enabled state
+	performanceControls.stageEnabled[stage] = !performanceControls.stageEnabled[stage];
+
+	// Display the new state
+	if (performanceControls.stageEnabled[stage]) {
+		char buffer[30];
+		sprintf(buffer, "Stage %d: ON", stage + 1);
+		display->displayPopup(buffer);
+	}
+	else {
+		char buffer[30];
+		sprintf(buffer, "Stage %d: OFF", stage + 1);
+		display->displayPopup(buffer);
+	}
+
+	// Set custom 2-second timeout for OLED
+	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+
+	// Force UI update
+	displayState.needsRefresh = true;
+}
+
+void KeyboardLayoutPulseSeq::advanceToNextEnabledStage() {
+	int32_t nextStage = performanceControls.currentStage;
+	int32_t attempts = 0;
+
+	// Determine direction based on play order
+	int32_t direction = 1; // Default forward
+	switch (performanceControls.playOrder) {
+	case PlayOrder::FORWARDS:
+		direction = 1;
+		break;
+	case PlayOrder::BACKWARDS:
+		direction = -1;
+		break;
+	case PlayOrder::PING_PONG:
+		direction = performanceControls.pingPongDirection;
+		break;
+	case PlayOrder::RANDOM:
+		// Handle random separately
+		int32_t enabledStages[8];
+		int32_t enabledCount = 0;
+
+		for (int32_t i = 0; i < performanceControls.numStages; i++) {
+			if (performanceControls.stageEnabled[i]) {
+				enabledStages[enabledCount++] = i;
+			}
+		}
+
+		if (enabledCount > 0) {
+			int32_t randomIndex = getRandom255() % enabledCount;
+			performanceControls.currentStage = enabledStages[randomIndex];
+		}
+		return;
+	}
+
+	// Find the next enabled stage in the given direction
+	do {
+		nextStage += direction;
+		attempts++;
+
+		// Handle wrapping
+		if (nextStage >= performanceControls.numStages) {
+			if (performanceControls.playOrder == PlayOrder::PING_PONG) {
+				nextStage = performanceControls.numStages - 2;
+				performanceControls.pingPongDirection = -1;
+				direction = -1;
+			}
+			else {
+				nextStage = 0; // Wrap to beginning
+			}
+		}
+		else if (nextStage < 0) {
+			if (performanceControls.playOrder == PlayOrder::PING_PONG) {
+				nextStage = 1;
+				performanceControls.pingPongDirection = 1;
+				direction = 1;
+			}
+			else {
+				nextStage = performanceControls.numStages - 1; // Wrap to end
+			}
+		}
+
+		// Safety check to prevent infinite loops
+		if (attempts > performanceControls.numStages) {
+			return; // If all stages are disabled, stay on current stage
+		}
+
+	} while (!performanceControls.stageEnabled[nextStage]);
+
+	performanceControls.currentStage = nextStage;
 }
 
 bool KeyboardLayoutPulseSeq::evaluateRhythmPattern(int32_t stage, int32_t pulsePosition) {
