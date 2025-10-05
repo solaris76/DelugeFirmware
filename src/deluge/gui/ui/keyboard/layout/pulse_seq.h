@@ -231,9 +231,9 @@ private:
 		int32_t velocitySpreadValues[8] = {0, 5, 10, 15, 20, 25, 30, 50};
 		int32_t lastTouchedVelocityPad = -1;
 
-		// Note probability values for each pad (0-100, where 100 = always play)
-		int32_t noteProbabilityValues[8] = {100, 95, 90, 75, 50, 25, 10, 0};
-		int32_t lastTouchedProbabilityPad = 0; // Default to 100% (first pad)
+		// Note probability values for each pad (0-100, where 100 = OFF/default)
+		int32_t noteProbabilityValues[8] = {0, 10, 25, 50, 75, 90, 95, 100};
+		int32_t lastTouchedProbabilityPad = 7; // Default to 100% (last pad, all pads lit)
 
 		// Stage enable/disable state (true = enabled, false = disabled/skipped)
 		bool stageEnabled[8] = {true, true, true, true, true, true, true, true};
