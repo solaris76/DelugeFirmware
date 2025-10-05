@@ -606,8 +606,8 @@ const char* KeyboardLayoutPulseSeq::getNoteName(int32_t noteIndex, int32_t octav
 	const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 	const char* noteName = noteNames[note % 12];
 
-	// Calculate octave number (C3 = 0, so C4 = 1, etc.)
-	int32_t octaveNum = 3 + octave; // Base octave is 3
+	// Calculate octave number (display one octave lower to match actual playback)
+	int32_t octaveNum = 2 + octave; // Base octave is 2 (was 3, adjusted for correct display)
 
 	static char buffer[16];
 	snprintf(buffer, sizeof(buffer), "%s%d", noteName, octaveNum);
@@ -785,8 +785,8 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 	}
 
-	// y1: Play order presets - 4 pads (x8-11)
-	for (int32_t x = 8; x < 12; x++) {
+	// y1: Play order presets - 8 pads (x8-15)
+	for (int32_t x = 8; x < 16; x++) {
 		// Play order colors - highlight selected, dim others
 		if (static_cast<int32_t>(performanceControls.playOrder) == (x - 8)) {
 			image[1][x] = RGB{0, 255, 255}; // Bright cyan for selected
