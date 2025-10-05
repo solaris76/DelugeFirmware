@@ -241,8 +241,7 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 			sequencerState.noteGatePos[n]++;
 
 			if (sequencerState.noteGatePos[n] >= gateLength) {
-				// Debug: show when note-off is triggered
-				display->displayPopup("NOTE OFF");
+				// Note-off triggered
 				switchNoteOff(instruction, n);
 			}
 		}
@@ -295,11 +294,38 @@ void KeyboardLayoutPulseSeq::generateNotes(ArpReturnInstruction* instruction) {
 	int32_t visualStage = findStageForPulse(sequencerState.currentPulse);
 	sequencerState.lastPlayedStage = visualStage;
 
-	// Advance to next pulse
-	sequencerState.currentPulse++;
-	if (sequencerState.currentPulse >= sequencerState.totalPatternLength) {
-		// Pattern completed, loop back to start
-		sequencerState.currentPulse = 0; // Loop back to start
+	// Advance to next pulse based on play order
+	switch (performanceControls.playOrder) {
+	case PlayOrder::FORWARDS:
+		sequencerState.currentPulse++;
+		if (sequencerState.currentPulse >= sequencerState.totalPatternLength) {
+			sequencerState.currentPulse = 0; // Loop back to start
+		}
+		break;
+
+	case PlayOrder::BACKWARDS:
+		sequencerState.currentPulse--;
+		if (sequencerState.currentPulse < 0) {
+			sequencerState.currentPulse = sequencerState.totalPatternLength - 1; // Loop back to end
+		}
+		break;
+
+	case PlayOrder::PING_PONG:
+		sequencerState.currentPulse += performanceControls.pingPongDirection;
+		if (sequencerState.currentPulse >= sequencerState.totalPatternLength) {
+			sequencerState.currentPulse = sequencerState.totalPatternLength - 2; // Back one step
+			performanceControls.pingPongDirection = -1;                          // Reverse direction
+		}
+		else if (sequencerState.currentPulse < 0) {
+			sequencerState.currentPulse = 1;           // Forward one step
+			performanceControls.pingPongDirection = 1; // Forward direction
+		}
+		break;
+
+	case PlayOrder::RANDOM:
+		// Generate random pulse position every step
+		sequencerState.currentPulse = getRandom255() % sequencerState.totalPatternLength;
+		break;
 	}
 }
 
@@ -856,6 +882,9 @@ void KeyboardLayoutPulseSeq::handlePlayOrderChange(int32_t playOrderIndex) {
 			strcpy(text, "Order: ");
 			strcat(text, orderNames[playOrderIndex]);
 			display->popupText(text);
+
+			// Set custom 2-second timeout for OLED
+			uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
 		}
 
 		displayState.needsRefresh = true;
