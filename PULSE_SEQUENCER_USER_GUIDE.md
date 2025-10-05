@@ -33,7 +33,7 @@ The Pulse Sequencer is a powerful, professional-grade step sequencer built into 
 - **Press pad**: Adjust octave for that stage
 
 #### **Pulse Count Display (y0-3)** - Rhythm Patterns
-- **7 rows** showing pulse counts 1-7
+- **7 columns** showing pulse counts 1-7
 - **Gradient colors**: Purple/pink to cyan
 - **Visual representation**: Lit pads show active pulses
 - **Press pad**: Set pulse count for that stage (1-7 pulses)
