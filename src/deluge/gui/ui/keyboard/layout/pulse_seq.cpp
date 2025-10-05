@@ -77,9 +77,13 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			else if (y == 4 && x >= 8 && x < kDisplayWidth) {
 				handleStageCountChange(x - 7); // 1-8
 			}
-			// y2: Play order presets
-			else if (y == 2 && x >= 8 && x < 12) {
+			// y1: Play order presets
+			else if (y == 1 && x >= 8 && x < 12) {
 				handlePlayOrderChange(x - 8); // 0-3
+			}
+			// y2: Gate control (x8-15)
+			else if (y == 2 && x >= 8 && x < kDisplayWidth) {
+				handleGate(x - 8); // 0-7
 			}
 			// y3: Stage enable/disable toggle (x8-15)
 			else if (y == 3 && x >= 8 && x < kDisplayWidth) {
@@ -93,9 +97,12 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 			else if (y == 6 && x >= 8 && x < kDisplayWidth) {
 				handleNoteProbability(x - 8); // 0-7
 			}
-			// y7: Transpose and octave controls
-			else if (y == 7 && x >= 12 && x < kDisplayWidth) {
-				if (x == 12) {
+			// y7: Reset button and transpose/octave controls
+			else if (y == 7 && x >= 8 && x < kDisplayWidth) {
+				if (x == 8) {
+					resetToDefaults(); // Reset all settings
+				}
+				else if (x == 12) {
 					handleTransposeChange(-1); // Transpose -1
 				}
 				else if (x == 13) {
@@ -255,26 +262,35 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 	uint32_t syncLevel = arpSettings ? arpSettings->syncLevel : 4; // Default to 16th notes if no arp settings
 	uint32_t ticksPerPeriod = 3 << (9 - syncLevel);
 	ticksPerPeriod *= performanceControls.clockDivider; // Scale by clock divider
+	ticksPerPeriod /= 2;                                // Correct timing - was running at half speed
 
 	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
 
-	// Check for note-off when gate expires (per-note tracking)
-	bool anyNoteActive = false;
-	uint32_t gateLength = calculateGateLength();
+	// Handle note-offs manually since arpeggiator mode is OFF
+	// Calculate gate length based on arp gate setting
+	// Gate length should be much shorter to ensure notes turn off between pulses
+	uint32_t gateLength = ticksPerPeriod / 8; // Default short gate
 
+	if (arpSettings) {
+		uint32_t gatePercent = computeCurrentValueForStandardMenuItem(arpSettings->gate);
+		// Scale gate to be a fraction of the period, not the full period
+		gateLength = (gatePercent * ticksPerPeriod) / 200; // Divide by 200 instead of 50 for shorter gates
+		if (gateLength < 2)
+			gateLength = 2; // Minimum gate length
+		if (gateLength > ticksPerPeriod / 4)
+			gateLength = ticksPerPeriod / 4; // Max 25% of period
+	}
+
+	// Track note-offs for active notes
 	for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
 		if (sequencerState.noteActive[n]) {
-			anyNoteActive = true;
 			sequencerState.noteGatePos[n]++;
 
 			if (sequencerState.noteGatePos[n] >= gateLength) {
-				// Note-off triggered
 				switchNoteOff(instruction, n);
 			}
 		}
 	}
-
-	// Update overall gate state
 
 	if (!howFarIntoPeriod) {
 
@@ -393,7 +409,7 @@ void KeyboardLayoutPulseSeq::playNoteForStage(ArpReturnInstruction* instruction,
 		}
 	}
 
-	// Find an available slot for this note (for MULTIPLE gate type)
+	// Track this note for manual gate timing (since arp mode is OFF)
 	int32_t noteSlot = -1;
 	for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
 		if (!sequencerState.noteActive[n]) {
@@ -402,27 +418,15 @@ void KeyboardLayoutPulseSeq::playNoteForStage(ArpReturnInstruction* instruction,
 		}
 	}
 
-	// If no slot available, find the oldest note to replace
+	// If no slot available, use slot 0 (simple replacement)
 	if (noteSlot == -1) {
-		// Find the note with the highest gate position (oldest)
-		uint32_t maxGatePos = 0;
-		for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
-			if (sequencerState.noteGatePos[n] > maxGatePos) {
-				maxGatePos = sequencerState.noteGatePos[n];
-				noteSlot = n;
-			}
-		}
-		// If still no slot found, use slot 0
-		if (noteSlot == -1) {
-			noteSlot = 0;
-		}
+		noteSlot = 0;
 	}
 
-	// Store note for note-off tracking
-	sequencerState.noteCodeCurrentlyOnPostArp[noteSlot] = note;
-	sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[noteSlot] = MIDI_CHANNEL_NONE;
-	sequencerState.noteGatePos[noteSlot] = 0;
+	// Activate the note slot for gate timing
 	sequencerState.noteActive[noteSlot] = true;
+	sequencerState.noteGatePos[noteSlot] = 0;
+	sequencerState.noteCodeCurrentlyOnPostArp[noteSlot] = note;
 }
 
 void KeyboardLayoutPulseSeq::switchNoteOff(ArpReturnInstruction* instruction, int32_t noteSlot) {
@@ -468,25 +472,7 @@ void KeyboardLayoutPulseSeq::switchAnyNoteOff(ArpReturnInstruction* instruction)
 	}
 }
 
-uint32_t KeyboardLayoutPulseSeq::calculateGateLength() {
-	// Simple gate length calculation based on arp settings
-	ArpeggiatorSettings* arpSettings = getArpSettings();
-	if (!arpSettings)
-		return 24; // Default 24 ticks
-
-	// Get gate length from arp settings (1-50, where 50 = 100%)
-	uint32_t gatePercent = computeFinalValueForStandardMenuItem(arpSettings->gate);
-
-	// Convert to ticks (50 = 24 ticks, 25 = 12 ticks, etc.)
-	uint32_t gateLength = (gatePercent * 24) / 50;
-
-	// Ensure minimum gate length
-	if (gateLength < 5) {
-		gateLength = 5;
-	}
-
-	return gateLength;
-}
+// Gate length is now handled entirely by the arpeggiator system
 
 // OLED display helpers
 void KeyboardLayoutPulseSeq::displayGateTypePopup(int32_t stage) {
@@ -758,14 +744,30 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 	}
 
-	// y2: Play order presets - 4 pads (x8-11)
+	// y1: Play order presets - 4 pads (x8-11)
 	for (int32_t x = 8; x < 12; x++) {
 		// Play order colors - highlight selected, dim others
 		if (static_cast<int32_t>(performanceControls.playOrder) == (x - 8)) {
-			image[2][x] = RGB{0, 255, 255}; // Bright cyan for selected
+			image[1][x] = RGB{0, 255, 255}; // Bright cyan for selected
 		}
 		else {
-			image[2][x] = RGB{0, 128, 128}; // Dim cyan for others
+			image[1][x] = RGB{0, 128, 128}; // Dim cyan for others
+		}
+	}
+
+	// y2: Gate control (x8-15) - Green with intensity based on value
+	for (int32_t x = 8; x < kDisplayWidth; x++) {
+		int32_t padIndex = x - 8;
+		int32_t gateValue = performanceControls.gateValues[padIndex];
+
+		// Scale brightness based on gate value (5-50 maps to dim-bright)
+		uint8_t intensity = (gateValue * 255) / 50; // Scale 5-50 to brightness
+
+		if (performanceControls.lastTouchedGatePad == padIndex) {
+			image[2][x] = RGB{0, 255, 0}; // Bright green for selected
+		}
+		else {
+			image[2][x] = RGB{0, intensity, 0}; // Green intensity based on gate value
 		}
 	}
 
@@ -802,7 +804,10 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		}
 	}
 
-	// y7: Transpose and octave controls - 4 pads (x12-15)
+	// y7: Reset button (x8) and transpose/octave controls (x12-15)
+	// Reset button - purple
+	image[7][8] = RGB{128, 0, 255}; // Purple reset button
+
 	// Transpose controls with direction-specific colors
 	if (performanceControls.transpose != 0) {
 		if (performanceControls.transpose < 0) {
@@ -1160,6 +1165,64 @@ void KeyboardLayoutPulseSeq::handleNoteProbability(int32_t x) {
 	displayState.needsRefresh = true;
 }
 
+void KeyboardLayoutPulseSeq::handleGate(int32_t x) {
+	// Track the last touched gate pad for LED feedback
+	performanceControls.lastTouchedGatePad = x;
+
+	// Direct gate control - each pad has its own value
+	int32_t newGate = performanceControls.gateValues[x];
+
+	// Check output type to determine which approach to use
+	OutputType outputType = getCurrentOutputType();
+
+	if (outputType == OutputType::SYNTH) {
+		// Use soundEditor.setup() for synth tracks (works properly)
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (clip) {
+			UI* originalUI = getCurrentUI();
+
+			// Set up sound editor context like the official menu
+			if (soundEditor.setup(clip, nullptr, 0)) {
+				// Now we're in sound editor context - use the official approach
+				char modelStackMemory[MODEL_STACK_MAX_SIZE];
+				ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+				ModelStackWithAutoParam* modelStackWithParam =
+				    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
+
+				if (modelStackWithParam && modelStackWithParam->autoParam) {
+					// Use absolute value (0-50) without scaling
+					int32_t finalValue = computeFinalValueForStandardMenuItem(newGate);
+					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue,
+					                                                                     modelStackWithParam);
+				}
+
+				// Exit sound editor context back to original UI
+				originalUI->focusRegained();
+			}
+		}
+	}
+	else {
+		// Use direct parameter setting for CV/MIDI tracks (avoids crash)
+		// Use proper value scaling like the official menu system
+		ArpeggiatorSettings* settings = getArpSettings();
+		if (settings) {
+			int32_t scaledValue = computeFinalValueForStandardMenuItem(newGate);
+			settings->gate = scaledValue;
+		}
+	}
+
+	// Display the gate value
+	char buffer[30];
+	sprintf(buffer, "Gate: %d", newGate);
+	display->displayPopup(buffer);
+
+	// Set custom 2-second timeout for OLED
+	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+
+	// Force UI update
+	displayState.needsRefresh = true;
+}
+
 void KeyboardLayoutPulseSeq::handleStageToggle(int32_t stage) {
 	if (stage < 0 || stage >= 8)
 		return;
@@ -1255,6 +1318,94 @@ void KeyboardLayoutPulseSeq::advanceToNextEnabledStage() {
 	} while (!performanceControls.stageEnabled[nextStage]);
 
 	performanceControls.currentStage = nextStage;
+}
+
+void KeyboardLayoutPulseSeq::resetToDefaults() {
+	// Reset all performance controls to default values
+	performanceControls.transpose = 0;
+	performanceControls.octave = 0;
+	performanceControls.clockDivider = 1;
+	performanceControls.numStages = 8;
+	performanceControls.playOrder = PlayOrder::FORWARDS;
+	performanceControls.pingPongDirection = 1;
+	performanceControls.lastTouchedVelocityPad = -1;
+	performanceControls.lastTouchedProbabilityPad = -1;
+	performanceControls.currentStage = 0;
+
+	// Reset all stage enabled states to true
+	for (int32_t i = 0; i < 8; i++) {
+		performanceControls.stageEnabled[i] = true;
+	}
+
+	// Reset all stage data to defaults
+	for (int32_t i = 0; i < 8; i++) {
+		stages[i].gateType = GateType::OFF;
+		stages[i].noteIndex = 0;
+		stages[i].octave = 0;
+		stages[i].pulseCount = 1;
+		stages[i].accumulator = 0;
+	}
+
+	// Reset arpeggiator settings to defaults
+	ArpeggiatorSettings* settings = getArpSettings();
+	if (settings) {
+		// Check output type to determine which approach to use
+		OutputType outputType = getCurrentOutputType();
+
+		if (outputType == OutputType::SYNTH) {
+			// Reset synth parameters via sound editor
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip) {
+				UI* originalUI = getCurrentUI();
+				if (soundEditor.setup(clip, nullptr, 0)) {
+					char modelStackMemory[MODEL_STACK_MAX_SIZE];
+					ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+
+					// Reset velocity spread
+					ModelStackWithAutoParam* velSpreadParam =
+					    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_SPREAD_VELOCITY);
+					if (velSpreadParam && velSpreadParam->autoParam) {
+						velSpreadParam->autoParam->setCurrentValueInResponseToUserInput(0, velSpreadParam);
+					}
+
+					// Reset note probability
+					ModelStackWithAutoParam* noteProbParam =
+					    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_NOTE_PROBABILITY);
+					if (noteProbParam && noteProbParam->autoParam) {
+						int32_t maxValue = computeFinalValueForUnsignedMenuItem(100); // 100% = always play
+						noteProbParam->autoParam->setCurrentValueInResponseToUserInput(maxValue, noteProbParam);
+					}
+
+					// Reset gate to default
+					ModelStackWithAutoParam* gateParam =
+					    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
+					if (gateParam && gateParam->autoParam) {
+						int32_t defaultGate = computeFinalValueForStandardMenuItem(25); // Default gate 25 (50%)
+						gateParam->autoParam->setCurrentValueInResponseToUserInput(defaultGate, gateParam);
+					}
+
+					originalUI->focusRegained();
+				}
+			}
+		}
+		else {
+			// Reset MIDI/CV parameters directly
+			settings->spreadVelocity = 0;
+			settings->noteProbability = 4294967295u;                   // Max value = 100%
+			settings->syncLevel = static_cast<SyncLevel>(4);           // 16th notes
+			settings->gate = computeFinalValueForStandardMenuItem(25); // Default gate 25 (50%)
+		}
+	}
+
+	// Reset sequencer state
+	sequencerState.totalPatternLength = calculateTotalPatternLength();
+
+	// Show confirmation popup
+	display->displayPopup("RESET TO DEFAULTS");
+	uiTimerManager.setTimer(TimerName::DISPLAY, 2000);
+
+	// Force UI update
+	displayState.needsRefresh = true;
 }
 
 bool KeyboardLayoutPulseSeq::evaluateRhythmPattern(int32_t stage, int32_t pulsePosition) {

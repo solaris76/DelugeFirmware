@@ -95,11 +95,17 @@ private:
 	/// Handle note probability control
 	void handleNoteProbability(int32_t x);
 
+	/// Handle gate control
+	void handleGate(int32_t x);
+
 	/// Handle stage enable/disable toggle
 	void handleStageToggle(int32_t stage);
 
 	/// Advance to next enabled stage based on play order
 	void advanceToNextEnabledStage();
+
+	/// Reset all performance controls to default values
+	void resetToDefaults();
 
 	/// Evaluate rhythm pattern to determine if note should play (auto-generated from gate type and pulse count)
 	bool evaluateRhythmPattern(int32_t stage, int32_t pulsePosition);
@@ -209,6 +215,10 @@ private:
 
 		// Current stage (separate from pulse position for stage skipping)
 		int32_t currentStage = 0;
+
+		// Gate values for each pad (0-50)
+		int32_t gateValues[8] = {1, 5, 12, 20, 25, 30, 40, 50};
+		int32_t lastTouchedGatePad = -1;
 	} performanceControls;
 };
 
