@@ -1098,46 +1098,8 @@ void KeyboardLayoutPulseSeq::handleVelocitySpread(int32_t x) {
 	// Direct velocity spread control - each pad has its own value
 	int32_t newVelocity = performanceControls.velocitySpreadValues[x];
 
-	// Get arpeggiator settings to apply velocity spread
-	ArpeggiatorSettings* settings = getArpSettings();
-	if (settings) {
-		// Check output type to determine which approach to use
-		OutputType outputType = getCurrentOutputType();
-
-		if (outputType == OutputType::SYNTH) {
-			// Use soundEditor.setup() for synth tracks (works properly)
-			InstrumentClip* clip = getCurrentInstrumentClip();
-			if (clip) {
-				UI* originalUI = getCurrentUI();
-
-				// Set up sound editor context like the official menu
-				if (soundEditor.setup(clip, nullptr, 0)) {
-					// Now we're in sound editor context - use the official approach
-					char modelStackMemory[MODEL_STACK_MAX_SIZE];
-					ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-					ModelStackWithAutoParam* modelStackWithParam =
-					    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_SPREAD_VELOCITY);
-
-					if (modelStackWithParam && modelStackWithParam->autoParam) {
-						// Use signed scaling like the menu system
-						int32_t finalValue = computeFinalValueForStandardMenuItem(newVelocity);
-						modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue,
-						                                                                     modelStackWithParam);
-					}
-
-					// Exit sound editor context back to original UI
-					originalUI->focusRegained();
-				}
-			}
-		}
-		else {
-			// For MIDI/CV tracks, spreadVelocity is in the randomizer menu, not the main arp menu
-			// Use direct parameter setting for CV/MIDI tracks (avoids crash)
-			// Use proper value scaling like the official menu system (unsigned scaling)
-			int32_t scaledValue = computeFinalValueForUnsignedMenuItem(newVelocity);
-			settings->spreadVelocity = scaledValue;
-		}
-	}
+	// Set velocity spread parameter using helper function
+	setArpParameter(modulation::params::UNPATCHED_SPREAD_VELOCITY, newVelocity, true);
 
 	// Display "OFF" for value 0, otherwise show the value
 	if (newVelocity == 0) {
@@ -1163,44 +1125,8 @@ void KeyboardLayoutPulseSeq::handleNoteProbability(int32_t x) {
 	// Direct note probability control - each pad has its own value
 	int32_t newProbability = performanceControls.noteProbabilityValues[x];
 
-	// Get arpeggiator settings to apply note probability
-	ArpeggiatorSettings* settings = getArpSettings();
-	if (settings) {
-		// Check output type to determine which approach to use
-		OutputType outputType = getCurrentOutputType();
-
-		if (outputType == OutputType::SYNTH) {
-			// Use soundEditor.setup() for synth tracks (works properly)
-			InstrumentClip* clip = getCurrentInstrumentClip();
-			if (clip) {
-				UI* originalUI = getCurrentUI();
-
-				// Set up sound editor context like the official menu
-				if (soundEditor.setup(clip, nullptr, 0)) {
-					// Now we're in sound editor context - use the official approach
-					char modelStackMemory[MODEL_STACK_MAX_SIZE];
-					ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-					ModelStackWithAutoParam* modelStackWithParam =
-					    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_NOTE_PROBABILITY);
-
-					if (modelStackWithParam && modelStackWithParam->autoParam) {
-						// Use unsigned scaling like the menu system
-						int32_t finalValue = computeFinalValueForUnsignedMenuItem(newProbability);
-						modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue,
-						                                                                     modelStackWithParam);
-					}
-
-					// Exit sound editor context back to original UI
-					originalUI->focusRegained();
-				}
-			}
-		}
-		else {
-			// For MIDI/CV tracks, use direct parameter setting
-			int32_t scaledValue = computeFinalValueForUnsignedMenuItem(newProbability);
-			settings->noteProbability = scaledValue;
-		}
-	}
+	// Set note probability parameter using helper function
+	setArpParameter(modulation::params::UNPATCHED_NOTE_PROBABILITY, newProbability, false);
 
 	// Display the percentage (100% = always play, 0% = never play)
 	if (newProbability == 100) {
@@ -1226,44 +1152,8 @@ void KeyboardLayoutPulseSeq::handleGate(int32_t x) {
 	// Direct gate control - each pad has its own value
 	int32_t newGate = performanceControls.gateValues[x];
 
-	// Check output type to determine which approach to use
-	OutputType outputType = getCurrentOutputType();
-
-	if (outputType == OutputType::SYNTH) {
-		// Use soundEditor.setup() for synth tracks (works properly)
-		InstrumentClip* clip = getCurrentInstrumentClip();
-		if (clip) {
-			UI* originalUI = getCurrentUI();
-
-			// Set up sound editor context like the official menu
-			if (soundEditor.setup(clip, nullptr, 0)) {
-				// Now we're in sound editor context - use the official approach
-				char modelStackMemory[MODEL_STACK_MAX_SIZE];
-				ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
-				ModelStackWithAutoParam* modelStackWithParam =
-				    modelStack->getUnpatchedAutoParamFromId(modulation::params::UNPATCHED_ARP_GATE);
-
-				if (modelStackWithParam && modelStackWithParam->autoParam) {
-					// Use absolute value (0-50) without scaling
-					int32_t finalValue = computeFinalValueForStandardMenuItem(newGate);
-					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue,
-					                                                                     modelStackWithParam);
-				}
-
-				// Exit sound editor context back to original UI
-				originalUI->focusRegained();
-			}
-		}
-	}
-	else {
-		// Use direct parameter setting for CV/MIDI tracks (avoids crash)
-		// Use proper value scaling like the official menu system
-		ArpeggiatorSettings* settings = getArpSettings();
-		if (settings) {
-			int32_t scaledValue = computeFinalValueForStandardMenuItem(newGate);
-			settings->gate = scaledValue;
-		}
-	}
+	// Set gate parameter using helper function
+	setArpParameter(modulation::params::UNPATCHED_ARP_GATE, newGate, true);
 
 	// Display the gate value
 	char buffer[30];
@@ -1625,6 +1515,58 @@ void KeyboardLayoutPulseSeq::sendAllNotesOff() {
 			if (nonAudioInstrument) {
 				nonAudioInstrument->arpeggiator.reset();
 			}
+		}
+	}
+}
+
+// ================================================================================================
+// HELPER FUNCTIONS
+// ================================================================================================
+
+// Helper to set parameters for both synth and MIDI tracks
+void KeyboardLayoutPulseSeq::setArpParameter(int32_t paramId, int32_t value, bool useStandardScaling) {
+	ArpeggiatorSettings* settings = getArpSettings();
+	if (!settings)
+		return;
+
+	OutputType outputType = getCurrentOutputType();
+
+	if (outputType == OutputType::SYNTH) {
+		// Use soundEditor.setup() for synth tracks
+		InstrumentClip* clip = getCurrentInstrumentClip();
+		if (clip) {
+			UI* originalUI = getCurrentUI();
+			if (soundEditor.setup(clip, nullptr, 0)) {
+				char modelStackMemory[MODEL_STACK_MAX_SIZE];
+				ModelStackWithThreeMainThings* modelStack = soundEditor.getCurrentModelStack(modelStackMemory);
+				ModelStackWithAutoParam* modelStackWithParam = modelStack->getUnpatchedAutoParamFromId(paramId);
+
+				if (modelStackWithParam && modelStackWithParam->autoParam) {
+					int32_t finalValue = useStandardScaling ? computeFinalValueForStandardMenuItem(value)
+					                                        : computeFinalValueForUnsignedMenuItem(value);
+					modelStackWithParam->autoParam->setCurrentValueInResponseToUserInput(finalValue,
+					                                                                     modelStackWithParam);
+				}
+
+				originalUI->focusRegained();
+			}
+		}
+	}
+	else {
+		// Direct parameter setting for MIDI/CV tracks
+		int32_t scaledValue = useStandardScaling ? computeFinalValueForStandardMenuItem(value)
+		                                         : computeFinalValueForUnsignedMenuItem(value);
+
+		switch (paramId) {
+		case modulation::params::UNPATCHED_SPREAD_VELOCITY:
+			settings->spreadVelocity = scaledValue;
+			break;
+		case modulation::params::UNPATCHED_NOTE_PROBABILITY:
+			settings->noteProbability = scaledValue;
+			break;
+		case modulation::params::UNPATCHED_ARP_GATE:
+			settings->gate = scaledValue;
+			break;
 		}
 	}
 }

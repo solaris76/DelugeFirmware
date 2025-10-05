@@ -113,6 +113,11 @@ private:
 	/// Evolve sequence with subtle changes to notes only
 	void evolveSequence();
 
+private:
+	/// Helper to set arpeggiator parameters for both synth and MIDI tracks
+	void setArpParameter(int32_t paramId, int32_t value, bool useStandardScaling = true);
+
+public:
 	/// Evaluate rhythm pattern to determine if note should play (auto-generated from gate type and pulse count)
 	bool evaluateRhythmPattern(int32_t stage, int32_t pulsePosition);
 
