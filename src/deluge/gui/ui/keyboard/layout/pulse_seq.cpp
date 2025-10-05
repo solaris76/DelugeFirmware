@@ -288,7 +288,8 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 			int32_t currentStage = performanceControls.currentStage;
 			if (currentStage >= 0 && currentStage < 8 && stages[currentStage].gateType == GateType::HELD) {
 				// Calculate gate length for entire stage duration
-				noteGateLength = (ticksPerPeriod * stages[currentStage].pulseCount) / 2;
+				// Each pulse in the stage lasts ticksPerPeriod ticks
+				noteGateLength = ticksPerPeriod * stages[currentStage].pulseCount;
 			}
 
 			if (sequencerState.noteGatePos[n] >= noteGateLength) {
