@@ -262,18 +262,17 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
 
 	// Handle note-offs manually since arpeggiator mode is OFF
-	// Calculate gate length based on arp gate setting
-	// Gate length should be much shorter to ensure notes turn off between pulses
-	uint32_t gateLength = ticksPerPeriod / 8; // Default short gate
+	// Calculate gate length for SINGLE/MULTIPLE gates (short, per-pulse duration)
+	uint32_t gateLength = ticksPerPeriod / 16; // Very short default gate for single pulses
 
 	if (arpSettings) {
 		uint32_t gatePercent = computeCurrentValueForStandardMenuItem(arpSettings->gate);
-		// Scale gate to be a fraction of the period, not the full period
-		gateLength = (gatePercent * ticksPerPeriod) / 200; // Divide by 200 instead of 50 for shorter gates
-		if (gateLength < 2)
-			gateLength = 2; // Minimum gate length
-		if (gateLength > ticksPerPeriod / 4)
-			gateLength = ticksPerPeriod / 4; // Max 25% of period
+		// Scale gate to be appropriate for single pulse duration
+		gateLength = (gatePercent * ticksPerPeriod) / 400; // Much shorter gates for single pulses
+		if (gateLength < 1)
+			gateLength = 1; // Minimum gate length
+		if (gateLength > ticksPerPeriod / 8)
+			gateLength = ticksPerPeriod / 8; // Max 12.5% of period for single pulses
 	}
 
 	// Track note-offs for active notes
