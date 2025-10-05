@@ -86,8 +86,8 @@ void KeyboardLayoutPulseSeq::evaluatePads(PressedPad presses[kMaxNumKeyboardPadP
 				handleStageCountChange(x - 7); // 1-8
 			}
 			// y1: Play order presets
-			else if (y == 1 && x >= 8 && x < 12) {
-				handlePlayOrderChange(x - 8); // 0-3
+			else if (y == 1 && x >= 8 && x < 16) {
+				handlePlayOrderChange(x - 8); // 0-7
 			}
 			// y2: Gate control (x8-15)
 			else if (y == 2 && x >= 8 && x < kDisplayWidth) {
@@ -951,7 +951,7 @@ void KeyboardLayoutPulseSeq::handleStageCountChange(int32_t numStages) {
 }
 
 void KeyboardLayoutPulseSeq::handlePlayOrderChange(int32_t playOrderIndex) {
-	if (playOrderIndex < 0 || playOrderIndex > 3)
+	if (playOrderIndex < 0 || playOrderIndex > 7)
 		return;
 
 	PlayOrder newPlayOrder = static_cast<PlayOrder>(playOrderIndex);
@@ -1180,13 +1180,21 @@ void KeyboardLayoutPulseSeq::advanceToNextEnabledStage() {
 
 	case PlayOrder::PEDAL:
 		// Always return to stage 1: 1,2,1,3,1,4,1,5,1,6,1,7,1,8
-		if (performanceControls.currentStage == 0) {
-			// From stage 1, go to next stage
-			performanceControls.currentStage = (performanceControls.currentStage + 1) % performanceControls.numStages;
-		}
-		else {
-			// From any other stage, return to stage 1
-			performanceControls.currentStage = 0;
+		{
+			static int32_t pedalNextStage = 1; // Track which stage to go to next (1-based)
+
+			if (performanceControls.currentStage == 0) {
+				// From stage 1, go to the next stage in sequence
+				performanceControls.currentStage = pedalNextStage;
+				pedalNextStage++;
+				if (pedalNextStage >= performanceControls.numStages) {
+					pedalNextStage = 1; // Reset to stage 2 (1-based)
+				}
+			}
+			else {
+				// From any other stage, return to stage 1
+				performanceControls.currentStage = 0;
+			}
 		}
 		return;
 
@@ -1216,25 +1224,28 @@ void KeyboardLayoutPulseSeq::advanceToNextEnabledStage() {
 	case PlayOrder::PENDULUM:
 		// Swing pattern: 1,2,3,2,3,4,3,4,5,4,5,6,5,6,7,6,7,8
 		{
-			static int32_t pendulumDirection = 1;
-			static int32_t pendulumCenter = 1;
+			static int32_t pendulumLow = 0;  // Current low stage (0-based)
+			static int32_t pendulumHigh = 1; // Current high stage (0-based)
+			static bool goingUp = true;      // Direction: true = low->high, false = high->low
 
-			if (performanceControls.currentStage == pendulumCenter) {
-				// At center, move to next position
-				performanceControls.currentStage += pendulumDirection;
+			if (goingUp) {
+				// Going from low to high
+				performanceControls.currentStage = pendulumHigh;
+				goingUp = false; // Next time go back down
 			}
 			else {
-				// Not at center, return to center or advance center
-				if (pendulumDirection == 1 && performanceControls.currentStage == pendulumCenter + 1) {
-					// Advance center and continue forward
-					pendulumCenter++;
-					if (pendulumCenter >= performanceControls.numStages - 1) {
-						pendulumCenter = 0;
-					}
-					performanceControls.currentStage = pendulumCenter;
-				}
-				else {
-					performanceControls.currentStage = pendulumCenter;
+				// Going from high back to low, then advance the pair
+				performanceControls.currentStage = pendulumLow;
+				goingUp = true; // Next time go up
+
+				// Advance to next pair
+				pendulumLow++;
+				pendulumHigh++;
+
+				// Reset when we reach the end
+				if (pendulumHigh >= performanceControls.numStages) {
+					pendulumLow = 0;
+					pendulumHigh = 1;
 				}
 			}
 		}
