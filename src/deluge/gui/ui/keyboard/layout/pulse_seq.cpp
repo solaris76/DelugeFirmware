@@ -781,23 +781,8 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 	}
 
 	// y2: Gate control (x8-15) - Green fader (5 left, 50 right)
-	for (int32_t x = 8; x < kDisplayWidth; x++) {
-		int32_t padIndex = x - 8;
-		int32_t currentGate = performanceControls.lastTouchedGatePad >= 0
-		                          ? performanceControls.gateValues[performanceControls.lastTouchedGatePad]
-		                          : 25;
-		int32_t thisPadGate = performanceControls.gateValues[padIndex];
-
-		if (performanceControls.lastTouchedGatePad == padIndex) {
-			image[2][x] = RGB{0, 255, 0}; // Bright green for selected
-		}
-		else if (thisPadGate <= currentGate) {
-			image[2][x] = RGB{0, 128, 0}; // Dim green for active range
-		}
-		else {
-			image[2][x] = RGB{0, 0, 0}; // Black for inactive range (fader effect)
-		}
-	}
+	renderFaderControl(image, 2, performanceControls.gateValues, performanceControls.lastTouchedGatePad, RGB{0, 255, 0},
+	                   RGB{0, 128, 0});
 
 	// y3: Stage enable/disable toggle (x8-15) - Orange
 	for (int32_t x = 8; x < kDisplayWidth; x++) {
@@ -811,44 +796,12 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 	}
 
 	// y5: Velocity spread control (x8-15) - Light blue fader (0 left, 50 right)
-	for (int32_t x = 8; x < kDisplayWidth; x++) {
-		int32_t padIndex = x - 8;
-		int32_t currentVelocity =
-		    performanceControls.lastTouchedVelocityPad >= 0
-		        ? performanceControls.velocitySpreadValues[performanceControls.lastTouchedVelocityPad]
-		        : 0;
-		int32_t thisPadVelocity = performanceControls.velocitySpreadValues[padIndex];
-
-		if (performanceControls.lastTouchedVelocityPad == padIndex) {
-			image[5][x] = RGB{100, 200, 255}; // Bright light blue for selected
-		}
-		else if (thisPadVelocity <= currentVelocity) {
-			image[5][x] = RGB{50, 100, 128}; // Dim light blue for active range
-		}
-		else {
-			image[5][x] = RGB{0, 0, 0}; // Black for inactive range (fader effect)
-		}
-	}
+	renderFaderControl(image, 5, performanceControls.velocitySpreadValues, performanceControls.lastTouchedVelocityPad,
+	                   RGB{100, 200, 255}, RGB{50, 100, 128});
 
 	// y6: Note probability control (x8-15) - Blue fader (0% left, 100% right)
-	for (int32_t x = 8; x < kDisplayWidth; x++) {
-		int32_t padIndex = x - 8;
-		int32_t currentProbability =
-		    performanceControls.lastTouchedProbabilityPad >= 0
-		        ? performanceControls.noteProbabilityValues[performanceControls.lastTouchedProbabilityPad]
-		        : 100;
-		int32_t thisPadProbability = performanceControls.noteProbabilityValues[padIndex];
-
-		if (performanceControls.lastTouchedProbabilityPad == padIndex) {
-			image[6][x] = RGB{0, 150, 255}; // Bright blue for selected
-		}
-		else if (thisPadProbability <= currentProbability) {
-			image[6][x] = RGB{0, 75, 128}; // Dim blue for active range
-		}
-		else {
-			image[6][x] = RGB{0, 0, 0}; // Black for inactive range (fader effect)
-		}
-	}
+	renderFaderControl(image, 6, performanceControls.noteProbabilityValues,
+	                   performanceControls.lastTouchedProbabilityPad, RGB{0, 150, 255}, RGB{0, 75, 128});
 
 	// y7: Reset button (x8), randomize button (x9), evolve button (x10), and transpose/octave controls (x12-15)
 	// Reset button - purple
@@ -1567,6 +1520,26 @@ void KeyboardLayoutPulseSeq::setArpParameter(int32_t paramId, int32_t value, boo
 		case modulation::params::UNPATCHED_ARP_GATE:
 			settings->gate = scaledValue;
 			break;
+		}
+	}
+}
+
+void KeyboardLayoutPulseSeq::renderFaderControl(RGB image[][kDisplayWidth + kSideBarWidth], int32_t row,
+                                                const int32_t* values, int32_t lastTouchedPad, RGB activeColor,
+                                                RGB dimColor) {
+	for (int32_t x = 8; x < kDisplayWidth; x++) {
+		int32_t padIndex = x - 8;
+		int32_t currentValue = lastTouchedPad >= 0 ? values[lastTouchedPad] : values[0];
+		int32_t thisPadValue = values[padIndex];
+
+		if (lastTouchedPad == padIndex) {
+			image[row][x] = activeColor; // Bright color for selected
+		}
+		else if (thisPadValue <= currentValue) {
+			image[row][x] = dimColor; // Dim color for active range
+		}
+		else {
+			image[row][x] = RGB{0, 0, 0}; // Black for inactive range (fader effect)
 		}
 	}
 }
