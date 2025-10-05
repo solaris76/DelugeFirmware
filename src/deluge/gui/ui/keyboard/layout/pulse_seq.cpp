@@ -861,8 +861,8 @@ int32_t KeyboardLayoutPulseSeq::getGateLineY() const {
 // ================================================================================================
 
 void KeyboardLayoutPulseSeq::handleGateType(int32_t stage) {
-	if (stage < 0 || stage >= kMaxStages)
-		return; // Gate line only on first 8 columns
+	if (!isValidStage(stage))
+		return;
 
 	// Cycle through gate types: OFF -> SINGLE -> MULTIPLE -> HELD -> OFF
 	int32_t currentType = static_cast<int32_t>(stages[stage].gateType);
@@ -874,7 +874,7 @@ void KeyboardLayoutPulseSeq::handleGateType(int32_t stage) {
 }
 
 void KeyboardLayoutPulseSeq::handleNoteSelection(int32_t stage) {
-	if (stage < 0 || stage >= kMaxStages)
+	if (!isValidStage(stage))
 		return;
 
 	// Get current scale notes
