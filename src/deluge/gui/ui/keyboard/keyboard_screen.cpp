@@ -960,6 +960,7 @@ int32_t KeyboardScreen::doTickForwardForKeyboardScreen(int32_t currentPos, ArpRe
 		return 2147483647;
 	}
 
+
 	// Handle keyboard screen timing for layouts that support it
 	KeyboardLayoutType currentLayoutType = clip->keyboardState.currentLayout;
 

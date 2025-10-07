@@ -145,6 +145,8 @@ public:
 
 	/// Note handling methods
 	void generateNotes(ArpReturnInstruction* instruction);
+	void generateNotesMidiClockSafe(ArpReturnInstruction* instruction); // MIDI clock safe version
+	int32_t doTickForwardMidiClockSafe(uint32_t clipCurrentPos, ArpReturnInstruction* instruction); // MIDI clock safe timing
 	int32_t findStageForPulse(int32_t pulse);
 	void playNoteForStage(ArpReturnInstruction* instruction, int32_t stage);
 	void switchNoteOff(ArpReturnInstruction* instruction, int32_t noteSlot);
@@ -247,6 +249,16 @@ private:
 		// Gate values for each pad (0-50)
 		int32_t gateValues[8] = {1, 5, 12, 20, 25, 30, 40, 50};
 		int32_t lastTouchedGatePad = -1;
+
+		// Play order state variables (moved from static to avoid MIDI clock conflicts)
+		int32_t pedalNextStage = 1;        // PEDAL: Track which stage to go to next (1-based)
+		bool skip2OddPhase = true;         // SKIP_2: Track odd/even phase
+		int32_t pendulumLow = 0;           // PENDULUM: Current low stage (0-based)
+		int32_t pendulumHigh = 1;          // PENDULUM: Current high stage (0-based)
+		bool pendulumGoingUp = true;       // PENDULUM: Direction (true = low->high, false = high->low)
+		int32_t spiralLow = 0;             // SPIRAL: Current low position
+		int32_t spiralHigh = 7;            // SPIRAL: Current high position
+		bool spiralFromLow = true;         // SPIRAL: Direction flag
 	} performanceControls;
 };
 

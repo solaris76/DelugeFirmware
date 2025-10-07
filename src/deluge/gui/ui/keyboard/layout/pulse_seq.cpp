@@ -222,33 +222,31 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 		return 2147483647;
 	}
 
+	// MIDI clock compatibility: Use ultra-safe minimal implementation
+	if (playbackHandler.isExternalClockActive()) {
+		return doTickForwardMidiClockSafe(clipCurrentPos, instruction);
+	}
+
 	// Only generate notes if arpeggiator is off
 	ArpeggiatorSettings* arpSettings = getArpSettings();
 	if (arpSettings && arpSettings->mode != ArpMode::OFF) {
 		return 2147483647; // No timing support when arpeggiator is on
 	}
 
-	// Handle playback start/stop detection
-	static bool hasBeenInitialized = false;
-	static bool wasPlayingLastTime = false;
+	// Handle playback start/stop detection using position-based logic (no static variables)
 	bool isCurrentlyPlaying = (clipCurrentPos > 0);
 
-	if (!hasBeenInitialized) {
-		resetSequencerState();
-		hasBeenInitialized = true;
-		wasPlayingLastTime = isCurrentlyPlaying;
-	}
-	else if (wasPlayingLastTime && !isCurrentlyPlaying) {
+	// Reset sequencer when playback position resets to 0
+	if (clipCurrentPos == 0 && sequencerState.isPlaying) {
 		// Playback just stopped - send all notes off
 		sendAllNotesOff();
 		sequencerState.isPlaying = false;
 	}
-	else if (!wasPlayingLastTime && isCurrentlyPlaying) {
+	else if (clipCurrentPos > 0 && !sequencerState.isPlaying) {
 		// Playback just started
+		resetSequencerState();
 		sequencerState.isPlaying = true;
 	}
-
-	wasPlayingLastTime = isCurrentlyPlaying;
 
 	// Calculate ticks per period based on clock divider
 	// Use the same sync level as the arpeggiator for consistency
@@ -301,7 +299,7 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 
 		// Flash pad for visual feedback
 		sequencerState.gatePadFlashing = true;
-		sequencerState.flashStartTime = playbackHandler.getCurrentInternalTickCount();
+		sequencerState.flashStartTime = clipCurrentPos; // Use clip position instead of internal tick count
 		sequencerState.lastPlayedStage = sequencerState.currentVisualStage;
 		keyboardScreen.requestMainPadsRendering();
 
@@ -309,12 +307,121 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 		generateNotes(instruction);
 	}
 	else {
+		// Turn off flash after a short duration
+		if (sequencerState.gatePadFlashing && sequencerState.flashStartTime != 0) {
+			uint32_t flashDuration = ticksPerPeriod / 4; // Flash for 1/4 of the period
+			if ((clipCurrentPos - sequencerState.flashStartTime) > flashDuration) {
+				sequencerState.gatePadFlashing = false;
+			}
+		}
+
 		if (!currentlyPlayingReversed) {
 			howFarIntoPeriod = ticksPerPeriod - howFarIntoPeriod;
 		}
 	}
 
 	return howFarIntoPeriod;
+}
+
+int32_t KeyboardLayoutPulseSeq::doTickForwardMidiClockSafe(uint32_t clipCurrentPos, ArpReturnInstruction* instruction) {
+	// Ultra-minimal MIDI clock safe implementation
+	// No complex timing calculations, no arpeggiator calls, no note-off tracking
+
+	// Simple playback state tracking
+	bool isCurrentlyPlaying = (clipCurrentPos > 0);
+	if (!isCurrentlyPlaying) {
+		sequencerState.isPlaying = false;
+		return 2147483647;
+	}
+
+	if (!sequencerState.isPlaying) {
+		// Just started - minimal initialization
+		sequencerState.isPlaying = true;
+		sequencerState.currentPulse = 0;
+		performanceControls.currentStage = 0;
+	}
+
+	// MIDI clock timing - use clock divider but with safe calculations
+	ArpeggiatorSettings* arpSettings = getArpSettings();
+	uint32_t syncLevel = arpSettings ? arpSettings->syncLevel : 6; // Default to 16th notes
+	uint32_t ticksPerPeriod = 3 << (9 - syncLevel); // Base timing calculation
+	ticksPerPeriod *= performanceControls.clockDivider; // Apply clock divider
+	// Skip the /2 correction that was causing issues
+	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
+
+	// Only trigger on beat boundaries
+	if (howFarIntoPeriod == 0) {
+		// Flash pad for visual feedback
+		sequencerState.gatePadFlashing = true;
+		sequencerState.flashStartTime = clipCurrentPos;
+		sequencerState.lastPlayedStage = performanceControls.currentStage;
+		keyboardScreen.requestMainPadsRendering();
+
+		// Generate notes with proper advancement
+		generateNotesMidiClockSafe(instruction);
+	}
+	else {
+		// Turn off flash after a short duration
+		if (sequencerState.gatePadFlashing && sequencerState.flashStartTime != 0) {
+			uint32_t flashDuration = ticksPerPeriod / 4;
+			if ((clipCurrentPos - sequencerState.flashStartTime) > flashDuration) {
+				sequencerState.gatePadFlashing = false;
+			}
+		}
+	}
+
+	return (howFarIntoPeriod == 0) ? ticksPerPeriod : (ticksPerPeriod - howFarIntoPeriod);
+}
+
+void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* instruction) {
+	// MIDI clock safe note generation - use arpeggiator system but avoid problematic calls
+	int32_t stage = performanceControls.currentStage;
+
+	if (stage >= 0 && stage < performanceControls.numStages && performanceControls.stageEnabled[stage]) {
+		StageData& stageData = stages[stage];
+
+		// Only SINGLE gate type to keep it simple during MIDI clock
+		if (stageData.gateType == GateType::SINGLE) {
+			// Use the same note calculation as the full version
+			NoteSet& scaleNotes = getScaleNotes();
+			uint8_t scaleNoteCount = getScaleNoteCount();
+
+			// Calculate note from scale (same as full version)
+			constexpr int32_t kBaseOctave = 48; // C3
+			int32_t note = kBaseOctave + getRootNote() + scaleNotes[stageData.noteIndex] + (stageData.octave * kOctaveSize)
+			               + performanceControls.transpose + (performanceControls.octave * kOctaveSize);
+
+			// Clamp note to valid range
+			if (note < 0) note = 0;
+			if (note > 127) note = 127;
+
+			uint8_t velocity = getDefaultVelocity();
+
+			// Use arpeggiator system safely - call noteOn but avoid the problematic reset() calls
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip) {
+				MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
+				if (melodicInstrument) {
+					NonAudioInstrument* nonAudioInstrument = (NonAudioInstrument*)melodicInstrument;
+					if (nonAudioInstrument) {
+						ArpeggiatorSettings* arpSettings = getArpSettings();
+						if (arpSettings) {
+							// This is the safe arpeggiator call - noteOn with ArpMode::OFF should be safe
+							nonAudioInstrument->arpeggiator.noteOn(arpSettings, note, velocity, instruction, MIDI_CHANNEL_NONE, nullptr);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Stage advancement - skip disabled stages during MIDI clock
+	do {
+		performanceControls.currentStage++;
+		if (performanceControls.currentStage >= performanceControls.numStages) {
+			performanceControls.currentStage = 0;
+		}
+	} while (!performanceControls.stageEnabled[performanceControls.currentStage] && performanceControls.currentStage != 0);
 }
 
 void KeyboardLayoutPulseSeq::generateNotes(ArpReturnInstruction* instruction) {
@@ -400,8 +507,10 @@ void KeyboardLayoutPulseSeq::playNoteForStage(ArpReturnInstruction* instruction,
 			if (nonAudioInstrument) {
 				// Add note to arpeggiator's internal list
 				ArpeggiatorSettings* arpSettings = getArpSettings();
-				nonAudioInstrument->arpeggiator.noteOn(arpSettings, note, velocity, instruction, MIDI_CHANNEL_NONE,
-				                                       nullptr);
+				if (arpSettings) { // Extra safety check
+					nonAudioInstrument->arpeggiator.noteOn(arpSettings, note, velocity, instruction, MIDI_CHANNEL_NONE,
+					                                       nullptr);
+				}
 			}
 		}
 	}
@@ -448,7 +557,9 @@ void KeyboardLayoutPulseSeq::switchNoteOff(ArpReturnInstruction* instruction, in
 				if (note != ARP_NOTE_NONE) {
 					// Call arpeggiator's noteOff - it will send note-off when ArpMode::OFF
 					ArpeggiatorSettings* arpSettings = getArpSettings();
-					nonAudioInstrument->arpeggiator.noteOff(arpSettings, note, instruction);
+					if (arpSettings) { // Extra safety check
+						nonAudioInstrument->arpeggiator.noteOff(arpSettings, note, instruction);
+					}
 				}
 			}
 		}
@@ -614,16 +725,9 @@ void KeyboardLayoutPulseSeq::renderPads(RGB image[][kDisplayWidth + kSideBarWidt
 		// Gate type colors with red flash for active stage
 		bool shouldFlash = false;
 		if (sequencerState.gatePadFlashing && sequencerState.lastPlayedStage == x) {
-			// Check if flash duration has expired
-			uint32_t currentTime = playbackHandler.getCurrentInternalTickCount();
-			uint32_t flashElapsed = currentTime - sequencerState.flashStartTime;
-			if (flashElapsed < sequencerState.flashDuration) {
-				shouldFlash = true;
-			}
-			else {
-				// Flash duration expired, stop flashing
-				sequencerState.gatePadFlashing = false;
-			}
+			// Simple flash - just flash for a few render cycles
+			shouldFlash = true;
+			// Flash will be turned off by the timing function when appropriate
 		}
 
 		if (shouldFlash) {
@@ -1141,100 +1245,85 @@ void KeyboardLayoutPulseSeq::advanceToNextEnabledStage() {
 
 	case PlayOrder::PEDAL:
 		// Always return to stage 1: 1,2,1,3,1,4,1,5,1,6,1,7,1,8
-		{
-			static int32_t pedalNextStage = 1; // Track which stage to go to next (1-based)
-
-			if (performanceControls.currentStage == 0) {
-				// From stage 1, go to the next stage in sequence
-				performanceControls.currentStage = pedalNextStage;
-				pedalNextStage++;
-				if (pedalNextStage >= performanceControls.numStages) {
-					pedalNextStage = 1; // Reset to stage 2 (1-based)
-				}
+		// Use instance variable instead of static to avoid MIDI clock conflicts
+		if (performanceControls.currentStage == 0) {
+			// From stage 1, go to the next stage in sequence
+			performanceControls.currentStage = performanceControls.pedalNextStage;
+			performanceControls.pedalNextStage++;
+			if (performanceControls.pedalNextStage >= performanceControls.numStages) {
+				performanceControls.pedalNextStage = 1; // Reset to stage 2 (1-based)
 			}
-			else {
-				// From any other stage, return to stage 1
-				performanceControls.currentStage = 0;
-			}
+		}
+		else {
+			// From any other stage, return to stage 1
+			performanceControls.currentStage = 0;
 		}
 		return;
 
 	case PlayOrder::SKIP_2:
 		// Skip every 2nd: 1,3,5,7,2,4,6,8
-		{
-			static bool oddPhase = true;
-			if (oddPhase) {
-				// Odd stages: 1,3,5,7
-				performanceControls.currentStage += 2;
-				if (performanceControls.currentStage >= performanceControls.numStages) {
-					performanceControls.currentStage = 1; // Start even phase at stage 2
-					oddPhase = false;
-				}
+		// Use instance variable instead of static to avoid MIDI clock conflicts
+		if (performanceControls.skip2OddPhase) {
+			// Odd stages: 1,3,5,7
+			performanceControls.currentStage += 2;
+			if (performanceControls.currentStage >= performanceControls.numStages) {
+				performanceControls.currentStage = 1; // Start even phase at stage 2
+				performanceControls.skip2OddPhase = false;
 			}
-			else {
-				// Even stages: 2,4,6,8
-				performanceControls.currentStage += 2;
-				if (performanceControls.currentStage >= performanceControls.numStages) {
-					performanceControls.currentStage = 0; // Back to stage 1
-					oddPhase = true;
-				}
+		}
+		else {
+			// Even stages: 2,4,6,8
+			performanceControls.currentStage += 2;
+			if (performanceControls.currentStage >= performanceControls.numStages) {
+				performanceControls.currentStage = 0; // Back to stage 1
+				performanceControls.skip2OddPhase = true;
 			}
 		}
 		return;
 
 	case PlayOrder::PENDULUM:
 		// Swing pattern: 1,2,3,2,3,4,3,4,5,4,5,6,5,6,7,6,7,8
-		{
-			static int32_t pendulumLow = 0;  // Current low stage (0-based)
-			static int32_t pendulumHigh = 1; // Current high stage (0-based)
-			static bool goingUp = true;      // Direction: true = low->high, false = high->low
+		// Use instance variables instead of static to avoid MIDI clock conflicts
+		if (performanceControls.pendulumGoingUp) {
+			// Going from low to high
+			performanceControls.currentStage = performanceControls.pendulumHigh;
+			performanceControls.pendulumGoingUp = false; // Next time go back down
+		}
+		else {
+			// Going from high back to low, then advance the pair
+			performanceControls.currentStage = performanceControls.pendulumLow;
+			performanceControls.pendulumGoingUp = true; // Next time go up
 
-			if (goingUp) {
-				// Going from low to high
-				performanceControls.currentStage = pendulumHigh;
-				goingUp = false; // Next time go back down
-			}
-			else {
-				// Going from high back to low, then advance the pair
-				performanceControls.currentStage = pendulumLow;
-				goingUp = true; // Next time go up
+			// Advance to next pair
+			performanceControls.pendulumLow++;
+			performanceControls.pendulumHigh++;
 
-				// Advance to next pair
-				pendulumLow++;
-				pendulumHigh++;
-
-				// Reset when we reach the end
-				if (pendulumHigh >= performanceControls.numStages) {
-					pendulumLow = 0;
-					pendulumHigh = 1;
-				}
+			// Reset when we reach the end
+			if (performanceControls.pendulumHigh >= performanceControls.numStages) {
+				performanceControls.pendulumLow = 0;
+				performanceControls.pendulumHigh = 1;
 			}
 		}
 		return;
 
 	case PlayOrder::SPIRAL:
 		// Spiral inward: 1,8,2,7,3,6,4,5
-		{
-			static int32_t spiralLow = 0;
-			static int32_t spiralHigh = 7;
-			static bool spiralFromLow = true;
+		// Use instance variables instead of static to avoid MIDI clock conflicts
+		if (performanceControls.spiralFromLow) {
+			performanceControls.currentStage = performanceControls.spiralLow;
+			performanceControls.spiralLow++;
+			performanceControls.spiralFromLow = false;
+		}
+		else {
+			performanceControls.currentStage = performanceControls.spiralHigh;
+			performanceControls.spiralHigh--;
+			performanceControls.spiralFromLow = true;
+		}
 
-			if (spiralFromLow) {
-				performanceControls.currentStage = spiralLow;
-				spiralLow++;
-				spiralFromLow = false;
-			}
-			else {
-				performanceControls.currentStage = spiralHigh;
-				spiralHigh--;
-				spiralFromLow = true;
-			}
-
-			// Reset when spiral meets in middle
-			if (spiralLow > spiralHigh) {
-				spiralLow = 0;
-				spiralHigh = performanceControls.numStages - 1;
-			}
+		// Reset when spiral meets in middle
+		if (performanceControls.spiralLow > performanceControls.spiralHigh) {
+			performanceControls.spiralLow = 0;
+			performanceControls.spiralHigh = performanceControls.numStages - 1;
 		}
 		return;
 	}
@@ -1507,21 +1596,25 @@ void KeyboardLayoutPulseSeq::resetToPatternStart() {
 }
 
 void KeyboardLayoutPulseSeq::sendAllNotesOff() {
-	// Send all notes off via instrument
+	// MIDI clock safety: The problematic calls are arpeggiator.reset() during MIDI clock transitions
+	// Skip the reset() call during external clock, but allow allNotesOff() which should be safer
+
 	InstrumentClip* clip = getCurrentInstrumentClip();
 	if (clip) {
 		MelodicInstrument* melodicInstrument = (MelodicInstrument*)clip->output;
 		if (melodicInstrument) {
-			// Cast to MIDIInstrument to access allNotesOff
+			// Cast to MIDIInstrument to access allNotesOff - this should be safe
 			MIDIInstrument* midiInstrument = (MIDIInstrument*)melodicInstrument;
 			if (midiInstrument) {
 				midiInstrument->allNotesOff();
 			}
 
-			// Also clear the arpeggiator's note list to prevent hung notes
-			NonAudioInstrument* nonAudioInstrument = (NonAudioInstrument*)melodicInstrument;
-			if (nonAudioInstrument) {
-				nonAudioInstrument->arpeggiator.reset();
+			// CRITICAL: Skip arpeggiator.reset() during MIDI clock - this was likely the crash cause
+			if (!playbackHandler.isExternalClockActive() && !playbackHandler.ignoringMidiClockInput) {
+				NonAudioInstrument* nonAudioInstrument = (NonAudioInstrument*)melodicInstrument;
+				if (nonAudioInstrument) {
+					nonAudioInstrument->arpeggiator.reset(); // Only during internal clock
+				}
 			}
 		}
 	}
