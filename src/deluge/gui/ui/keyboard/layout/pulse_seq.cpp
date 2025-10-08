@@ -239,7 +239,7 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 	// Don't reset on clipCurrentPos == 0 - that's just clip looping, not stopping
 	// Only reset when playback actually stops (detected by playback handler state)
 	if (!playbackHandler.isEitherClockActive() && sequencerState.isPlaying) {
-		// Playback actually stopped - send all notes off
+		// Playback actually stopped - send all notes off for safety
 		sendAllNotesOff();
 		sequencerState.isPlaying = false;
 	}
@@ -328,12 +328,14 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 }
 
 int32_t KeyboardLayoutPulseSeq::doTickForwardMidiClockSafe(uint32_t clipCurrentPos, ArpReturnInstruction* instruction) {
-	// Ultra-minimal MIDI clock safe implementation
-	// No complex timing calculations, no arpeggiator calls, no note-off tracking
+	// MIDI clock implementation with proper gate length handling (same as internal clock)
+	// Use the same gate length system as internal clock for consistent behavior
 
 	// Simple playback state tracking - don't reset on clipCurrentPos == 0
 	// Only reset when playback actually stops
 	if (!playbackHandler.isEitherClockActive() && sequencerState.isPlaying) {
+		// MIDI clock stopped - send all notes off for safety
+		sendAllNotesOff();
 		sequencerState.isPlaying = false;
 		return 2147483647;
 	}
@@ -355,6 +357,43 @@ int32_t KeyboardLayoutPulseSeq::doTickForwardMidiClockSafe(uint32_t clipCurrentP
 	ticksPerPeriod *= performanceControls.clockDivider;            // Apply clock divider
 	// Skip the /2 correction that was causing issues
 	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
+
+	// Add proper gate length handling (same as internal clock)
+	uint32_t gateLength = ticksPerPeriod / 16; // Very short default gate for single pulses
+
+	if (arpSettings) {
+		uint32_t gatePercent = computeCurrentValueForStandardMenuItem(arpSettings->gate);
+		// Scale gate to be appropriate for single pulse duration
+		gateLength = (gatePercent * ticksPerPeriod) / 400; // Much shorter gates for single pulses
+		if (gateLength < 1)
+			gateLength = 1; // Minimum gate length
+		if (gateLength > ticksPerPeriod / 8)
+			gateLength = ticksPerPeriod / 8; // Max 12.5% of period for single pulses
+	}
+
+	// Track note-offs for active notes (same as internal clock)
+	for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
+		if (sequencerState.noteActive[n]) {
+			sequencerState.noteGatePos[n]++;
+
+			// Check if this note should be turned off
+			uint32_t noteGateLength = gateLength;
+
+			// Use the source stage that triggered this note for gate calculation
+			int32_t sourceStage = sequencerState.noteSourceStage[n];
+			if (sourceStage >= 0 && sourceStage < 8) {
+				if (stages[sourceStage].gateType == GateType::HELD) {
+					// For HELD gate types, extend gate length to cover entire stage duration
+					noteGateLength = ticksPerPeriod * stages[sourceStage].pulseCount;
+				}
+				// For other gate types, use normal gate length (already set above)
+			}
+
+			if (sequencerState.noteGatePos[n] >= noteGateLength) {
+				switchNoteOff(instruction, n);
+			}
+		}
+	}
 
 	// Only trigger on beat boundaries
 	if (howFarIntoPeriod == 0) {
@@ -445,26 +484,22 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 					if (nonAudioInstrument) {
 						ArpeggiatorSettings* arpSettings = getArpSettings();
 						if (arpSettings) {
-							// Call noteOn and also call noteOff immediately for short gates
+							// Call noteOn and track for proper gate length (same as internal clock)
 							nonAudioInstrument->arpeggiator.noteOn(arpSettings, note, velocity, instruction,
 							                                       MIDI_CHANNEL_NONE, nullptr);
 
-							// For SINGLE and MULTIPLE gates, schedule immediate note-off
-							if (stageData.gateType == GateType::SINGLE || stageData.gateType == GateType::MULTIPLE) {
-								// Call noteOff immediately to get short gate behavior
-								ArpReturnInstruction noteOffInstruction;
-								nonAudioInstrument->arpeggiator.noteOff(arpSettings, note, &noteOffInstruction);
-
-								// Copy note-off to main instruction
-								for (int32_t off = 0; off < ARP_MAX_INSTRUCTION_NOTES; off++) {
-									if (instruction->noteCodeOffPostArp[off] == ARP_NOTE_NONE) {
-										instruction->noteCodeOffPostArp[off] = noteOffInstruction.noteCodeOffPostArp[0];
-										instruction->outputMIDIChannelOff[off] = noteOffInstruction.outputMIDIChannelOff[0];
-										break;
-									}
+							// Track this note for proper gate length handling (same as internal clock)
+							// Find an empty slot to track this note
+							for (int32_t n = 0; n < ARP_MAX_INSTRUCTION_NOTES; n++) {
+								if (!sequencerState.noteActive[n]) {
+									sequencerState.noteActive[n] = true;
+									sequencerState.noteCodeCurrentlyOnPostArp[n] = note;
+									sequencerState.outputMIDIChannelForNoteCurrentlyOnPostArp[n] = MIDI_CHANNEL_NONE;
+									sequencerState.noteGatePos[n] = 0; // Start gate timing
+									sequencerState.noteSourceStage[n] = stage; // Track which stage triggered this note
+									break;
 								}
 							}
-							// For HELD gates, let the note sustain (no immediate note-off)
 						}
 					}
 				}
@@ -489,7 +524,10 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 	if (stage >= 0 && stage < performanceControls.numStages) {
 		StageData& stageData = stages[stage];
 		if (sequencerState.currentPulse >= stageData.pulseCount) {
-			// Stage complete - advance to next enabled stage
+			// Stage complete - send All Notes Off for clean transition
+			sendAllNotesOff();
+
+			// Now advance to next enabled stage
 			sequencerState.currentPulse = 0;
 			advanceToNextEnabledStage(); // Use existing logic with play orders
 		}
@@ -527,7 +565,10 @@ void KeyboardLayoutPulseSeq::generateNotes(ArpReturnInstruction* instruction) {
 	// Advance to next pulse within current stage, or next stage
 	sequencerState.currentPulse++;
 	if (sequencerState.currentPulse >= stages[performanceControls.currentStage].pulseCount) {
-		// Finished current stage, move to next enabled stage
+		// Finished current stage - send All Notes Off for clean transition
+		sendAllNotesOff();
+
+		// Now move to next enabled stage
 		sequencerState.currentPulse = 0;
 		advanceToNextEnabledStage();
 	}
