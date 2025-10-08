@@ -384,6 +384,15 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 	// MIDI clock safe note generation - use arpeggiator system but avoid problematic calls
 	int32_t stage = performanceControls.currentStage;
 
+	// SAFETY: Check if current stage is still valid and enabled during real-time editing
+	if (stage < 0 || stage >= performanceControls.numStages || !performanceControls.stageEnabled[stage]) {
+		// Current stage is invalid or disabled - immediately advance to next enabled stage
+		sequencerState.currentPulse = 0;
+		performanceControls.currentStage = 0; // Reset to stage 0
+		advanceToNextEnabledStage(); // Find next enabled stage
+		return;
+	}
+
 	if (stage >= 0 && stage < performanceControls.numStages && performanceControls.stageEnabled[stage]) {
 		StageData& stageData = stages[stage];
 
@@ -467,6 +476,15 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 	// Advance pulse within current stage
 	sequencerState.currentPulse++;
 
+	// SAFETY: Check if current stage is still valid and enabled
+	if (stage < 0 || stage >= performanceControls.numStages || !performanceControls.stageEnabled[stage]) {
+		// Current stage is invalid or disabled - immediately advance to next enabled stage
+		sequencerState.currentPulse = 0;
+		performanceControls.currentStage = 0; // Reset to stage 0
+		advanceToNextEnabledStage(); // Find next enabled stage
+		return; // Exit early - don't play notes from invalid stage
+	}
+
 	// Check if we've completed this stage's pulse count
 	if (stage >= 0 && stage < performanceControls.numStages) {
 		StageData& stageData = stages[stage];
@@ -481,6 +499,15 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 void KeyboardLayoutPulseSeq::generateNotes(ArpReturnInstruction* instruction) {
 	// Use current stage directly (skip disabled stages completely)
 	int32_t stage = performanceControls.currentStage;
+
+	// SAFETY: Check if current stage is still valid and enabled
+	if (stage < 0 || stage >= performanceControls.numStages || !performanceControls.stageEnabled[stage]) {
+		// Current stage is invalid or disabled - immediately advance to next enabled stage
+		sequencerState.currentPulse = 0;
+		performanceControls.currentStage = 0; // Reset to stage 0
+		advanceToNextEnabledStage(); // Find next enabled stage
+		return;
+	}
 
 	if (stage >= 0 && stage < performanceControls.numStages && performanceControls.stageEnabled[stage]) {
 		StageData& stageData = stages[stage];
