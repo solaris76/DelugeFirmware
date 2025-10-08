@@ -236,9 +236,10 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 	// Handle playback start/stop detection using position-based logic (no static variables)
 	bool isCurrentlyPlaying = (clipCurrentPos > 0);
 
-	// Reset sequencer when playback position resets to 0
-	if (clipCurrentPos == 0 && sequencerState.isPlaying) {
-		// Playback just stopped - send all notes off
+	// Don't reset on clipCurrentPos == 0 - that's just clip looping, not stopping
+	// Only reset when playback actually stops (detected by playback handler state)
+	if (!playbackHandler.isEitherClockActive() && sequencerState.isPlaying) {
+		// Playback actually stopped - send all notes off
 		sendAllNotesOff();
 		sequencerState.isPlaying = false;
 	}
@@ -246,6 +247,9 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 		// Playback just started
 		resetSequencerState();
 		sequencerState.isPlaying = true;
+
+		// CRITICAL: Calculate actual total pattern length based on stage pulse counts
+		sequencerState.totalPatternLength = calculateTotalPatternLength();
 	}
 
 	// Calculate ticks per period based on clock divider
@@ -253,7 +257,7 @@ int32_t KeyboardLayoutPulseSeq::doTickForward(uint32_t clipCurrentPos, bool curr
 	uint32_t syncLevel = arpSettings ? arpSettings->syncLevel : 6; // Default to 16th notes if no arp settings
 	uint32_t ticksPerPeriod = 3 << (9 - syncLevel);
 	ticksPerPeriod *= performanceControls.clockDivider; // Clock divider - multiply to make slower
-	ticksPerPeriod /= 2;                                // Correct timing - was running at half speed
+	// Remove /2 correction to match MIDI clock timing
 
 	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
 
@@ -327,9 +331,9 @@ int32_t KeyboardLayoutPulseSeq::doTickForwardMidiClockSafe(uint32_t clipCurrentP
 	// Ultra-minimal MIDI clock safe implementation
 	// No complex timing calculations, no arpeggiator calls, no note-off tracking
 
-	// Simple playback state tracking
-	bool isCurrentlyPlaying = (clipCurrentPos > 0);
-	if (!isCurrentlyPlaying) {
+	// Simple playback state tracking - don't reset on clipCurrentPos == 0
+	// Only reset when playback actually stops
+	if (!playbackHandler.isEitherClockActive() && sequencerState.isPlaying) {
 		sequencerState.isPlaying = false;
 		return 2147483647;
 	}
@@ -339,6 +343,9 @@ int32_t KeyboardLayoutPulseSeq::doTickForwardMidiClockSafe(uint32_t clipCurrentP
 		sequencerState.isPlaying = true;
 		sequencerState.currentPulse = 0;
 		performanceControls.currentStage = 0;
+
+		// CRITICAL: Calculate actual total pattern length for MIDI clock too!
+		sequencerState.totalPatternLength = calculateTotalPatternLength();
 	}
 
 	// MIDI clock timing - use clock divider but with safe calculations
@@ -380,8 +387,28 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 	if (stage >= 0 && stage < performanceControls.numStages && performanceControls.stageEnabled[stage]) {
 		StageData& stageData = stages[stage];
 
-		// Only SINGLE gate type to keep it simple during MIDI clock
-		if (stageData.gateType == GateType::SINGLE) {
+		// Check if we should play based on gate type and current pulse within stage
+		bool shouldPlay = false;
+		switch (stageData.gateType) {
+			case GateType::SINGLE:
+				// Play only on first pulse of stage
+				shouldPlay = (sequencerState.currentPulse == 0);
+				break;
+			case GateType::MULTIPLE:
+				// Play on every pulse of stage
+				shouldPlay = true;
+				break;
+			case GateType::HELD:
+				// Play only on first pulse, but let arpeggiator gate handle the hold
+				shouldPlay = (sequencerState.currentPulse == 0);
+				break;
+			case GateType::OFF:
+			default:
+				shouldPlay = false;
+				break;
+		}
+
+		if (shouldPlay) {
 			// Use the same note calculation as the full version
 			NoteSet& scaleNotes = getScaleNotes();
 			uint8_t scaleNoteCount = getScaleNoteCount();
@@ -415,13 +442,19 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 		}
 	}
 
-	// Stage advancement - skip disabled stages during MIDI clock
-	do {
-		performanceControls.currentStage++;
-		if (performanceControls.currentStage >= performanceControls.numStages) {
-			performanceControls.currentStage = 0;
+	// Proper pulse tracking within stage (same as main function)
+	// Advance pulse within current stage
+	sequencerState.currentPulse++;
+
+	// Check if we've completed this stage's pulse count
+	if (stage >= 0 && stage < performanceControls.numStages) {
+		StageData& stageData = stages[stage];
+		if (sequencerState.currentPulse >= stageData.pulseCount) {
+			// Stage complete - advance to next enabled stage
+			sequencerState.currentPulse = 0;
+			advanceToNextEnabledStage(); // Use existing logic with play orders
 		}
-	} while (!performanceControls.stageEnabled[performanceControls.currentStage] && performanceControls.currentStage != 0);
+	}
 }
 
 void KeyboardLayoutPulseSeq::generateNotes(ArpReturnInstruction* instruction) {
