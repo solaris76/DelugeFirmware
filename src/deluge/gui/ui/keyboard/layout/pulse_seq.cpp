@@ -351,8 +351,8 @@ int32_t KeyboardLayoutPulseSeq::doTickForwardMidiClockSafe(uint32_t clipCurrentP
 	// MIDI clock timing - use clock divider but with safe calculations
 	ArpeggiatorSettings* arpSettings = getArpSettings();
 	uint32_t syncLevel = arpSettings ? arpSettings->syncLevel : 6; // Default to 16th notes
-	uint32_t ticksPerPeriod = 3 << (9 - syncLevel); // Base timing calculation
-	ticksPerPeriod *= performanceControls.clockDivider; // Apply clock divider
+	uint32_t ticksPerPeriod = 3 << (9 - syncLevel);                // Base timing calculation
+	ticksPerPeriod *= performanceControls.clockDivider;            // Apply clock divider
 	// Skip the /2 correction that was causing issues
 	int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
 
@@ -390,22 +390,22 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 		// Check if we should play based on gate type and current pulse within stage
 		bool shouldPlay = false;
 		switch (stageData.gateType) {
-			case GateType::SINGLE:
-				// Play only on first pulse of stage
-				shouldPlay = (sequencerState.currentPulse == 0);
-				break;
-			case GateType::MULTIPLE:
-				// Play on every pulse of stage
-				shouldPlay = true;
-				break;
-			case GateType::HELD:
-				// Play only on first pulse, but let arpeggiator gate handle the hold
-				shouldPlay = (sequencerState.currentPulse == 0);
-				break;
-			case GateType::OFF:
-			default:
-				shouldPlay = false;
-				break;
+		case GateType::SINGLE:
+			// Play only on first pulse of stage
+			shouldPlay = (sequencerState.currentPulse == 0);
+			break;
+		case GateType::MULTIPLE:
+			// Play on every pulse of stage
+			shouldPlay = true;
+			break;
+		case GateType::HELD:
+			// Play only on first pulse, but let arpeggiator gate handle the hold
+			shouldPlay = (sequencerState.currentPulse == 0);
+			break;
+		case GateType::OFF:
+		default:
+			shouldPlay = false;
+			break;
 		}
 
 		if (shouldPlay) {
@@ -415,12 +415,15 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 
 			// Calculate note from scale (same as full version)
 			constexpr int32_t kBaseOctave = 48; // C3
-			int32_t note = kBaseOctave + getRootNote() + scaleNotes[stageData.noteIndex] + (stageData.octave * kOctaveSize)
-			               + performanceControls.transpose + (performanceControls.octave * kOctaveSize);
+			int32_t note = kBaseOctave + getRootNote() + scaleNotes[stageData.noteIndex]
+			               + (stageData.octave * kOctaveSize) + performanceControls.transpose
+			               + (performanceControls.octave * kOctaveSize);
 
 			// Clamp note to valid range
-			if (note < 0) note = 0;
-			if (note > 127) note = 127;
+			if (note < 0)
+				note = 0;
+			if (note > 127)
+				note = 127;
 
 			uint8_t velocity = getDefaultVelocity();
 
@@ -433,8 +436,26 @@ void KeyboardLayoutPulseSeq::generateNotesMidiClockSafe(ArpReturnInstruction* in
 					if (nonAudioInstrument) {
 						ArpeggiatorSettings* arpSettings = getArpSettings();
 						if (arpSettings) {
-							// This is the safe arpeggiator call - noteOn with ArpMode::OFF should be safe
-							nonAudioInstrument->arpeggiator.noteOn(arpSettings, note, velocity, instruction, MIDI_CHANNEL_NONE, nullptr);
+							// Call noteOn and also call noteOff immediately for short gates
+							nonAudioInstrument->arpeggiator.noteOn(arpSettings, note, velocity, instruction,
+							                                       MIDI_CHANNEL_NONE, nullptr);
+
+							// For SINGLE and MULTIPLE gates, schedule immediate note-off
+							if (stageData.gateType == GateType::SINGLE || stageData.gateType == GateType::MULTIPLE) {
+								// Call noteOff immediately to get short gate behavior
+								ArpReturnInstruction noteOffInstruction;
+								nonAudioInstrument->arpeggiator.noteOff(arpSettings, note, &noteOffInstruction);
+
+								// Copy note-off to main instruction
+								for (int32_t off = 0; off < ARP_MAX_INSTRUCTION_NOTES; off++) {
+									if (instruction->noteCodeOffPostArp[off] == ARP_NOTE_NONE) {
+										instruction->noteCodeOffPostArp[off] = noteOffInstruction.noteCodeOffPostArp[0];
+										instruction->outputMIDIChannelOff[off] = noteOffInstruction.outputMIDIChannelOff[0];
+										break;
+									}
+								}
+							}
+							// For HELD gates, let the note sustain (no immediate note-off)
 						}
 					}
 				}
