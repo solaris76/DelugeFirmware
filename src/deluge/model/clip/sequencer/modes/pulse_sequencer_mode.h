@@ -159,11 +159,12 @@ private:
 	int32_t getNoteRowY(int32_t noteIdx) const { return getGateLineY() + kNotesStartRow + noteIdx; }
 	int32_t getGateLineY() const { return displayState_.gateLineOffset + 4; }
 	int32_t calculateTotalPatternLength() const;
+	int32_t getTicksPerPeriod(int32_t baseTicks) const;
 	void showStagePopup(int32_t stage, const char* format, ...);
 	RGB dimColorIfDisabled(RGB color, int32_t stage) const;
 	RGB getOctaveColor(int32_t octave) const;
 	int32_t cycleValue(int32_t current, const int32_t* values, int32_t count) const;
-	
+
 	// Rendering sub-methods
 	void renderPulseCounts(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	                      int32_t imageWidth, int32_t gateLineY);
@@ -177,7 +178,7 @@ private:
 	                            int32_t imageWidth);
 	void renderPlaybackIndicator(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	                            int32_t imageWidth, int32_t gateLineY);
-	
+
 	// Play order advancement methods
 	void advanceForwards(int32_t& nextStage);
 	void advanceBackwards(int32_t& nextStage);
@@ -198,6 +199,7 @@ private:
 	void handleGateLength(int32_t stage);
 	void handleStageCountChange(int32_t numStages);
 	void handlePlayOrderChange(int32_t playOrderIndex);
+	void handleClockDividerChange(int32_t dividerMode);
 	void handleTransposeChange(int32_t direction);
 	void handleOctaveChange(int32_t direction);
 	void handleStageToggle(int32_t stage);
