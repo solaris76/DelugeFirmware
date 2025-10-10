@@ -1180,6 +1180,10 @@ void PulseSequencerMode::handleStageCountChange(int32_t numStages) {
 	if (performanceControls_.numStages != numStages) {
 		performanceControls_.numStages = numStages;
 		sequencerState_.totalPatternLength = calculateTotalPatternLength();
+		
+		char buffer[30];
+		snprintf(buffer, sizeof(buffer), "Stages: %d", numStages);
+		display->displayPopup(buffer);
 	}
 }
 
@@ -1248,6 +1252,11 @@ void PulseSequencerMode::handleOctaveChange(int32_t direction) {
 void PulseSequencerMode::handleStageToggle(int32_t stage) {
 	if (!isStageValid(stage)) return;
 	performanceControls_.stageEnabled[stage] = !performanceControls_.stageEnabled[stage];
+	
+	const char* status = performanceControls_.stageEnabled[stage] ? "ON" : "OFF";
+	char buffer[30];
+	snprintf(buffer, sizeof(buffer), "Stage %d: %s", stage + 1, status);
+	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handleVelocitySpread(int32_t stage) {
@@ -1346,7 +1355,7 @@ void PulseSequencerMode::randomizeSequence() {
 	}
 
 	sequencerState_.totalPatternLength = calculateTotalPatternLength();
-	display->displayPopup("RANDOMIZE");
+	display->displayPopup("RANDOMISE");
 }
 
 void PulseSequencerMode::evolveSequence() {
