@@ -290,12 +290,49 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 		}
 	}
 
-	// y7: Octave up controls for stages (x0-7) + Control buttons (x8-15)
-	if (whichRows & (1 << 7)) {
-		// Octave up indicators for each stage (x0-7)
+	// y5: Octave down controls for stages (x0-7 only)
+	if (whichRows & (1 << 5)) {
+		for (int32_t x = 0; x < 8; x++) {
+			bool isActive = (stages_[x].octave < 0);
+			RGB color = isActive ? RGB{100, 150, 255} : RGB{30, 50, 90};
+
+			if (!performanceControls_.stageEnabled[x] || x >= performanceControls_.numStages) {
+				color.r /= 8;
+				color.g /= 8;
+				color.b /= 8;
+			}
+
+			image[5 * imageWidth + x] = color;
+			if (occupancyMask) {
+				occupancyMask[5][x] = isActive ? 48 : 24;
+			}
+		}
+	}
+
+	// y6: Octave up controls for stages (x0-7 only)
+	if (whichRows & (1 << 6)) {
 		for (int32_t x = 0; x < 8; x++) {
 			bool isActive = (stages_[x].octave > 0);
-			RGB color = isActive ? RGB{255, 128, 0} : RGB{50, 75, 128};
+			RGB color = isActive ? RGB{255, 128, 0} : RGB{90, 50, 30};
+
+			if (!performanceControls_.stageEnabled[x] || x >= performanceControls_.numStages) {
+				color.r /= 8;
+				color.g /= 8;
+				color.b /= 8;
+			}
+
+			image[6 * imageWidth + x] = color;
+			if (occupancyMask) {
+				occupancyMask[6][x] = isActive ? 48 : 24;
+			}
+		}
+	}
+
+	// y7: Note selection toggle for stages (x0-7) + Control buttons (x8-15)
+	if (whichRows & (1 << 7)) {
+		// Note selection pads for each stage (x0-7)
+		for (int32_t x = 0; x < 8; x++) {
+			RGB color = RGB{255, 100, 150}; // Pink for note selection
 
 			if (!performanceControls_.stageEnabled[x] || x >= performanceControls_.numStages) {
 				color.r /= 8;
@@ -305,7 +342,7 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 
 			image[7 * imageWidth + x] = color;
 			if (occupancyMask) {
-				occupancyMask[7][x] = isActive ? 48 : 24;
+				occupancyMask[7][x] = 48;
 			}
 		}
 
@@ -783,68 +820,34 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 		return false; // Let releases pass through
 	}
 
-	int32_t gateLineY = getGateLineY();
-
-	// Gate line (y = gateLineY, x0-x7)
-	if (y == gateLineY && x < 8) {
-		handleGateType(x);
-		return true;
+	// FIXED POSITION CONTROLS - Check these FIRST before dynamic scrolling controls
+	// y5: Octave down (x0-7) OR Velocity spread (x8-15)
+	if (y == 5) {
+		if (x < 8) {
+			handleOctaveAdjustment(x, -1); // Octave down
+			return true;
+		}
+		else if (x >= 8 && x < 16) {
+			handleVelocitySpread(x - 8);
+			return true;
+		}
 	}
-	// Note selection (above gate line)
-	else if (y == gateLineY + 1 && x < 8) {
-		handleNoteSelection(x);
-		return true;
+	// y6: Octave up (x0-7) OR Probability (x8-15)
+	else if (y == 6) {
+		if (x < 8) {
+			handleOctaveAdjustment(x, 1); // Octave up
+			return true;
+		}
+		else if (x >= 8 && x < 16) {
+			handleProbability(x - 8);
+			return true;
+		}
 	}
-	// Octave controls (above note selection)
-	else if (y == gateLineY + 2 && x < 8) {
-		handleOctaveAdjustment(x, -1); // Octave down
-		return true;
-	}
-	else if (y == gateLineY + 3 && x < 8) {
-		handleOctaveAdjustment(x, 1); // Octave up
-		return true;
-	}
-	// Pulse count pads (below gate line)
-	else if (y < gateLineY && x < 8) {
-		handlePulseCount(x, gateLineY - 1 - y);
-		return true;
-	}
-	// Performance controls on right side (x8-15)
-	// y4: Stage count control
-	else if (y == 4 && x >= 8 && x < kDisplayWidth) {
-		handleStageCountChange(x - 7); // 1-8
-		return true;
-	}
-	// y1: Play order presets
-	else if (y == 1 && x >= 8 && x < 16) {
-		handlePlayOrderChange(x - 8); // 0-7
-		return true;
-	}
-	// y3: Stage enable/disable toggle
-	else if (y == 3 && x >= 8 && x < kDisplayWidth) {
-		handleStageToggle(x - 8); // 0-7
-		return true;
-	}
-	// y5: Velocity spread (x8-15)
-	else if (y == 5 && x >= 8 && x < 16) {
-		handleVelocitySpread(x - 8);
-		return true;
-	}
-	// y6: Probability (x8-15)
-	else if (y == 6 && x >= 8 && x < 16) {
-		handleProbability(x - 8);
-		return true;
-	}
-	// y2: Gate length (x8-15)
-	else if (y == 2 && x >= 8 && x < 16) {
-		handleGateLength(x - 8);
-		return true;
-	}
-	// y7: Octave up for stages (x0-7) + Control buttons (x8-15)
+	// y7: Note selection (x0-7) + Control buttons (x8-15)
 	else if (y == 7) {
 		if (x < 8) {
-			// Octave up toggle for stage
-			handleOctaveAdjustment(x, 1);
+			// Note selection toggle for stage
+			handleNoteSelection(x);
 			return true;
 		}
 		else if (x == 8) {
@@ -879,6 +882,55 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 			handleOctaveChange(1);
 			return true;
 		}
+	}
+	
+	// DYNAMIC SCROLLING CONTROLS - Check these AFTER fixed positions
+	int32_t gateLineY = getGateLineY();
+
+	// Gate line (y = gateLineY, x0-x7)
+	if (y == gateLineY && x < 8) {
+		handleGateType(x);
+		return true;
+	}
+	// Note selection (above gate line) - only if NOT on fixed rows
+	else if (y == gateLineY + 1 && x < 8 && y != 5 && y != 6 && y != 7) {
+		handleNoteSelection(x);
+		return true;
+	}
+	// Octave controls (above note selection) - only if NOT on fixed rows
+	else if (y == gateLineY + 2 && x < 8 && y != 5 && y != 6 && y != 7) {
+		handleOctaveAdjustment(x, -1); // Octave down
+		return true;
+	}
+	else if (y == gateLineY + 3 && x < 8 && y != 5 && y != 6 && y != 7) {
+		handleOctaveAdjustment(x, 1); // Octave up
+		return true;
+	}
+	// Pulse count pads (below gate line)
+	else if (y < gateLineY && x < 8) {
+		handlePulseCount(x, gateLineY - 1 - y);
+		return true;
+	}
+	// Performance controls on right side (x8-15)
+	// y4: Stage count control
+	else if (y == 4 && x >= 8 && x < kDisplayWidth) {
+		handleStageCountChange(x - 7); // 1-8
+		return true;
+	}
+	// y1: Play order presets
+	else if (y == 1 && x >= 8 && x < 16) {
+		handlePlayOrderChange(x - 8); // 0-7
+		return true;
+	}
+	// y3: Stage enable/disable toggle
+	else if (y == 3 && x >= 8 && x < kDisplayWidth) {
+		handleStageToggle(x - 8); // 0-7
+		return true;
+	}
+	// y2: Gate length (x8-15)
+	else if (y == 2 && x >= 8 && x < 16) {
+		handleGateLength(x - 8);
+		return true;
 	}
 
 	return false; // Didn't handle this pad
@@ -929,9 +981,42 @@ void PulseSequencerMode::handleNoteSelection(int32_t stage) {
 	// Cycle through note indices (0-15 for more range)
 	stages_[stage].noteIndex = (stages_[stage].noteIndex + 1) % 16;
 
-	// Show popup with degree in scale (we don't have note name without modelStack, so show scale degree)
+	// Calculate the actual note to show its name
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->output->type == OutputType::SYNTH) {
+		char modelStackMemory[MODEL_STACK_MAX_SIZE];
+		ModelStackWithTimelineCounter* modelStack = setupModelStackWithTimelineCounter(modelStackMemory, currentSong, clip);
+		
+		int32_t scaleNotes[64];
+		int32_t numNotes = getScaleNotes(modelStack, scaleNotes, 64, 6, 0);
+		
+		if (numNotes > 0) {
+			// Calculate note with current settings
+			int32_t noteIndexInScale = stages_[stage].noteIndex + performanceControls_.transpose;
+			while (noteIndexInScale < 0) noteIndexInScale += numNotes;
+			while (noteIndexInScale >= numNotes) noteIndexInScale -= numNotes;
+			
+			int32_t note = scaleNotes[noteIndexInScale] + 48; // Base C3 offset
+			note += (stages_[stage].octave * 12) + (performanceControls_.octave * 12);
+			
+			if (note < 0) note = 0;
+			if (note > 127) note = 127;
+			
+			// Convert to note name
+			char noteNameBuffer[10];
+			int32_t lengthDummy = 0;
+			noteCodeToString(note, noteNameBuffer, &lengthDummy, true);
+			
+			char buffer[30];
+			snprintf(buffer, sizeof(buffer), "Stage %d: %s", stage + 1, noteNameBuffer);
+			display->displayPopup(buffer);
+			return;
+		}
+	}
+	
+	// Fallback
 	char buffer[30];
-	snprintf(buffer, sizeof(buffer), "Stage %d: Degree %d", stage + 1, stages_[stage].noteIndex + 1);
+	snprintf(buffer, sizeof(buffer), "Stage %d Note: %d", stage + 1, stages_[stage].noteIndex + 1);
 	display->displayPopup(buffer);
 }
 
@@ -946,7 +1031,7 @@ void PulseSequencerMode::handleOctaveAdjustment(int32_t stage, int32_t direction
 
 	stages_[stage].octave = newOctave;
 
-	// Show popup
+	// Show popup with octave value
 	char buffer[30];
 	snprintf(buffer, sizeof(buffer), "Stage %d Oct: %+d", stage + 1, stages_[stage].octave);
 	display->displayPopup(buffer);
