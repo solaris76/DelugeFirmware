@@ -44,7 +44,7 @@ public:
 	// Override rendering to show pulse pattern
 	bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	               int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) override;
-	
+
 	// Override sidebar rendering
 	bool renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
 	                  uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) override;
@@ -133,7 +133,9 @@ private:
 
 	// Display state
 	struct {
-		int32_t gateLineOffset = 0; // 0-3, maps to Y positions 4-7
+		int32_t gateLineOffset = 0; // 0 to (3+numScaleNotes), shifts entire left side
+		int32_t scaleNotes[12]; // Current scale notes (max 12 for chromatic)
+		int32_t numScaleNotes = 0; // How many notes in current scale
 	} displayState_;
 
 	// Helper methods
@@ -145,6 +147,7 @@ private:
 	int32_t calculateTotalPatternLength() const;
 	int32_t getGateLineY() const { return displayState_.gateLineOffset + 4; }
 	const char* getGateTypeName(GateType type) const;
+	void updateScaleNotes(); // Update scale notes from current song
 
 	// Pad input handlers
 	void handleGateType(int32_t stage);
