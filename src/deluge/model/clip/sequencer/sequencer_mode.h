@@ -92,6 +92,15 @@ protected:
 	// Sends a note on/off to the instrument
 	static void playNote(void* modelStackPtr, int32_t noteCode, uint8_t velocity, int32_t length);
 	static void stopNote(void* modelStackPtr, int32_t noteCode);
+	
+	// PLAYBACK POSITION INDICATOR - Show current position across top row (y7, x0-15)
+	// Call this from your renderPads() to show playback position
+	// absolutePlaybackPos: current playback position (from processPlayback)
+	// totalLength: total length of your pattern in ticks
+	// color: color for the position indicator
+	static void renderPlaybackPosition(RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	                                   int32_t imageWidth, int32_t absolutePlaybackPos, int32_t totalLength,
+	                                   RGB color = RGB{255, 255, 255}, bool enabled = true);
 
 	// Track type compatibility (default: support all)
 	virtual bool supportsInstrument() { return true; }

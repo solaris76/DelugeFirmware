@@ -101,4 +101,27 @@ void SequencerMode::stopNote(void* modelStackPtr, int32_t noteCode) {
 	                    MIDI_CHANNEL_NONE, 64, 0, 0);
 }
 
+void SequencerMode::renderPlaybackPosition(RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+                                           int32_t imageWidth, int32_t absolutePlaybackPos, int32_t totalLength,
+                                           RGB color, bool enabled) {
+	if (!enabled || totalLength == 0) {
+		return;
+	}
+	
+	// Calculate which pad on y7 should be lit (0-15)
+	int32_t positionInPattern = absolutePlaybackPos % totalLength;
+	int32_t padX = (positionInPattern * kDisplayWidth) / totalLength;
+	
+	// Clamp to valid range
+	if (padX < 0) padX = 0;
+	if (padX >= kDisplayWidth) padX = kDisplayWidth - 1;
+	
+	// Light up the pad on y7
+	int32_t y = 7;
+	image[y * imageWidth + padX] = color;
+	if (occupancyMask) {
+		occupancyMask[y][padX] = 64;
+	}
+}
+
 } // namespace deluge::model::clip::sequencer

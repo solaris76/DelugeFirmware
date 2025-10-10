@@ -21,6 +21,8 @@
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "util/functions.h"
+#include "gui/ui/ui.h"
+#include "gui/views/instrument_clip_view.h"
 
 namespace deluge::model::clip::sequencer::modes {
 
@@ -225,6 +227,62 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 		}
 	}
 
+	// y7: Playback position indicator (x0-15, full width) + Control buttons (x8-15)
+	if (whichRows & (1 << 7)) {
+		// Clear y7 first
+		for (int32_t x = 0; x < kDisplayWidth; x++) {
+			image[7 * imageWidth + x] = {0, 0, 0};
+			if (occupancyMask) {
+				occupancyMask[7][x] = 0;
+			}
+		}
+
+		// Render playback position on y7 (x0-15, full width)
+		// Use the same simple calculation as the default clip position indicator
+		if (lastAbsolutePlaybackPos_ >= 0) {
+			// Map position to x coordinate (0-15)
+			int32_t padX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / (ticksPerSixteenthNote_ * performanceControls_.clockDivider * sequencerState_.totalPatternLength);
+
+			if (padX >= 0 && padX < kDisplayWidth) {
+				image[7 * imageWidth + padX] = RGB{255, 255, 255}; // White position indicator
+				if (occupancyMask) {
+					occupancyMask[7][padX] = 64;
+				}
+			}
+		}
+
+		// Overlay control buttons on top (x8-15) - they'll override the position indicator where they are
+		image[7 * imageWidth + 8] = RGB{128, 0, 255};  // Purple reset
+		image[7 * imageWidth + 9] = RGB{255, 0, 128};  // Magenta randomize
+		image[7 * imageWidth + 10] = RGB{0, 255, 255}; // Cyan evolve
+
+		// Transpose controls
+		if (performanceControls_.transpose != 0) {
+			image[7 * imageWidth + 12] = (performanceControls_.transpose < 0) ? RGB{255, 128, 0} : RGB{64, 32, 0};
+			image[7 * imageWidth + 13] = (performanceControls_.transpose > 0) ? RGB{255, 128, 0} : RGB{64, 32, 0};
+		}
+		else {
+			image[7 * imageWidth + 12] = RGB{64, 32, 0};
+			image[7 * imageWidth + 13] = RGB{64, 32, 0};
+		}
+
+		// Octave controls
+		if (performanceControls_.octave != 0) {
+			image[7 * imageWidth + 14] = (performanceControls_.octave < 0) ? RGB{255, 0, 255} : RGB{64, 0, 64};
+			image[7 * imageWidth + 15] = (performanceControls_.octave > 0) ? RGB{255, 0, 255} : RGB{64, 0, 64};
+		}
+		else {
+			image[7 * imageWidth + 14] = RGB{64, 0, 64};
+			image[7 * imageWidth + 15] = RGB{64, 0, 64};
+		}
+
+		if (occupancyMask) {
+			for (int32_t x = 8; x < 16; x++) {
+				occupancyMask[7][x] = 48;
+			}
+		}
+	}
+
 	return true;
 }
 
@@ -235,6 +293,23 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 
 	ModelStackWithTimelineCounter* modelStack = static_cast<ModelStackWithTimelineCounter*>(modelStackPtr);
 	InstrumentClip* clip = static_cast<InstrumentClip*>(modelStack->getTimelineCounter());
+
+	// Store clip position for position indicator and request refresh if pad position changed
+	int32_t oldPadX = -1;
+	int32_t totalLengthTicks = ticksPerSixteenthNote_ * performanceControls_.clockDivider * sequencerState_.totalPatternLength;
+	if (ticksPerSixteenthNote_ > 0 && totalLengthTicks > 0) {
+		oldPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
+	}
+
+	lastAbsolutePlaybackPos_ = clip->lastProcessedPos;
+
+	// Request UI refresh if position indicator moved to a new pad
+	if (ticksPerSixteenthNote_ > 0 && totalLengthTicks > 0) {
+		int32_t newPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
+		if (newPadX != oldPadX) {
+			uiNeedsRendering(&instrumentClipView, 1 << 7, 0); // Refresh y7 only
+		}
+	}
 
 	// Only work with melodic instruments
 	if (clip->output->type != OutputType::SYNTH && clip->output->type != OutputType::MIDI_OUT
@@ -390,12 +465,15 @@ void PulseSequencerMode::advanceToNextEnabledStage() {
 	case PlayOrder::FORWARDS:
 		direction = 1;
 		break;
+
 	case PlayOrder::BACKWARDS:
 		direction = -1;
 		break;
+
 	case PlayOrder::PING_PONG:
 		direction = performanceControls_.pingPongDirection;
 		break;
+
 	case PlayOrder::RANDOM: {
 		int32_t enabledStages[8];
 		int32_t enabledCount = 0;
@@ -409,11 +487,80 @@ void PulseSequencerMode::advanceToNextEnabledStage() {
 		}
 		return;
 	}
-	default:
-		break;
+
+	case PlayOrder::PEDAL:
+		// Always return to stage 1: 1,2,1,3,1,4,1,5,1,6,1,7,1,8
+		if (performanceControls_.currentStage == 0) {
+			performanceControls_.currentStage = performanceControls_.pedalNextStage;
+			performanceControls_.pedalNextStage++;
+			if (performanceControls_.pedalNextStage >= performanceControls_.numStages) {
+				performanceControls_.pedalNextStage = 1;
+			}
+		}
+		else {
+			performanceControls_.currentStage = 0;
+		}
+		return;
+
+	case PlayOrder::SKIP_2:
+		// Skip every 2nd: 1,3,5,7,2,4,6,8
+		if (performanceControls_.skip2OddPhase) {
+			performanceControls_.currentStage += 2;
+			if (performanceControls_.currentStage >= performanceControls_.numStages) {
+				performanceControls_.currentStage = 1;
+				performanceControls_.skip2OddPhase = false;
+			}
+		}
+		else {
+			performanceControls_.currentStage += 2;
+			if (performanceControls_.currentStage >= performanceControls_.numStages) {
+				performanceControls_.currentStage = 0;
+				performanceControls_.skip2OddPhase = true;
+			}
+		}
+		return;
+
+	case PlayOrder::PENDULUM:
+		// Swing pattern: 1,2,3,2,3,4,3,4,5,4,5,6,5,6,7,6,7,8
+		if (performanceControls_.pendulumGoingUp) {
+			performanceControls_.currentStage = performanceControls_.pendulumHigh;
+			performanceControls_.pendulumGoingUp = false;
+		}
+		else {
+			performanceControls_.currentStage = performanceControls_.pendulumLow;
+			performanceControls_.pendulumGoingUp = true;
+
+			performanceControls_.pendulumLow++;
+			performanceControls_.pendulumHigh++;
+
+			if (performanceControls_.pendulumHigh >= performanceControls_.numStages) {
+				performanceControls_.pendulumLow = 0;
+				performanceControls_.pendulumHigh = 1;
+			}
+		}
+		return;
+
+	case PlayOrder::SPIRAL:
+		// Spiral inward: 1,8,2,7,3,6,4,5
+		if (performanceControls_.spiralFromLow) {
+			performanceControls_.currentStage = performanceControls_.spiralLow;
+			performanceControls_.spiralLow++;
+			performanceControls_.spiralFromLow = false;
+		}
+		else {
+			performanceControls_.currentStage = performanceControls_.spiralHigh;
+			performanceControls_.spiralHigh--;
+			performanceControls_.spiralFromLow = true;
+		}
+
+		if (performanceControls_.spiralLow > performanceControls_.spiralHigh) {
+			performanceControls_.spiralLow = 0;
+			performanceControls_.spiralHigh = performanceControls_.numStages - 1;
+		}
+		return;
 	}
 
-	// Find next enabled stage
+	// Find next enabled stage (for FORWARDS/BACKWARDS/PING_PONG)
 	do {
 		nextStage += direction;
 		attempts++;
@@ -485,6 +632,286 @@ const char* PulseSequencerMode::getGateTypeName(GateType type) const {
 		return "HELD";
 	}
 	return "UNKNOWN";
+}
+
+// ================================================================================================
+// PAD INPUT HANDLING
+// ================================================================================================
+
+bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
+	// Only handle presses (not releases) for most controls
+	if (velocity == 0) {
+		return false; // Let releases pass through
+	}
+
+	int32_t gateLineY = getGateLineY();
+
+	// Gate line (y = gateLineY, x0-x7)
+	if (y == gateLineY && x < 8) {
+		handleGateType(x);
+		return true;
+	}
+	// Note selection (above gate line)
+	else if (y == gateLineY + 1 && x < 8) {
+		handleNoteSelection(x);
+		return true;
+	}
+	// Octave controls (above note selection)
+	else if (y == gateLineY + 2 && x < 8) {
+		handleOctaveAdjustment(x, -1); // Octave down
+		return true;
+	}
+	else if (y == gateLineY + 3 && x < 8) {
+		handleOctaveAdjustment(x, 1); // Octave up
+		return true;
+	}
+	// Pulse count pads (below gate line)
+	else if (y < gateLineY && x < 8) {
+		handlePulseCount(x, gateLineY - 1 - y);
+		return true;
+	}
+	// Performance controls on right side (x8-15)
+	// y4: Stage count control
+	else if (y == 4 && x >= 8 && x < kDisplayWidth) {
+		handleStageCountChange(x - 7); // 1-8
+		return true;
+	}
+	// y1: Play order presets
+	else if (y == 1 && x >= 8 && x < 16) {
+		handlePlayOrderChange(x - 8); // 0-7
+		return true;
+	}
+	// y3: Stage enable/disable toggle
+	else if (y == 3 && x >= 8 && x < kDisplayWidth) {
+		handleStageToggle(x - 8); // 0-7
+		return true;
+	}
+	// y7: Control buttons (Reset, Randomize, Evolve, Transpose, Octave) - x8-15
+	else if (y == 7 && x >= 8 && x < kDisplayWidth) {
+		if (x == 8) {
+			resetToDefaults();
+			return true;
+		}
+		else if (x == 9) {
+			randomizeSequence();
+			return true;
+		}
+		else if (x == 10) {
+			evolveSequence();
+			return true;
+		}
+		else if (x == 12) {
+			handleTransposeChange(-1);
+			return true;
+		}
+		else if (x == 13) {
+			handleTransposeChange(1);
+			return true;
+		}
+		else if (x == 14) {
+			handleOctaveChange(-1);
+			return true;
+		}
+		else if (x == 15) {
+			handleOctaveChange(1);
+			return true;
+		}
+	}
+
+	return false; // Didn't handle this pad
+}
+
+// ================================================================================================
+// PAD INPUT HANDLERS
+// ================================================================================================
+
+void PulseSequencerMode::handleGateType(int32_t stage) {
+	if (stage < 0 || stage >= kMaxStages) {
+		return;
+	}
+
+	// Cycle through gate types: OFF -> SINGLE -> MULTIPLE -> HELD -> OFF
+	int32_t currentType = static_cast<int32_t>(stages_[stage].gateType);
+	int32_t nextType = (currentType + 1) % 4;
+	stages_[stage].gateType = static_cast<GateType>(nextType);
+}
+
+void PulseSequencerMode::handleNoteSelection(int32_t stage) {
+	if (stage < 0 || stage >= kMaxStages) {
+		return;
+	}
+
+	// Get current scale notes
+	// TODO: Need access to modelStack to call getScaleNotes()
+	// For now, just cycle through 0-7 as a placeholder
+	stages_[stage].noteIndex = (stages_[stage].noteIndex + 1) % 8;
+}
+
+void PulseSequencerMode::handleOctaveAdjustment(int32_t stage, int32_t direction) {
+	if (stage < 0 || stage >= kMaxStages) {
+		return;
+	}
+
+	int32_t newOctave = stages_[stage].octave + direction;
+	if (newOctave < -2) newOctave = -2;
+	if (newOctave > 3) newOctave = 3;
+
+	stages_[stage].octave = newOctave;
+}
+
+void PulseSequencerMode::handlePulseCount(int32_t stage, int32_t position) {
+	if (stage < 0 || stage >= kMaxStages) {
+		return;
+	}
+	if (position < 0 || position >= kMaxPulseCount) {
+		return;
+	}
+
+	int32_t newPulseCount = position + 1;
+	if (newPulseCount != stages_[stage].pulseCount) {
+		stages_[stage].pulseCount = newPulseCount;
+		sequencerState_.totalPatternLength = calculateTotalPatternLength();
+
+		if (sequencerState_.currentPulse >= sequencerState_.totalPatternLength) {
+			sequencerState_.currentPulse = 0;
+		}
+	}
+}
+
+void PulseSequencerMode::handleStageCountChange(int32_t numStages) {
+	if (numStages < 1) numStages = 1;
+	if (numStages > 8) numStages = 8;
+
+	if (performanceControls_.numStages != numStages) {
+		performanceControls_.numStages = numStages;
+		sequencerState_.totalPatternLength = calculateTotalPatternLength();
+	}
+}
+
+void PulseSequencerMode::handlePlayOrderChange(int32_t playOrderIndex) {
+	if (playOrderIndex < 0 || playOrderIndex > 7) {
+		return;
+	}
+
+	PlayOrder newPlayOrder = static_cast<PlayOrder>(playOrderIndex);
+	if (performanceControls_.playOrder != newPlayOrder) {
+		performanceControls_.playOrder = newPlayOrder;
+		performanceControls_.pingPongDirection = 1;
+	}
+}
+
+void PulseSequencerMode::handleTransposeChange(int32_t direction) {
+	performanceControls_.transpose += direction;
+
+	if (performanceControls_.transpose < -12) {
+		performanceControls_.transpose = -12;
+	}
+	if (performanceControls_.transpose > 12) {
+		performanceControls_.transpose = 12;
+	}
+}
+
+void PulseSequencerMode::handleOctaveChange(int32_t direction) {
+	performanceControls_.octave += direction;
+
+	if (performanceControls_.octave < -3) {
+		performanceControls_.octave = -3;
+	}
+	if (performanceControls_.octave > 3) {
+		performanceControls_.octave = 3;
+	}
+}
+
+void PulseSequencerMode::handleStageToggle(int32_t stage) {
+	if (stage < 0 || stage >= kMaxStages) {
+		return;
+	}
+
+	performanceControls_.stageEnabled[stage] = !performanceControls_.stageEnabled[stage];
+}
+
+void PulseSequencerMode::resetToDefaults() {
+	performanceControls_.transpose = 0;
+	performanceControls_.octave = 0;
+	performanceControls_.clockDivider = 2;
+	performanceControls_.numStages = 8;
+	performanceControls_.playOrder = PlayOrder::FORWARDS;
+	performanceControls_.pingPongDirection = 1;
+	performanceControls_.currentStage = 0;
+
+	for (int32_t i = 0; i < 8; i++) {
+		performanceControls_.stageEnabled[i] = true;
+		stages_[i].gateType = GateType::OFF;
+		stages_[i].noteIndex = 0;
+		stages_[i].octave = 0;
+		stages_[i].pulseCount = 1;
+	}
+
+	sequencerState_.totalPatternLength = calculateTotalPatternLength();
+}
+
+void PulseSequencerMode::randomizeSequence() {
+	for (int32_t i = 0; i < 8; i++) {
+		// Randomize gate type (skip OFF for interesting patterns)
+		int32_t gateTypeIndex = getRandom255() % 3;
+		stages_[i].gateType = static_cast<GateType>(gateTypeIndex + 1);
+
+		// Randomize note index (0-7)
+		stages_[i].noteIndex = getRandom255() % 8;
+
+		// Randomize octave (-2 to +3)
+		stages_[i].octave = (getRandom255() % 6) - 2;
+
+		// Randomize pulse count (bias toward lower values)
+		uint8_t random = getRandom255();
+		if (random < 128) {
+			stages_[i].pulseCount = 1;
+		}
+		else if (random < 192) {
+			stages_[i].pulseCount = 2;
+		}
+		else if (random < 224) {
+			stages_[i].pulseCount = 3;
+		}
+		else if (random < 240) {
+			stages_[i].pulseCount = 4;
+		}
+		else {
+			stages_[i].pulseCount = (getRandom255() % 3) + 5;
+		}
+	}
+
+	sequencerState_.totalPatternLength = calculateTotalPatternLength();
+}
+
+void PulseSequencerMode::evolveSequence() {
+	int32_t numStagesToChange = (getRandom255() % 4) + 1;
+
+	for (int32_t change = 0; change < numStagesToChange; change++) {
+		int32_t stageToChange = getRandom255() % 8;
+
+		if (getRandom255() < 179) { // 70% chance - change note
+			int32_t currentNote = stages_[stageToChange].noteIndex;
+			int32_t noteChange = (getRandom255() % 5) - 2; // -2 to +2
+			int32_t newNote = currentNote + noteChange;
+
+			// Wrap around
+			while (newNote < 0) newNote += 8;
+			while (newNote >= 8) newNote -= 8;
+
+			stages_[stageToChange].noteIndex = newNote;
+		}
+		else { // 30% chance - change octave
+			int32_t currentOctave = stages_[stageToChange].octave;
+			int32_t octaveChange = (getRandom255() < 128) ? -1 : 1;
+			int32_t newOctave = currentOctave + octaveChange;
+
+			if (newOctave < -2) newOctave = -2;
+			if (newOctave > 3) newOctave = 3;
+
+			stages_[stageToChange].octave = newOctave;
+		}
+	}
 }
 
 } // namespace deluge::model::clip::sequencer::modes

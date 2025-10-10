@@ -58,6 +58,7 @@ private:
 	
 	// Timing
 	int32_t ticksPerSixteenthNote_ = 0;
+	int32_t lastAbsolutePlaybackPos_ = 0; // For position indicator
 	
 	// Track the last note we played for note-off
 	int32_t lastNoteCode_ = -1;

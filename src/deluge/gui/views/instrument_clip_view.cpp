@@ -1849,6 +1849,17 @@ const uint32_t auditionPadActionUIModes[] = {UI_MODE_AUDITIONING,
 
 ActionResult InstrumentClipView::padAction(int32_t x, int32_t y, int32_t velocity) {
 
+	// Check if the current clip has an active sequencer mode that wants to handle pad input
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		if (sequencerMode && sequencerMode->handlePadPress(x, y, velocity)) {
+			// Sequencer mode handled the pad - request UI refresh
+			uiNeedsRendering(this, 0xFFFFFFFF, 0);
+			return ActionResult::DEALT_WITH;
+		}
+	}
+
 	// Drum Randomizer
 	if (x == 15 && y == 2 && velocity > 0
 	    && runtimeFeatureSettings.get(RuntimeFeatureSettingType::DrumRandomizer) == RuntimeFeatureStateToggle::On
@@ -6903,6 +6914,12 @@ void InstrumentClipView::graphicsRoutine() {
 	}
 
 	if (PadLEDs::flashCursor == FLASH_CURSOR_OFF) {
+		return;
+	}
+
+	// Don't render default playback position if sequencer mode is active
+	// (sequencer modes render their own position indicators)
+	if (clip && clip->hasSequencerMode()) {
 		return;
 	}
 

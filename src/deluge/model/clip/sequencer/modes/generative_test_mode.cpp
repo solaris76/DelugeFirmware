@@ -24,6 +24,8 @@
 #include "model/scale/musical_key.h"
 #include "playback/playback_handler.h"
 #include "util/functions.h"
+#include "gui/ui/ui.h"
+#include "gui/views/instrument_clip_view.h"
 
 namespace deluge::model::clip::sequencer::modes {
 
@@ -40,7 +42,7 @@ void GenerativeTestMode::cleanup() {
 }
 
 bool GenerativeTestMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
-                                   int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) {
+                                       int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) {
 	// Light up pads in a simple test pattern to show the mode is active
 
 	for (int32_t yDisplay = 0; yDisplay < kDisplayHeight; yDisplay++) {
@@ -56,13 +58,35 @@ bool GenerativeTestMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 				}
 
 				// Light up diagonal pattern - every 4th pad, offset by row
-				if ((xDisplay + yDisplay) % 4 == 0) {
+				if ((xDisplay + yDisplay) % 4 == 0 && yDisplay < 7) { // Skip y7 for position indicator
 					// Use a bright purple color to make it obvious this is our test mode
 					image[yDisplay * imageWidth + xDisplay] = {255, 0, 255}; // Bright magenta
 					if (occupancyMask) {
 						occupancyMask[yDisplay][xDisplay] = 64; // Full occupancy
 					}
 				}
+			}
+		}
+	}
+
+	// Show playback position on y7 (top row)
+	if ((whichRows & (1 << 7)) && ticksPerSixteenthNote_ > 0) {
+		// Clear y7 first
+		for (int32_t x = 0; x < kDisplayWidth; x++) {
+			image[7 * imageWidth + x] = {0, 0, 0};
+			if (occupancyMask) {
+				occupancyMask[7][x] = 0;
+			}
+		}
+
+		// Render position on y7 only - simple calculation like default clip view
+		int32_t totalLengthTicks = ticksPerSixteenthNote_ * 16; // 1 bar = 16 sixteenth notes
+		int32_t padX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
+
+		if (padX >= 0 && padX < kDisplayWidth) {
+			image[7 * imageWidth + padX] = RGB{255, 255, 0}; // Yellow position indicator
+			if (occupancyMask) {
+				occupancyMask[7][padX] = 64;
 			}
 		}
 	}
@@ -78,6 +102,23 @@ int32_t GenerativeTestMode::processPlayback(void* modelStackPtr, int32_t absolut
 	// Cast the model stack
 	ModelStackWithTimelineCounter* modelStack = static_cast<ModelStackWithTimelineCounter*>(modelStackPtr);
 	InstrumentClip* clip = static_cast<InstrumentClip*>(modelStack->getTimelineCounter());
+
+	// Store clip position for position indicator and request refresh if pad changed
+	int32_t oldPadX = -1;
+	int32_t totalLengthTicks = ticksPerSixteenthNote_ * 16;
+	if (ticksPerSixteenthNote_ > 0) {
+		oldPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
+	}
+
+	lastAbsolutePlaybackPos_ = clip->lastProcessedPos;
+
+	// Request UI refresh if position indicator moved to a new pad
+	if (ticksPerSixteenthNote_ > 0) {
+		int32_t newPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
+		if (newPadX != oldPadX) {
+			uiNeedsRendering(&instrumentClipView, 1 << 7, 0); // Refresh y7 only
+		}
+	}
 
 	// Only work with melodic instruments for now
 	if (clip->output->type != OutputType::SYNTH && clip->output->type != OutputType::MIDI_OUT && clip->output->type != OutputType::CV) {

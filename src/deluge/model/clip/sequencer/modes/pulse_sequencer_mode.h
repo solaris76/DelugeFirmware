@@ -45,6 +45,9 @@ public:
 	bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	               int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) override;
 
+	// Override pad input to handle user interaction
+	bool handlePadPress(int32_t x, int32_t y, int32_t velocity) override;
+
 	// Override playback to generate pulsed notes
 	int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) override;
 
@@ -66,6 +69,7 @@ public:
 private:
 	bool initialized_ = false;
 	int32_t ticksPerSixteenthNote_ = 0;
+	int32_t lastAbsolutePlaybackPos_ = 0; // Track for position indicator
 
 	// Stage data (8 stages, one per column)
 	struct StageData {
@@ -105,6 +109,16 @@ private:
 		int32_t pingPongDirection = 1;
 		int32_t currentStage = 0;
 		std::array<bool, kMaxStages> stageEnabled = {true, true, true, true, true, true, true, true};
+
+		// Play order state variables (instance-based, not static)
+		int32_t pedalNextStage = 1;
+		bool skip2OddPhase = true;
+		int32_t pendulumLow = 0;
+		int32_t pendulumHigh = 1;
+		bool pendulumGoingUp = true;
+		int32_t spiralLow = 0;
+		int32_t spiralHigh = 7;
+		bool spiralFromLow = true;
 	} performanceControls_;
 
 	// Display state
@@ -121,6 +135,20 @@ private:
 	int32_t calculateTotalPatternLength() const;
 	int32_t getGateLineY() const { return displayState_.gateLineOffset + 4; }
 	const char* getGateTypeName(GateType type) const;
+
+	// Pad input handlers
+	void handleGateType(int32_t stage);
+	void handleNoteSelection(int32_t stage);
+	void handleOctaveAdjustment(int32_t stage, int32_t direction);
+	void handlePulseCount(int32_t stage, int32_t position);
+	void handleStageCountChange(int32_t numStages);
+	void handlePlayOrderChange(int32_t playOrderIndex);
+	void handleTransposeChange(int32_t direction);
+	void handleOctaveChange(int32_t direction);
+	void handleStageToggle(int32_t stage);
+	void resetToDefaults();
+	void randomizeSequence();
+	void evolveSequence();
 };
 
 } // namespace deluge::model::clip::sequencer::modes
