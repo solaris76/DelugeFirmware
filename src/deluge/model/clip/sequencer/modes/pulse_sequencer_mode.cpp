@@ -23,6 +23,12 @@
 #include "util/functions.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
+#include "hid/display/display.h"
+#include <algorithm>
+#include <cstdio>
+
+// Forward declaration for note name conversion
+extern void noteCodeToString(int32_t noteCode, char* buffer, int32_t* getLengthWithoutDot, bool appendOctaveNo);
 
 namespace deluge::model::clip::sequencer::modes {
 
@@ -30,12 +36,15 @@ void PulseSequencerMode::initialize() {
 	initialized_ = true;
 	ticksPerSixteenthNote_ = 0;
 
-	// Initialize all stages to defaults
+	// Initialize all stages with a simple test pattern
 	for (int32_t i = 0; i < kMaxStages; i++) {
-		stages_[i].gateType = GateType::OFF;
-		stages_[i].noteIndex = 0;
+		stages_[i].gateType = (i < 4) ? GateType::SINGLE : GateType::OFF; // First 4 stages active
+		stages_[i].noteIndex = i; // Different note for each stage
 		stages_[i].octave = 0;
 		stages_[i].pulseCount = 1;
+		stages_[i].velocitySpread = 0;
+		stages_[i].probability = 100;
+		stages_[i].gateLength = 50;
 	}
 
 	// Initialize sequencer state
@@ -54,14 +63,22 @@ void PulseSequencerMode::initialize() {
 	// Initialize performance controls
 	performanceControls_.transpose = 0;
 	performanceControls_.octave = 0;
-	performanceControls_.clockDivider = 2;
+	performanceControls_.clockDivider = 1;  // Default: 16th notes (1=16th, 2=8th, 4=quarter)
 	performanceControls_.numStages = 8;
 	performanceControls_.playOrder = PlayOrder::FORWARDS;
 	performanceControls_.currentStage = 0;
 }
 
 void PulseSequencerMode::cleanup() {
-	// Send all notes off
+	// Send all notes off before cleanup
+	for (int32_t n = 0; n < 16; n++) {
+		if (sequencerState_.noteActive[n] && sequencerState_.noteCodeActive[n] >= 0) {
+			// We don't have modelStack here, so just mark as inactive
+			// The notes will be stopped when mode switches
+			sequencerState_.noteActive[n] = false;
+			sequencerState_.noteCodeActive[n] = -1;
+		}
+	}
 	initialized_ = false;
 }
 
@@ -227,34 +244,76 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 		}
 	}
 
-	// y7: Playback position indicator (x0-15, full width) + Control buttons (x8-15)
-	if (whichRows & (1 << 7)) {
-		// Clear y7 first
-		for (int32_t x = 0; x < kDisplayWidth; x++) {
-			image[7 * imageWidth + x] = {0, 0, 0};
+	// y5: Velocity spread per stage (x8-15) - Cyan gradient
+	if (whichRows & (1 << 5)) {
+		for (int32_t x = 8; x < 16; x++) {
+			int32_t stage = x - 8;
+			int32_t spread = stages_[stage].velocitySpread;
+			int32_t intensity = (spread * 255) / 127;  // 0-127 -> 0-255
+			int32_t g = (intensity > 32) ? intensity : 32;
+			int32_t b = (intensity > 32) ? intensity : 32;
+			RGB color = RGB{0, static_cast<uint8_t>(g), static_cast<uint8_t>(b)};
+			image[5 * imageWidth + x] = color;
 			if (occupancyMask) {
-				occupancyMask[7][x] = 0;
+				occupancyMask[5][x] = 32;
+			}
+		}
+	}
+
+	// y6: Probability per stage (x8-15) - Magenta gradient
+	if (whichRows & (1 << 6)) {
+		for (int32_t x = 8; x < 16; x++) {
+			int32_t stage = x - 8;
+			int32_t prob = stages_[stage].probability;
+			int32_t intensity = (prob * 255) / 100;  // 0-100 -> 0-255
+			int32_t val = (intensity > 32) ? intensity : 32;
+			RGB color = RGB{static_cast<uint8_t>(val), 0, static_cast<uint8_t>(val)};
+			image[6 * imageWidth + x] = color;
+			if (occupancyMask) {
+				occupancyMask[6][x] = 32;
+			}
+		}
+	}
+
+	// y2: Gate length per stage (x8-15) - GREEN gradient
+	if (whichRows & (1 << 2)) {
+		for (int32_t x = 8; x < 16; x++) {
+			int32_t stage = x - 8;
+			int32_t gateLen = stages_[stage].gateLength;
+			int32_t intensity = (gateLen * 255) / 100;  // 0-100 -> 0-255
+			int32_t g = (intensity > 32) ? intensity : 32;
+			RGB color = RGB{0, static_cast<uint8_t>(g), 0};
+			image[2 * imageWidth + x] = color;
+			if (occupancyMask) {
+				occupancyMask[2][x] = 32;
+			}
+		}
+	}
+
+	// y7: Octave up controls for stages (x0-7) + Control buttons (x8-15)
+	if (whichRows & (1 << 7)) {
+		// Octave up indicators for each stage (x0-7)
+		for (int32_t x = 0; x < 8; x++) {
+			bool isActive = (stages_[x].octave > 0);
+			RGB color = isActive ? RGB{255, 128, 0} : RGB{50, 75, 128};
+
+			if (!performanceControls_.stageEnabled[x] || x >= performanceControls_.numStages) {
+				color.r /= 8;
+				color.g /= 8;
+				color.b /= 8;
+			}
+
+			image[7 * imageWidth + x] = color;
+			if (occupancyMask) {
+				occupancyMask[7][x] = isActive ? 48 : 24;
 			}
 		}
 
-		// Render playback position on y7 (x0-15, full width)
-		// Use the same simple calculation as the default clip position indicator
-		if (lastAbsolutePlaybackPos_ >= 0) {
-			// Map position to x coordinate (0-15)
-			int32_t padX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / (ticksPerSixteenthNote_ * performanceControls_.clockDivider * sequencerState_.totalPatternLength);
-
-			if (padX >= 0 && padX < kDisplayWidth) {
-				image[7 * imageWidth + padX] = RGB{255, 255, 255}; // White position indicator
-				if (occupancyMask) {
-					occupancyMask[7][padX] = 64;
-				}
-			}
-		}
-
-		// Overlay control buttons on top (x8-15) - they'll override the position indicator where they are
-		image[7 * imageWidth + 8] = RGB{128, 0, 255};  // Purple reset
+		// Control buttons (x8-15)
+		image[7 * imageWidth + 8] = RGB{128, 0, 255};  // Purple reset all
 		image[7 * imageWidth + 9] = RGB{255, 0, 128};  // Magenta randomize
 		image[7 * imageWidth + 10] = RGB{0, 255, 255}; // Cyan evolve
+		image[7 * imageWidth + 11] = RGB{0, 100, 255}; // Blue reset performance controls
 
 		// Transpose controls
 		if (performanceControls_.transpose != 0) {
@@ -283,7 +342,58 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 		}
 	}
 
+	// After rendering all pads, brighten the playback position pad
+	// Calculate which pad the playback position is on
+	if (ticksPerSixteenthNote_ > 0 && lastAbsolutePlaybackPos_ >= 0) {
+		int32_t totalLengthTicks = ticksPerSixteenthNote_ * performanceControls_.clockDivider * sequencerState_.totalPatternLength;
+		if (totalLengthTicks > 0) {
+			int32_t positionInPattern = lastAbsolutePlaybackPos_ % totalLengthTicks;
+			int32_t currentStage = 0;
+			int32_t ticksAccumulated = 0;
+
+			// Find which stage we're in
+			for (int32_t s = 0; s < performanceControls_.numStages; s++) {
+				int32_t stageTicks = ticksPerSixteenthNote_ * performanceControls_.clockDivider * stages_[performanceControls_.currentStage].pulseCount;
+				if (positionInPattern < ticksAccumulated + stageTicks) {
+					currentStage = s;
+					break;
+				}
+				ticksAccumulated += stageTicks;
+			}
+
+			// Brighten the gate pad for the current stage
+			int32_t gateLineY = getGateLineY();
+			if ((whichRows & (1 << gateLineY)) && currentStage < 8) {
+				RGB& gatePad = image[gateLineY * imageWidth + currentStage];
+				// Brighten by adding white
+				gatePad.r = std::min(255, gatePad.r + 100);
+				gatePad.g = std::min(255, gatePad.g + 100);
+				gatePad.b = std::min(255, gatePad.b + 100);
+				if (occupancyMask) {
+					occupancyMask[gateLineY][currentStage] = 64;
+				}
+			}
+		}
+	}
+
 	return true;
+}
+
+bool PulseSequencerMode::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+                                       uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
+	// Blank out the sidebar - no mute/audition pads in sequencer mode
+	for (int32_t y = 0; y < kDisplayHeight; y++) {
+		if (whichRows & (1 << y)) {
+			image[y][kDisplayWidth] = RGB{0, 0, 0};      // x16 - blank
+			image[y][kDisplayWidth + 1] = RGB{0, 0, 0};  // x17 - blank
+			if (occupancyMask) {
+				occupancyMask[y][kDisplayWidth] = 0;
+				occupancyMask[y][kDisplayWidth + 1] = 0;
+			}
+		}
+	}
+
+	return true; // We handled it
 }
 
 int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolutePlaybackPos) {
@@ -294,54 +404,48 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 	ModelStackWithTimelineCounter* modelStack = static_cast<ModelStackWithTimelineCounter*>(modelStackPtr);
 	InstrumentClip* clip = static_cast<InstrumentClip*>(modelStack->getTimelineCounter());
 
-	// Store clip position for position indicator and request refresh if pad position changed
-	int32_t oldPadX = -1;
-	int32_t totalLengthTicks = ticksPerSixteenthNote_ * performanceControls_.clockDivider * sequencerState_.totalPatternLength;
-	if (ticksPerSixteenthNote_ > 0 && totalLengthTicks > 0) {
-		oldPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
-	}
-
-	lastAbsolutePlaybackPos_ = clip->lastProcessedPos;
-
-	// Request UI refresh if position indicator moved to a new pad
-	if (ticksPerSixteenthNote_ > 0 && totalLengthTicks > 0) {
-		int32_t newPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
-		if (newPadX != oldPadX) {
-			uiNeedsRendering(&instrumentClipView, 1 << 7, 0); // Refresh y7 only
-		}
-	}
-
 	// Only work with melodic instruments
 	if (clip->output->type != OutputType::SYNTH && clip->output->type != OutputType::MIDI_OUT
 	    && clip->output->type != OutputType::CV) {
 		return 2147483647;
 	}
 
-	// Calculate 16th note ticks
+	// Calculate base tick rate (16th notes from song)
 	if (ticksPerSixteenthNote_ == 0) {
 		ticksPerSixteenthNote_ = modelStack->song->getSixteenthNoteLength();
 	}
 
 	// Apply clock divider to timing
+	// clockDivider = 1 -> 16th notes (default)
+	// clockDivider = 2 -> 8th notes
+	// clockDivider = 4 -> quarter notes
 	int32_t ticksPerPeriod = ticksPerSixteenthNote_ * performanceControls_.clockDivider;
 
-	// Track note-offs for active notes
-	int32_t gateLength = ticksPerPeriod / 4; // 25% gate by default
+	// Store clip position for position indicator and request refresh if pad position changed
+	int32_t oldPadX = -1;
+	int32_t totalLengthTicks = ticksPerSixteenthNote_ * performanceControls_.clockDivider * sequencerState_.totalPatternLength;
+	if (totalLengthTicks > 0) {
+		oldPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
+	}
 
-	for (int32_t n = 0; n < 16; n++) {
-		if (sequencerState_.noteActive[n]) {
-			sequencerState_.noteGatePos[n]++;
+	lastAbsolutePlaybackPos_ = clip->lastProcessedPos;
 
-			int32_t noteGateLength = gateLength;
-			int32_t sourceStage = sequencerState_.noteSourceStage[n];
-			if (sourceStage >= 0 && sourceStage < 8) {
-				if (stages_[sourceStage].gateType == GateType::HELD) {
-					noteGateLength = ticksPerPeriod * stages_[sourceStage].pulseCount;
-				}
-			}
+	// Request UI refresh if position indicator moved to a new pad
+	if (totalLengthTicks > 0) {
+		int32_t newPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
+		if (newPadX != oldPadX) {
+			uiNeedsRendering(&instrumentClipView, 1 << 7, 0); // Refresh y7 only
+		}
+	}
 
-			if (sequencerState_.noteGatePos[n] >= noteGateLength) {
-				switchNoteOff(modelStackPtr, n);
+	// Check for any notes that need to be turned off
+	for (int32_t i = 0; i < 16; i++) {
+		if (sequencerState_.noteActive[i]) {
+			// Check if note should end now
+			if (absolutePlaybackPos >= sequencerState_.noteGatePos[i]) {
+				stopNote(modelStackPtr, sequencerState_.noteCodeActive[i]);
+				sequencerState_.noteActive[i] = false;
+				sequencerState_.noteCodeActive[i] = -1;
 			}
 		}
 	}
@@ -350,6 +454,9 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 	bool atBoundary = atDivisionBoundary(absolutePlaybackPos, ticksPerPeriod);
 
 	if (atBoundary) {
+		// Store old stage to detect changes
+		int32_t oldStage = sequencerState_.lastPlayedStage;
+
 		// Flash pad for visual feedback
 		sequencerState_.gatePadFlashing = true;
 		sequencerState_.flashStartTime = playbackHandler.getCurrentInternalTickCount();
@@ -357,6 +464,13 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 
 		// Generate notes
 		generateNotes(modelStackPtr);
+
+		// Refresh the gate line and octave pads when we move to a new stage
+		if (oldStage != performanceControls_.currentStage) {
+			int32_t gateLineY = getGateLineY();
+			uint32_t rowsToRefresh = (1 << gateLineY) | (1 << (gateLineY + 1)) | (1 << (gateLineY + 2)) | (1 << (gateLineY + 3));
+			uiNeedsRendering(&instrumentClipView, rowsToRefresh, 0);
+		}
 	}
 
 	return ticksUntilNextDivision(absolutePlaybackPos, ticksPerPeriod);
@@ -390,55 +504,80 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 		return;
 	}
 
-	// Get all scale notes
-	int32_t scaleNotes[32];
-	int32_t numNotes = getScaleNotes(modelStackPtr, scaleNotes, 32, 6, 0); // 6 octaves for full range
+	// Get all scale notes starting from C3 (MIDI 60) for better range
+	int32_t scaleNotes[64];
+	int32_t numNotes = getScaleNotes(modelStackPtr, scaleNotes, 64, 6, 0); // 6 octaves starting from root
 
 	if (numNotes == 0) {
 		return;
 	}
 
-	// Calculate note index with octave offset
+	// Calculate note index with transpose
 	int32_t noteIndexInScale = stageData.noteIndex + performanceControls_.transpose;
 
 	// Wrap to scale
 	while (noteIndexInScale < 0) noteIndexInScale += numNotes;
 	while (noteIndexInScale >= numNotes) noteIndexInScale -= numNotes;
 
-	// Get base note
+	// Get note from scale (already includes the root note from getScaleNotes)
 	int32_t note = scaleNotes[noteIndexInScale];
 
-	// Apply octave offsets
+	// Add base octave offset to start from C3 (MIDI 60) instead of very low notes
+	// The root note from scale is already included, so we just shift up to C3 range
+	note += 48; // Shift up 4 octaves to C3 range
+
+	// Apply stage octave and global octave offsets
 	note += (stageData.octave * 12) + (performanceControls_.octave * 12);
 
 	// Clamp to MIDI range
 	if (note < 0) note = 0;
 	if (note > 127) note = 127;
 
-	// Find free note slot
-	int32_t noteSlot = -1;
-	for (int32_t n = 0; n < 16; n++) {
-		if (!sequencerState_.noteActive[n]) {
-			noteSlot = n;
+	// Calculate note length based on gate type
+	ModelStackWithTimelineCounter* modelStack = static_cast<ModelStackWithTimelineCounter*>(modelStackPtr);
+	InstrumentClip* clip = static_cast<InstrumentClip*>(modelStack->getTimelineCounter());
+
+	int32_t noteLength;
+	if (stageData.gateType == GateType::HELD) {
+		// HELD: note lasts for entire stage duration
+		noteLength = ticksPerSixteenthNote_ * performanceControls_.clockDivider * stageData.pulseCount;
+	}
+	else {
+		// SINGLE/MULTIPLE: short staccato notes (50% of period)
+		noteLength = (ticksPerSixteenthNote_ * performanceControls_.clockDivider) / 2;
+	}
+
+	// Find free slot to track this note
+	int32_t freeSlot = -1;
+	for (int32_t i = 0; i < 16; i++) {
+		if (!sequencerState_.noteActive[i]) {
+			freeSlot = i;
 			break;
 		}
 	}
 
-	if (noteSlot == -1) {
-		noteSlot = 0; // Reuse first slot
+	if (freeSlot >= 0) {
+		// Apply probability check
+		if (!shouldPlayBasedOnProbability(stageData.probability)) {
+			return; // Don't play this note
+		}
+
+		// Apply velocity spread
+		uint8_t baseVelocity = 100;
+		uint8_t velocity = applyVelocitySpread(baseVelocity, stageData.velocitySpread);
+
+		// Apply gate length to note duration
+		noteLength = (noteLength * stageData.gateLength) / 100;
+		if (noteLength < 1) noteLength = 1; // Ensure at least 1 tick
+
+		// Send note-on (Deluge convention: pass length but we still track note-off ourselves)
+		playNote(modelStackPtr, note, velocity, noteLength);
+
+		// Track for automatic note-off
+		sequencerState_.noteCodeActive[freeSlot] = note;
+		sequencerState_.noteGatePos[freeSlot] = clip->lastProcessedPos + noteLength;
+		sequencerState_.noteActive[freeSlot] = true;
 	}
-
-	// Play the note
-	uint8_t velocity = 100;
-	int32_t noteLength = (ticksPerSixteenthNote_ * performanceControls_.clockDivider) / 4;
-
-	playNote(modelStackPtr, note, velocity, noteLength);
-
-	// Track this note
-	sequencerState_.noteActive[noteSlot] = true;
-	sequencerState_.noteGatePos[noteSlot] = 0;
-	sequencerState_.noteCodeActive[noteSlot] = note;
-	sequencerState_.noteSourceStage[noteSlot] = stage;
 }
 
 void PulseSequencerMode::switchNoteOff(void* modelStackPtr, int32_t noteSlot) {
@@ -686,9 +825,29 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 		handleStageToggle(x - 8); // 0-7
 		return true;
 	}
-	// y7: Control buttons (Reset, Randomize, Evolve, Transpose, Octave) - x8-15
-	else if (y == 7 && x >= 8 && x < kDisplayWidth) {
-		if (x == 8) {
+	// y5: Velocity spread (x8-15)
+	else if (y == 5 && x >= 8 && x < 16) {
+		handleVelocitySpread(x - 8);
+		return true;
+	}
+	// y6: Probability (x8-15)
+	else if (y == 6 && x >= 8 && x < 16) {
+		handleProbability(x - 8);
+		return true;
+	}
+	// y2: Gate length (x8-15)
+	else if (y == 2 && x >= 8 && x < 16) {
+		handleGateLength(x - 8);
+		return true;
+	}
+	// y7: Octave up for stages (x0-7) + Control buttons (x8-15)
+	else if (y == 7) {
+		if (x < 8) {
+			// Octave up toggle for stage
+			handleOctaveAdjustment(x, 1);
+			return true;
+		}
+		else if (x == 8) {
 			resetToDefaults();
 			return true;
 		}
@@ -698,6 +857,10 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 		}
 		else if (x == 10) {
 			evolveSequence();
+			return true;
+		}
+		else if (x == 11) {
+			resetPerformanceControls();
 			return true;
 		}
 		else if (x == 12) {
@@ -721,6 +884,22 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 	return false; // Didn't handle this pad
 }
 
+bool PulseSequencerMode::handleVerticalEncoder(int32_t offset) {
+	// Scroll the view vertically to access all 8 pulse count rows
+	displayState_.gateLineOffset += offset;
+
+	// Clamp to valid range (0-3, maps to gate line Y positions 4-7)
+	if (displayState_.gateLineOffset < 0) displayState_.gateLineOffset = 0;
+	if (displayState_.gateLineOffset > 3) displayState_.gateLineOffset = 3;
+
+	// Show popup indicating scroll position
+	char buffer[20];
+	snprintf(buffer, sizeof(buffer), "View: %d", displayState_.gateLineOffset);
+	display->displayPopup(buffer);
+
+	return true; // We handled it
+}
+
 // ================================================================================================
 // PAD INPUT HANDLERS
 // ================================================================================================
@@ -734,6 +913,12 @@ void PulseSequencerMode::handleGateType(int32_t stage) {
 	int32_t currentType = static_cast<int32_t>(stages_[stage].gateType);
 	int32_t nextType = (currentType + 1) % 4;
 	stages_[stage].gateType = static_cast<GateType>(nextType);
+
+	// Show popup
+	const char* gateNames[] = {"OFF", "SINGLE", "MULTIPLE", "HELD"};
+	char buffer[30];
+	snprintf(buffer, sizeof(buffer), "Stage %d: %s", stage + 1, gateNames[nextType]);
+	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handleNoteSelection(int32_t stage) {
@@ -741,10 +926,13 @@ void PulseSequencerMode::handleNoteSelection(int32_t stage) {
 		return;
 	}
 
-	// Get current scale notes
-	// TODO: Need access to modelStack to call getScaleNotes()
-	// For now, just cycle through 0-7 as a placeholder
-	stages_[stage].noteIndex = (stages_[stage].noteIndex + 1) % 8;
+	// Cycle through note indices (0-15 for more range)
+	stages_[stage].noteIndex = (stages_[stage].noteIndex + 1) % 16;
+
+	// Show popup with degree in scale (we don't have note name without modelStack, so show scale degree)
+	char buffer[30];
+	snprintf(buffer, sizeof(buffer), "Stage %d: Degree %d", stage + 1, stages_[stage].noteIndex + 1);
+	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handleOctaveAdjustment(int32_t stage, int32_t direction) {
@@ -757,6 +945,11 @@ void PulseSequencerMode::handleOctaveAdjustment(int32_t stage, int32_t direction
 	if (newOctave > 3) newOctave = 3;
 
 	stages_[stage].octave = newOctave;
+
+	// Show popup
+	char buffer[30];
+	snprintf(buffer, sizeof(buffer), "Stage %d Oct: %+d", stage + 1, stages_[stage].octave);
+	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handlePulseCount(int32_t stage, int32_t position) {
@@ -797,6 +990,10 @@ void PulseSequencerMode::handlePlayOrderChange(int32_t playOrderIndex) {
 	if (performanceControls_.playOrder != newPlayOrder) {
 		performanceControls_.playOrder = newPlayOrder;
 		performanceControls_.pingPongDirection = 1;
+
+		// Show popup with order name
+		const char* orderNames[] = {"FORWARDS", "BACKWARDS", "PING PONG", "RANDOM", "PEDAL", "SKIP 2", "PENDULUM", "SPIRAL"};
+		display->displayPopup(orderNames[playOrderIndex]);
 	}
 }
 
@@ -809,6 +1006,11 @@ void PulseSequencerMode::handleTransposeChange(int32_t direction) {
 	if (performanceControls_.transpose > 12) {
 		performanceControls_.transpose = 12;
 	}
+
+	// Show popup
+	char buffer[20];
+	snprintf(buffer, sizeof(buffer), "Transpose: %+d", performanceControls_.transpose);
+	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handleOctaveChange(int32_t direction) {
@@ -820,6 +1022,11 @@ void PulseSequencerMode::handleOctaveChange(int32_t direction) {
 	if (performanceControls_.octave > 3) {
 		performanceControls_.octave = 3;
 	}
+
+	// Show popup
+	char buffer[20];
+	snprintf(buffer, sizeof(buffer), "Octave: %+d", performanceControls_.octave);
+	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handleStageToggle(int32_t stage) {
@@ -830,10 +1037,76 @@ void PulseSequencerMode::handleStageToggle(int32_t stage) {
 	performanceControls_.stageEnabled[stage] = !performanceControls_.stageEnabled[stage];
 }
 
+void PulseSequencerMode::handleVelocitySpread(int32_t stage) {
+	if (stage < 0 || stage >= kMaxStages) {
+		return;
+	}
+
+	// Cycle through velocity spread values: 0, 20, 40, 60, 80, 100, 127
+	int32_t spreads[] = {0, 20, 40, 60, 80, 100, 127};
+	int32_t currentIndex = 0;
+	for (int32_t i = 0; i < 7; i++) {
+		if (stages_[stage].velocitySpread == spreads[i]) {
+			currentIndex = i;
+			break;
+		}
+	}
+	stages_[stage].velocitySpread = spreads[(currentIndex + 1) % 7];
+
+	// Show popup
+	char buffer[30];
+	snprintf(buffer, sizeof(buffer), "Stage %d Spread: %d", stage + 1, stages_[stage].velocitySpread);
+	display->displayPopup(buffer);
+}
+
+void PulseSequencerMode::handleProbability(int32_t stage) {
+	if (stage < 0 || stage >= kMaxStages) {
+		return;
+	}
+
+	// Cycle through probability values: 100%, 80%, 60%, 40%, 20%
+	int32_t probs[] = {100, 80, 60, 40, 20};
+	int32_t currentIndex = 0;
+	for (int32_t i = 0; i < 5; i++) {
+		if (stages_[stage].probability == probs[i]) {
+			currentIndex = i;
+			break;
+		}
+	}
+	stages_[stage].probability = probs[(currentIndex + 1) % 5];
+
+	// Show popup
+	char buffer[30];
+	snprintf(buffer, sizeof(buffer), "Stage %d Prob: %d%%", stage + 1, stages_[stage].probability);
+	display->displayPopup(buffer);
+}
+
+void PulseSequencerMode::handleGateLength(int32_t stage) {
+	if (stage < 0 || stage >= kMaxStages) {
+		return;
+	}
+
+	// Cycle through gate length values: 10%, 25%, 50%, 75%, 90%, 100%
+	int32_t lengths[] = {10, 25, 50, 75, 90, 100};
+	int32_t currentIndex = 2; // default 50%
+	for (int32_t i = 0; i < 6; i++) {
+		if (stages_[stage].gateLength == lengths[i]) {
+			currentIndex = i;
+			break;
+		}
+	}
+	stages_[stage].gateLength = lengths[(currentIndex + 1) % 6];
+
+	// Show popup
+	char buffer[30];
+	snprintf(buffer, sizeof(buffer), "Stage %d Gate: %d%%", stage + 1, stages_[stage].gateLength);
+	display->displayPopup(buffer);
+}
+
 void PulseSequencerMode::resetToDefaults() {
 	performanceControls_.transpose = 0;
 	performanceControls_.octave = 0;
-	performanceControls_.clockDivider = 2;
+	performanceControls_.clockDivider = 1;  // Default: 16th notes (1=16th, 2=8th, 4=quarter)
 	performanceControls_.numStages = 8;
 	performanceControls_.playOrder = PlayOrder::FORWARDS;
 	performanceControls_.pingPongDirection = 1;
@@ -845,9 +1118,23 @@ void PulseSequencerMode::resetToDefaults() {
 		stages_[i].noteIndex = 0;
 		stages_[i].octave = 0;
 		stages_[i].pulseCount = 1;
+		stages_[i].velocitySpread = 0;
+		stages_[i].probability = 100;
+		stages_[i].gateLength = 50;
 	}
 
 	sequencerState_.totalPatternLength = calculateTotalPatternLength();
+	display->displayPopup("RESET ALL");
+}
+
+void PulseSequencerMode::resetPerformanceControls() {
+	// Reset all stages to default performance values
+	for (int32_t i = 0; i < 8; i++) {
+		stages_[i].velocitySpread = 0;
+		stages_[i].probability = 100;
+		stages_[i].gateLength = 50;
+	}
+	display->displayPopup("RESET PERF");
 }
 
 void PulseSequencerMode::randomizeSequence() {

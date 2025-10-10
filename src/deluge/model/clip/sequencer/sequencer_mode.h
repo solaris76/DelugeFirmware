@@ -43,21 +43,31 @@ public:
 
 	// Rendering - allow sequencer modes to override pad display
 	// Returns true if the mode handled rendering, false to use default linear rendering
-	virtual bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth], 
+	virtual bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	                       int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) { return false; }
 	
+	// Sidebar rendering - allow sequencer modes to override sidebar (x16-17)
+	// Returns true if the mode handled sidebar, false to use default mute/audition
+	virtual bool renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+	                          uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) { return false; }
+
 	// Pad input - handle user interaction with pads
 	// Returns true if the mode handled the pad press, false to use default behavior
 	// x, y: pad coordinates (0-15, 0-7)
 	// velocity: press velocity (0 = release, 1-127 = press)
 	virtual bool handlePadPress(int32_t x, int32_t y, int32_t velocity) { return false; }
-	
+
+	// Vertical encoder - handle vertical scrolling
+	// Returns true if the mode handled the encoder, false to use default behavior
+	// offset: encoder rotation amount (positive = clockwise, negative = counter-clockwise)
+	virtual bool handleVerticalEncoder(int32_t offset) { return false; }
+
 	// Playback - called during clip playback to generate notes
 	// Return value: ticks until this mode needs to be called again
-	// modelStack: ModelStackWithTimelineCounter* for note triggering  
+	// modelStack: ModelStackWithTimelineCounter* for note triggering
 	// absolutePlaybackPos: playbackHandler.lastSwungTickActioned - NEVER resets, always incrementing
 	virtual int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) { return 2147483647; } // Max int = never
-	
+
 	// Simple callback when a musical division boundary is crossed
 	// Override this for easy timing - base class handles the modulo math
 	// syncLevel: 7=16th, 6=8th, 8=32nd (same as arpeggiator)
@@ -65,34 +75,40 @@ public:
 
 protected:
 	// ========== SIMPLE HELPERS FOR SEQUENCER MODES ==========
-	
+
 	// TIMING HELPERS - Musical divisions
-	// Use song->getSixteenthNoteLength(), song->getQuarterNoteLength(), song->getBarLength() 
+	// Use song->getSixteenthNoteLength(), song->getQuarterNoteLength(), song->getBarLength()
 	// to get tick periods that automatically handle tempo and resolution
-	
+
 	static bool atDivisionBoundary(int32_t absolutePos, int32_t ticksPerPeriod) {
 		return (absolutePos % ticksPerPeriod) == 0;
 	}
-	
+
 	static int32_t ticksUntilNextDivision(int32_t absolutePos, int32_t ticksPerPeriod) {
 		int32_t howFarIntoPeriod = absolutePos % ticksPerPeriod;
 		return howFarIntoPeriod == 0 ? ticksPerPeriod : (ticksPerPeriod - howFarIntoPeriod);
 	}
-	
+
 	// SCALE HELPERS - Get notes in current scale
 	// Fills an array with all scale notes across specified octave range
 	// Returns the number of notes filled
 	// maxNotes: size of the noteArray buffer
 	// octaveRange: how many octaves to span
 	// baseOctave: starting octave (0 = root octave, 1 = one octave up, etc.)
-	static int32_t getScaleNotes(void* modelStackPtr, int32_t* noteArray, int32_t maxNotes, 
+	static int32_t getScaleNotes(void* modelStackPtr, int32_t* noteArray, int32_t maxNotes,
 	                             int32_t octaveRange = 2, int32_t baseOctave = 0);
-	
+
 	// NOTE HELPERS - Easy note triggering
 	// Sends a note on/off to the instrument
 	static void playNote(void* modelStackPtr, int32_t noteCode, uint8_t velocity, int32_t length);
 	static void stopNote(void* modelStackPtr, int32_t noteCode);
-	
+
+	// RANDOMIZATION HELPERS - Use before calling playNote()
+	// Apply velocity spread to a base velocity (randomizes ±spread amount)
+	static uint8_t applyVelocitySpread(uint8_t baseVelocity, int32_t spread);
+	// Check if note should play based on probability (0-100, where 100 = always play)
+	static bool shouldPlayBasedOnProbability(int32_t probability);
+
 	// PLAYBACK POSITION INDICATOR - Show current position across top row (y7, x0-15)
 	// Call this from your renderPads() to show playback position
 	// absolutePlaybackPos: current playback position (from processPlayback)

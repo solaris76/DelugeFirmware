@@ -44,9 +44,16 @@ public:
 	// Override rendering to show pulse pattern
 	bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	               int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) override;
+	
+	// Override sidebar rendering
+	bool renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+	                  uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) override;
 
 	// Override pad input to handle user interaction
 	bool handlePadPress(int32_t x, int32_t y, int32_t velocity) override;
+
+	// Override vertical encoder for view scrolling
+	bool handleVerticalEncoder(int32_t offset) override;
 
 	// Override playback to generate pulsed notes
 	int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) override;
@@ -74,9 +81,12 @@ private:
 	// Stage data (8 stages, one per column)
 	struct StageData {
 		GateType gateType = GateType::OFF;
-		int32_t noteIndex = 0;  // Index in current scale
-		int32_t octave = 0;     // Octave offset from base
-		int32_t pulseCount = 1; // 1-8, default is 1
+		int32_t noteIndex = 0;     // Index in current scale
+		int32_t octave = 0;        // Octave offset from base
+		int32_t pulseCount = 1;    // 1-8, default is 1
+		int32_t velocitySpread = 0; // 0-127, randomization amount
+		int32_t probability = 100;  // 0-100%, chance to play
+		int32_t gateLength = 50;    // 0-100%, note length as % of period
 	};
 
 	std::array<StageData, kMaxStages> stages_;
@@ -141,12 +151,16 @@ private:
 	void handleNoteSelection(int32_t stage);
 	void handleOctaveAdjustment(int32_t stage, int32_t direction);
 	void handlePulseCount(int32_t stage, int32_t position);
+	void handleVelocitySpread(int32_t stage);
+	void handleProbability(int32_t stage);
+	void handleGateLength(int32_t stage);
 	void handleStageCountChange(int32_t numStages);
 	void handlePlayOrderChange(int32_t playOrderIndex);
 	void handleTransposeChange(int32_t direction);
 	void handleOctaveChange(int32_t direction);
 	void handleStageToggle(int32_t stage);
 	void resetToDefaults();
+	void resetPerformanceControls();
 	void randomizeSequence();
 	void evolveSequence();
 };

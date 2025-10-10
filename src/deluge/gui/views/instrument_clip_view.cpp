@@ -5901,6 +5901,15 @@ bool InstrumentClipView::renderSidebar(uint32_t whichRows, RGB image[][kDisplayW
 		return true;
 	}
 
+	// Check if the current clip has an active sequencer mode that wants to handle sidebar
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		if (sequencerMode && sequencerMode->renderSidebar(whichRows, image, occupancyMask)) {
+			return true; // Sequencer mode handled the sidebar
+		}
+	}
+
 	int32_t macroColumn = kDisplayWidth;
 	bool armed = false;
 	for (int32_t i = 0; i < kDisplayHeight; i++) {
@@ -6123,6 +6132,17 @@ ActionResult InstrumentClipView::verticalEncoderAction(int32_t offset, bool inCa
 
 	if (inCardRoutine && !allowSomeUserActionsEvenWhenInCardRoutine) {
 		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE; // Allow sometimes.
+	}
+
+	// Check if the current clip has an active sequencer mode that wants to handle the vertical encoder
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		if (sequencerMode && sequencerMode->handleVerticalEncoder(offset)) {
+			// Sequencer mode handled the encoder - request UI refresh
+			uiNeedsRendering(this, 0xFFFFFFFF, 0);
+			return ActionResult::DEALT_WITH;
+		}
 	}
 
 	bool inNoteRowEditor = getCurrentUI() == &soundEditor && soundEditor.inNoteRowEditor();
