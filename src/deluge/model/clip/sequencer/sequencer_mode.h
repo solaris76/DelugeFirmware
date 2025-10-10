@@ -48,9 +48,9 @@ public:
 
 	// Playback - called during clip playback to generate notes
 	// Return value: ticks until this mode needs to be called again
-	// modelStack: ModelStackWithTimelineCounter* for note triggering
-	// clipCurrentPos: current absolute position in the clip (wraps at loopLength)
-	virtual int32_t processPlayback(void* modelStack, int32_t clipCurrentPos) { return 2147483647; } // Max int = never
+	// modelStack: ModelStackWithTimelineCounter* for note triggering  
+	// absolutePlaybackPos: playbackHandler.lastSwungTickActioned - NEVER resets, always incrementing
+	virtual int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) { return 2147483647; } // Max int = never
 
 	// Simple callback when a musical division boundary is crossed
 	// Override this for easy timing - base class handles the modulo math

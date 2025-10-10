@@ -69,7 +69,7 @@ bool GenerativeTestMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 	return true; // We handled the rendering
 }
 
-int32_t GenerativeTestMode::processPlayback(void* modelStackPtr, int32_t clipCurrentPos) {
+int32_t GenerativeTestMode::processPlayback(void* modelStackPtr, int32_t absolutePlaybackPos) {
 	if (!initialized_) {
 		return 2147483647; // Not ready, come back never
 	}
@@ -91,8 +91,8 @@ int32_t GenerativeTestMode::processPlayback(void* modelStackPtr, int32_t clipCur
 
 	MelodicInstrument* instrument = static_cast<MelodicInstrument*>(clip->output);
 
-	// Use helper to check if we're at a 16th note boundary
-	bool atBoundary = atDivisionBoundary(clipCurrentPos, ticksPerSixteenthNote_);
+	// Use helper to check if we're at a 16th note boundary using ABSOLUTE playback position
+	bool atBoundary = atDivisionBoundary(absolutePlaybackPos, ticksPerSixteenthNote_);
 
 	// Only play a note if we're AT the boundary
 	if (atBoundary) {
@@ -140,8 +140,8 @@ int32_t GenerativeTestMode::processPlayback(void* modelStackPtr, int32_t clipCur
 		lastNoteCode_ = randomNote;
 	}
 
-	// Use helper to calculate when we need to be called next
-	return ticksUntilNextDivision(clipCurrentPos, ticksPerSixteenthNote_);
+	// Use helper to calculate when we need to be called next (based on absolute position)
+	return ticksUntilNextDivision(absolutePlaybackPos, ticksPerSixteenthNote_);
 }
 
 } // namespace deluge::model::clip::sequencer::modes

@@ -16,6 +16,8 @@
  */
 
 #include "playback/mode/session.h"
+#include "model/clip/instrument_clip.h"
+#include "model/clip/sequencer/sequencer_mode.h"
 #include "definitions_cxx.hpp"
 #include "gui/ui/audio_recorder.h"
 #include "gui/views/arranger_view.h"
@@ -2471,6 +2473,18 @@ void Session::doTickForward(int32_t posIncrement) {
 
 		int32_t ticksTilNextArpEvent = thisOutput->doTickForwardForArp(modelStack, posForArp);
 		playbackHandler.swungTicksTilNextEvent = std::min(ticksTilNextArpEvent, playbackHandler.swungTicksTilNextEvent);
+
+		// Do sequencer modes too - similar to arps but at clip level
+		Clip* activeClip = thisOutput->getActiveClip();
+		if (activeClip && activeClip->type == ClipType::INSTRUMENT && currentSong->isClipActive(activeClip)) {
+			InstrumentClip* instrumentClip = static_cast<InstrumentClip*>(activeClip);
+			if (instrumentClip->hasSequencerMode()) {
+				ModelStackWithTimelineCounter* modelStackWithTimelineCounter = modelStack->addTimelineCounter(instrumentClip);
+				int32_t ticksTilNextSeqEvent = instrumentClip->getSequencerMode()->processPlayback(
+					modelStackWithTimelineCounter, playbackHandler.lastSwungTickActioned);
+				playbackHandler.swungTicksTilNextEvent = std::min(ticksTilNextSeqEvent, playbackHandler.swungTicksTilNextEvent);
+			}
+		}
 	}
 
 	/*
