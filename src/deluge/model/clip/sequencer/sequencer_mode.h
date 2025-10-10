@@ -43,15 +43,21 @@ public:
 
 	// Rendering - allow sequencer modes to override pad display
 	// Returns true if the mode handled rendering, false to use default linear rendering
-	virtual bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	virtual bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth], 
 	                       int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) { return false; }
-
+	
+	// Pad input - handle user interaction with pads
+	// Returns true if the mode handled the pad press, false to use default behavior
+	// x, y: pad coordinates (0-15, 0-7)
+	// velocity: press velocity (0 = release, 1-127 = press)
+	virtual bool handlePadPress(int32_t x, int32_t y, int32_t velocity) { return false; }
+	
 	// Playback - called during clip playback to generate notes
 	// Return value: ticks until this mode needs to be called again
 	// modelStack: ModelStackWithTimelineCounter* for note triggering  
 	// absolutePlaybackPos: playbackHandler.lastSwungTickActioned - NEVER resets, always incrementing
 	virtual int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) { return 2147483647; } // Max int = never
-
+	
 	// Simple callback when a musical division boundary is crossed
 	// Override this for easy timing - base class handles the modulo math
 	// syncLevel: 7=16th, 6=8th, 8=32nd (same as arpeggiator)

@@ -45,6 +45,8 @@ void ClipTypeSelection::readCurrentValue() {
 		const std::string& modeName = clip->getSequencerModeName();
 		if (modeName == "generative_test") {
 			this->setValue(1); // GENERATIVE 1
+		} else if (modeName == "pulse_seq") {
+			this->setValue(2); // PULSE SEQ
 		} else {
 			this->setValue(0); // Default to PIANO ROLL
 		}
@@ -65,6 +67,9 @@ void ClipTypeSelection::writeCurrentValue() {
 		} else if (selectedMode == 1) {
 			// GENERATIVE 1 - set test sequencer mode
 			clip->setSequencerMode("generative_test");
+		} else if (selectedMode == 2) {
+			// PULSE SEQ - set pulse sequencer mode
+			clip->setSequencerMode("pulse_seq");
 		}
 
 		// Recalculate colours for instrument clip view (needed when going back to normal mode)

@@ -102,24 +102,24 @@ int32_t GenerativeTestMode::processPlayback(void* modelStackPtr, int32_t absolut
 			stopNote(modelStackPtr, lastNoteCode_);
 			lastNoteCode_ = -1;
 		}
-		
+
 		// Get all scale notes across 2 octaves
 		int32_t scaleNotes[32]; // Max notes: 12 semitones * 2 octaves + some buffer
 		int32_t numNotes = getScaleNotes(modelStackPtr, scaleNotes, 32, 2, 0);
-		
+
 		if (numNotes > 0) {
 			// Pick a random note from the scale
 			int32_t randomNote = scaleNotes[getRandom255() % numNotes];
-			
+
 			// Random velocity (64-127 for some dynamics)
 			uint8_t velocity = 64 + (getRandom255() % 64);
-			
+
 			// Note length: 75% of a 16th note (staccato feel)
 			int32_t noteLength = (ticksPerSixteenthNote_ * 3) / 4;
-			
+
 			// Play the note
 			playNote(modelStackPtr, randomNote, velocity, noteLength);
-			
+
 			// Remember this note
 			lastNoteCode_ = randomNote;
 		}
