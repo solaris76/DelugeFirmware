@@ -207,8 +207,21 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 	int32_t octaveDownY = gateLineY + 1;
 	if (octaveDownY >= 0 && octaveDownY < kDisplayHeight && (whichRows & (1 << octaveDownY))) {
 		for (int32_t stage = 0; stage < 8; stage++) {
-			bool isActive = (stages_[stage].octave < 0);
-			RGB color = isActive ? RGB{100, 150, 255} : RGB{30, 50, 90};
+			int32_t octave = stages_[stage].octave;
+			RGB color;
+
+			if (octave == 0) {
+				// At default pitch: white
+				color = RGB{200, 200, 200};
+			} else if (octave < 0) {
+				// Going down: brighter orange based on how far down (range -2 to -1)
+				int32_t brightness = (-octave * 127) / 2; // -1 = 63, -2 = 127
+				color = RGB{static_cast<uint8_t>(128 + brightness), static_cast<uint8_t>(64 + brightness/2), 0};
+			} else {
+				// Going up: dimmer (opposite of up pad)
+				int32_t dimness = (octave * 60) / 3; // Dims as up pad brightens
+				color = RGB{static_cast<uint8_t>(90 - dimness), static_cast<uint8_t>(45 - dimness/2), 0};
+			}
 
 			if (!performanceControls_.stageEnabled[stage] || stage >= performanceControls_.numStages) {
 				color.r /= 8;
@@ -218,7 +231,7 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 
 			image[octaveDownY * imageWidth + stage] = color;
 			if (occupancyMask) {
-				occupancyMask[octaveDownY][stage] = isActive ? 48 : 24;
+				occupancyMask[octaveDownY][stage] = (octave != 0) ? 48 : 32;
 			}
 		}
 	}
@@ -227,8 +240,21 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 	int32_t octaveUpY = gateLineY + 2;
 	if (octaveUpY >= 0 && octaveUpY < kDisplayHeight && (whichRows & (1 << octaveUpY))) {
 		for (int32_t stage = 0; stage < 8; stage++) {
-			bool isActive = (stages_[stage].octave > 0);
-			RGB color = isActive ? RGB{255, 128, 0} : RGB{90, 50, 30};
+			int32_t octave = stages_[stage].octave;
+			RGB color;
+
+			if (octave == 0) {
+				// At default pitch: white
+				color = RGB{200, 200, 200};
+			} else if (octave > 0) {
+				// Going up: brighter orange based on how far up (range 1 to 3)
+				int32_t brightness = (octave * 127) / 3; // 1 = 42, 2 = 85, 3 = 127
+				color = RGB{static_cast<uint8_t>(128 + brightness), static_cast<uint8_t>(64 + brightness/2), 0};
+			} else {
+				// Going down: dimmer (opposite of down pad)
+				int32_t dimness = (-octave * 60) / 2; // Dims as down pad brightens
+				color = RGB{static_cast<uint8_t>(90 - dimness), static_cast<uint8_t>(45 - dimness/2), 0};
+			}
 
 			if (!performanceControls_.stageEnabled[stage] || stage >= performanceControls_.numStages) {
 				color.r /= 8;
@@ -238,7 +264,7 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 
 			image[octaveUpY * imageWidth + stage] = color;
 			if (occupancyMask) {
-				occupancyMask[octaveUpY][stage] = isActive ? 48 : 24;
+				occupancyMask[octaveUpY][stage] = (octave != 0) ? 48 : 32;
 			}
 		}
 	}
@@ -341,14 +367,14 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 		}
 	}
 
-	// y6: Probability per stage (x8-15) - Magenta gradient
+	// y6: Probability per stage (x8-15) - Dark blue gradient
 	if (whichRows & (1 << 6)) {
 		for (int32_t x = 8; x < 16; x++) {
 			int32_t stage = x - 8;
 			int32_t prob = stages_[stage].probability;
 			int32_t intensity = (prob * 255) / 100;  // 0-100 -> 0-255
 			int32_t val = (intensity > 32) ? intensity : 32;
-			RGB color = RGB{static_cast<uint8_t>(val), 0, static_cast<uint8_t>(val)};
+			RGB color = RGB{0, 0, static_cast<uint8_t>(val)};
 			image[6 * imageWidth + x] = color;
 			if (occupancyMask) {
 				occupancyMask[6][x] = 32;
@@ -392,50 +418,32 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 	}
 
 	// After rendering all pads, brighten the playback position
-	// Show on both gate line AND the selected note pad for that stage
-	if (ticksPerSixteenthNote_ > 0 && lastAbsolutePlaybackPos_ >= 0) {
+	// Show on both gate line AND the selected note pad for the current stage
+	if (performanceControls_.currentStage >= 0 && performanceControls_.currentStage < 8) {
 		int32_t gateLineY = getGateLineY();
-		int32_t totalLengthTicks = ticksPerSixteenthNote_ * performanceControls_.clockDivider * sequencerState_.totalPatternLength;
+		int32_t currentStage = performanceControls_.currentStage;
 
-		if (totalLengthTicks > 0) {
-			int32_t positionInPattern = lastAbsolutePlaybackPos_ % totalLengthTicks;
-			int32_t currentStage = 0;
-			int32_t ticksAccumulated = 0;
-
-			// Find which stage we're in
-			for (int32_t s = 0; s < performanceControls_.numStages; s++) {
-				int32_t stageTicks = ticksPerSixteenthNote_ * performanceControls_.clockDivider * stages_[performanceControls_.currentStage].pulseCount;
-				if (positionInPattern < ticksAccumulated + stageTicks) {
-					currentStage = s;
-					break;
-				}
-				ticksAccumulated += stageTicks;
+		// Brighten the gate pad for the current stage (if visible)
+		if (gateLineY >= 0 && gateLineY < kDisplayHeight && (whichRows & (1 << gateLineY))) {
+			RGB& gatePad = image[gateLineY * imageWidth + currentStage];
+			// Brighten by adding white
+			gatePad.r = std::min(255, gatePad.r + 100);
+			gatePad.g = std::min(255, gatePad.g + 100);
+			gatePad.b = std::min(255, gatePad.b + 100);
+			if (occupancyMask) {
+				occupancyMask[gateLineY][currentStage] = 64;
 			}
+		}
 
-			// Brighten the gate pad for the current stage (if visible)
-			if (gateLineY >= 0 && gateLineY < kDisplayHeight && (whichRows & (1 << gateLineY)) && currentStage < 8) {
-				RGB& gatePad = image[gateLineY * imageWidth + currentStage];
-				// Brighten by adding white
-				gatePad.r = std::min(255, gatePad.r + 100);
-				gatePad.g = std::min(255, gatePad.g + 100);
-				gatePad.b = std::min(255, gatePad.b + 100);
-				if (occupancyMask) {
-					occupancyMask[gateLineY][currentStage] = 64;
-				}
-			}
+		// Also make the selected note pad RED for the current stage (if visible)
+		int32_t noteIdx = stages_[currentStage].noteIndex;
+		int32_t noteY = gateLineY + 3 + noteIdx; // Note position
 
-			// Also make the selected note pad RED for the current stage (if visible)
-			if (currentStage < 8) {
-				int32_t noteIdx = stages_[currentStage].noteIndex;
-				int32_t noteY = gateLineY + 3 + noteIdx; // Note position
-
-				if (noteY >= 0 && noteY < kDisplayHeight && (whichRows & (1 << noteY))) {
-					// Make it red like the gate line flash
-					image[noteY * imageWidth + currentStage] = RGB{255, 0, 0};
-					if (occupancyMask) {
-						occupancyMask[noteY][currentStage] = 64;
-					}
-				}
+		if (noteY >= 0 && noteY < kDisplayHeight && (whichRows & (1 << noteY))) {
+			// Make it red like the gate line flash
+			image[noteY * imageWidth + currentStage] = RGB{255, 0, 0};
+			if (occupancyMask) {
+				occupancyMask[noteY][currentStage] = 64;
 			}
 		}
 	}
@@ -485,22 +493,8 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 	// clockDivider = 4 -> quarter notes
 	int32_t ticksPerPeriod = ticksPerSixteenthNote_ * performanceControls_.clockDivider;
 
-	// Store clip position for position indicator and request refresh if pad position changed
-	int32_t oldPadX = -1;
-	int32_t totalLengthTicks = ticksPerSixteenthNote_ * performanceControls_.clockDivider * sequencerState_.totalPatternLength;
-	if (totalLengthTicks > 0) {
-		oldPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
-	}
-
+	// Store clip position
 	lastAbsolutePlaybackPos_ = clip->lastProcessedPos;
-
-	// Request UI refresh if position indicator moved to a new pad
-	if (totalLengthTicks > 0) {
-		int32_t newPadX = (lastAbsolutePlaybackPos_ * kDisplayWidth) / totalLengthTicks;
-		if (newPadX != oldPadX) {
-			uiNeedsRendering(&instrumentClipView, 1 << 7, 0); // Refresh y7 only
-		}
-	}
 
 	// Check for any notes that need to be turned off
 	for (int32_t i = 0; i < 16; i++) {
@@ -529,25 +523,27 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 		// Generate notes
 		generateNotes(modelStackPtr);
 
-		// Refresh the gate line, octave pads, and note pads when we move to a new stage
-		if (oldStage != performanceControls_.currentStage) {
-			int32_t gateLineY = getGateLineY();
-			uint32_t rowsToRefresh = (1 << gateLineY) | (1 << (gateLineY + 1)) | (1 << (gateLineY + 2));
+		// Refresh the gate line and note pads
+		int32_t gateLineY = getGateLineY();
+		uint32_t rowsToRefresh = (1 << gateLineY);
 
-			// Also refresh the note rows for both old and new stages
+		// If stage changed, also refresh the note rows for both old and new stages
+		if (oldStage != performanceControls_.currentStage) {
 			if (oldStage >= 0 && oldStage < kMaxStages) {
 				int32_t oldNoteY = gateLineY + 3 + stages_[oldStage].noteIndex;
 				if (oldNoteY >= 0 && oldNoteY < kDisplayHeight) {
 					rowsToRefresh |= (1 << oldNoteY);
 				}
 			}
-			int32_t newNoteY = gateLineY + 3 + stages_[performanceControls_.currentStage].noteIndex;
-			if (newNoteY >= 0 && newNoteY < kDisplayHeight) {
-				rowsToRefresh |= (1 << newNoteY);
-			}
-
-			uiNeedsRendering(&instrumentClipView, rowsToRefresh, 0);
 		}
+
+		// Always refresh the current stage's note row
+		int32_t newNoteY = gateLineY + 3 + stages_[performanceControls_.currentStage].noteIndex;
+		if (newNoteY >= 0 && newNoteY < kDisplayHeight) {
+			rowsToRefresh |= (1 << newNoteY);
+		}
+
+		uiNeedsRendering(&instrumentClipView, rowsToRefresh, 0);
 	}
 
 	return ticksUntilNextDivision(absolutePlaybackPos, ticksPerPeriod);
@@ -1290,13 +1286,19 @@ void PulseSequencerMode::resetPerformanceControls() {
 }
 
 void PulseSequencerMode::randomizeSequence() {
+	// Update scale notes first to ensure we have the current scale
+	updateScaleNotes();
+
+	// Ensure we have at least one note in the scale
+	int32_t maxNoteIndex = (displayState_.numScaleNotes > 0) ? displayState_.numScaleNotes : 1;
+
 	for (int32_t i = 0; i < 8; i++) {
 		// Randomize gate type (skip OFF for interesting patterns)
 		int32_t gateTypeIndex = getRandom255() % 3;
 		stages_[i].gateType = static_cast<GateType>(gateTypeIndex + 1);
 
-		// Randomize note index (0-7)
-		stages_[i].noteIndex = getRandom255() % 8;
+		// Randomize note index within the current scale
+		stages_[i].noteIndex = getRandom255() % maxNoteIndex;
 
 		// Randomize octave (-2 to +3)
 		stages_[i].octave = (getRandom255() % 6) - 2;
@@ -1324,6 +1326,10 @@ void PulseSequencerMode::randomizeSequence() {
 }
 
 void PulseSequencerMode::evolveSequence() {
+	// Update scale notes to get current scale size
+	updateScaleNotes();
+	int32_t maxNoteIndex = (displayState_.numScaleNotes > 0) ? displayState_.numScaleNotes : 1;
+
 	int32_t numStagesToChange = (getRandom255() % 4) + 1;
 
 	for (int32_t change = 0; change < numStagesToChange; change++) {
@@ -1334,9 +1340,9 @@ void PulseSequencerMode::evolveSequence() {
 			int32_t noteChange = (getRandom255() % 5) - 2; // -2 to +2
 			int32_t newNote = currentNote + noteChange;
 
-			// Wrap around
-			while (newNote < 0) newNote += 8;
-			while (newNote >= 8) newNote -= 8;
+			// Wrap around within the current scale
+			while (newNote < 0) newNote += maxNoteIndex;
+			while (newNote >= maxNoteIndex) newNote -= maxNoteIndex;
 
 			stages_[stageToChange].noteIndex = newNote;
 		}
