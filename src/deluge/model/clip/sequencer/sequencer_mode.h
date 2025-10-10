@@ -58,19 +58,34 @@ public:
 	virtual void onMusicalDivision(void* modelStack) {}
 
 protected:
-	// Simple timing helpers - use Song's getSixteenthNoteLength(), getQuarterNoteLength(), etc.
-	// for calculating tick periods with proper resolution
-
-	// Helper to check if we're at a musical division boundary
-	static bool atDivisionBoundary(int32_t clipCurrentPos, int32_t ticksPerPeriod) {
-		return (clipCurrentPos % ticksPerPeriod) == 0;
+	// ========== SIMPLE HELPERS FOR SEQUENCER MODES ==========
+	
+	// TIMING HELPERS - Musical divisions
+	// Use song->getSixteenthNoteLength(), song->getQuarterNoteLength(), song->getBarLength() 
+	// to get tick periods that automatically handle tempo and resolution
+	
+	static bool atDivisionBoundary(int32_t absolutePos, int32_t ticksPerPeriod) {
+		return (absolutePos % ticksPerPeriod) == 0;
 	}
-
-	// Helper to get ticks until next division
-	static int32_t ticksUntilNextDivision(int32_t clipCurrentPos, int32_t ticksPerPeriod) {
-		int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
+	
+	static int32_t ticksUntilNextDivision(int32_t absolutePos, int32_t ticksPerPeriod) {
+		int32_t howFarIntoPeriod = absolutePos % ticksPerPeriod;
 		return howFarIntoPeriod == 0 ? ticksPerPeriod : (ticksPerPeriod - howFarIntoPeriod);
 	}
+	
+	// SCALE HELPERS - Get notes in current scale
+	// Fills an array with all scale notes across specified octave range
+	// Returns the number of notes filled
+	// maxNotes: size of the noteArray buffer
+	// octaveRange: how many octaves to span
+	// baseOctave: starting octave (0 = root octave, 1 = one octave up, etc.)
+	static int32_t getScaleNotes(void* modelStackPtr, int32_t* noteArray, int32_t maxNotes, 
+	                             int32_t octaveRange = 2, int32_t baseOctave = 0);
+	
+	// NOTE HELPERS - Easy note triggering
+	// Sends a note on/off to the instrument
+	static void playNote(void* modelStackPtr, int32_t noteCode, uint8_t velocity, int32_t length);
+	static void stopNote(void* modelStackPtr, int32_t noteCode);
 
 	// Track type compatibility (default: support all)
 	virtual bool supportsInstrument() { return true; }

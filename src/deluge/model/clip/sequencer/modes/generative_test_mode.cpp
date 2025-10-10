@@ -21,6 +21,7 @@
 #include "model/instrument/melodic_instrument.h"
 #include "model/model_stack.h"
 #include "model/song/song.h"
+#include "model/scale/musical_key.h"
 #include "playback/playback_handler.h"
 #include "util/functions.h"
 
@@ -96,48 +97,32 @@ int32_t GenerativeTestMode::processPlayback(void* modelStackPtr, int32_t absolut
 
 	// Only play a note if we're AT the boundary
 	if (atBoundary) {
-		// Send note-off for previous note if any
+		// Stop previous note if any
 		if (lastNoteCode_ >= 0) {
-			int16_t mpeValues[kNumExpressionDimensions];
-			memset(mpeValues, 0, sizeof(mpeValues));
-
-			char modelStackMemory[MODEL_STACK_MAX_SIZE];
-			ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
-			    setupModelStackWithThreeMainThingsButNoNoteRow(modelStackMemory, modelStack->song,
-			                                                   instrument->toModControllable(), clip, &clip->paramManager);
-
-			// Send note-off
-			instrument->sendNote(modelStackWithThreeMainThings, false, lastNoteCode_, mpeValues,
-			                    MIDI_CHANNEL_NONE, 64, 0, 0);
+			stopNote(modelStackPtr, lastNoteCode_);
 			lastNoteCode_ = -1;
 		}
-
-		// Time to play a new random note!
-		// Generate random note (C3 to C5 range: MIDI 60-84)
-		int32_t randomNote = 60 + (getRandom255() % 25);
-
-		// Random velocity (64-127 for some dynamics)
-		uint8_t velocity = 64 + (getRandom255() % 64);
-
-		// Zero MPE values for now
-		int16_t mpeValues[kNumExpressionDimensions];
-		memset(mpeValues, 0, sizeof(mpeValues));
-
-		// Create model stack with three main things for note sending
-		char newModelStackMemory[MODEL_STACK_MAX_SIZE];
-		ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
-		    setupModelStackWithThreeMainThingsButNoNoteRow(newModelStackMemory, modelStack->song,
-		                                                   instrument->toModControllable(), clip, &clip->paramManager);
-
-		// Note length: 75% of a 16th note (leaves a gap for staccato feel)
-		int32_t noteLength = (ticksPerSixteenthNote_ * 3) / 4;
-
-		// Send note on
-		instrument->sendNote(modelStackWithThreeMainThings, true, randomNote, mpeValues,
-		                    MIDI_CHANNEL_NONE, velocity, noteLength, 0);
-
-		// Remember this note
-		lastNoteCode_ = randomNote;
+		
+		// Get all scale notes across 2 octaves
+		int32_t scaleNotes[32]; // Max notes: 12 semitones * 2 octaves + some buffer
+		int32_t numNotes = getScaleNotes(modelStackPtr, scaleNotes, 32, 2, 0);
+		
+		if (numNotes > 0) {
+			// Pick a random note from the scale
+			int32_t randomNote = scaleNotes[getRandom255() % numNotes];
+			
+			// Random velocity (64-127 for some dynamics)
+			uint8_t velocity = 64 + (getRandom255() % 64);
+			
+			// Note length: 75% of a 16th note (staccato feel)
+			int32_t noteLength = (ticksPerSixteenthNote_ * 3) / 4;
+			
+			// Play the note
+			playNote(modelStackPtr, randomNote, velocity, noteLength);
+			
+			// Remember this note
+			lastNoteCode_ = randomNote;
+		}
 	}
 
 	// Use helper to calculate when we need to be called next (based on absolute position)
