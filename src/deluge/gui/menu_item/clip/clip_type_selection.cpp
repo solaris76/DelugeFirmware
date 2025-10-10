@@ -21,6 +21,8 @@
 #include "model/clip/instrument_clip.h"
 #include "model/clip/sequencer/sequencer_mode_manager.h"
 #include "model/song/song.h"
+#include "gui/ui/ui.h"
+#include "gui/views/instrument_clip_view.h"
 
 namespace deluge::gui::menu_item::clip {
 
@@ -64,6 +66,12 @@ void ClipTypeSelection::writeCurrentValue() {
 			// GENERATIVE 1 - set test sequencer mode
 			clip->setSequencerMode("generative_test");
 		}
+
+		// Recalculate colours for instrument clip view (needed when going back to normal mode)
+		instrumentClipView.recalculateColours();
+
+		// Trigger UI refresh to show the new sequencer mode visuals
+		uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
 	}
 }
 

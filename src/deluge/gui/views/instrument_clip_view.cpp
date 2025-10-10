@@ -59,6 +59,7 @@
 #include "model/action/action_logger.h"
 #include "model/clip/clip.h"
 #include "model/clip/instrument_clip.h"
+#include "model/clip/sequencer/sequencer_mode.h"
 #include "model/consequence/consequence_instrument_clip_multiply.h"
 #include "model/consequence/consequence_note_array_change.h"
 #include "model/consequence/consequence_note_row_horizontal_shift.h"
@@ -7085,6 +7086,14 @@ void InstrumentClipView::performActualRender(uint32_t whichRows, RGB* image,
                                              uint32_t xZoom, int32_t renderWidth, int32_t imageWidth,
                                              bool drawUndefinedArea) {
 	InstrumentClip* clip = getCurrentInstrumentClip();
+
+	// Check if clip has an active sequencer mode that wants to handle rendering
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		if (sequencerMode && sequencerMode->renderPads(whichRows, image, occupancyMask, xScroll, xZoom, renderWidth, imageWidth)) {
+			return; // Sequencer mode handled the rendering
+		}
+	}
 
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];
 	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);

@@ -30,6 +30,37 @@ void GenerativeTestMode::cleanup() {
 	// TODO: Add cleanup logic when we connect to clip system
 }
 
+bool GenerativeTestMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+                                   int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) {
+	// Light up pads in a simple test pattern to show the mode is active
+
+	for (int32_t yDisplay = 0; yDisplay < kDisplayHeight; yDisplay++) {
+		if (whichRows & (1 << yDisplay)) {
+
+			// Create a simple pattern - light up every 4th pad in a diagonal
+			for (int32_t xDisplay = 0; xDisplay < renderWidth; xDisplay++) {
+
+				// Clear the row first
+				image[yDisplay * imageWidth + xDisplay] = {0, 0, 0};
+				if (occupancyMask) {
+					occupancyMask[yDisplay][xDisplay] = 0;
+				}
+
+				// Light up diagonal pattern - every 4th pad, offset by row
+				if ((xDisplay + yDisplay) % 4 == 0) {
+					// Use a bright purple color to make it obvious this is our test mode
+					image[yDisplay * imageWidth + xDisplay] = {255, 0, 255}; // Bright magenta
+					if (occupancyMask) {
+						occupancyMask[yDisplay][xDisplay] = 64; // Full occupancy
+					}
+				}
+			}
+		}
+	}
+
+	return true; // We handled the rendering
+}
+
 } // namespace deluge::model::clip::sequencer::modes
 
 // Register this mode with the manager

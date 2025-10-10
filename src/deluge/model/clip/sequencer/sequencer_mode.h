@@ -19,6 +19,7 @@
 
 #include "definitions_cxx.hpp"
 #include "gui/l10n/l10n.h"
+#include "hid/led/pad_leds.h"
 
 namespace deluge::model::clip::sequencer {
 
@@ -39,6 +40,11 @@ public:
 	// Minimal interface - will be expanded in future steps
 	virtual void initialize() {}
 	virtual void cleanup() {}
+
+	// Rendering - allow sequencer modes to override pad display
+	// Returns true if the mode handled rendering, false to use default linear rendering
+	virtual bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	                       int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) { return false; }
 
 	// Track type compatibility (default: support all)
 	virtual bool supportsInstrument() { return true; }

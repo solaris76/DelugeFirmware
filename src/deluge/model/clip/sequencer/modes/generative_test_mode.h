@@ -45,6 +45,10 @@ public:
 	void initialize() override;
 	void cleanup() override;
 
+	// Override rendering to show test pattern
+	bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	               int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) override;
+
 private:
 	// Simple test state
 	bool initialized_ = false;
