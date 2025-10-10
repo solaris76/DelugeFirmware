@@ -65,8 +65,8 @@ private:
 // Convenient registration macro for sequencer modes
 #define REGISTER_SEQUENCER_MODE(ClassName, ModeName)                                                                   \
 	namespace {                                                                                                        \
-		static auto registered_##ClassName = []() {                                                                   \
-			SequencerModeManager::instance().registerMode<ClassName>(ModeName);                                      \
+		static auto registered_##ClassName##_mode = []() {                                                                   \
+			deluge::model::clip::sequencer::SequencerModeManager::instance().registerMode<ClassName>(ModeName);                                      \
 			return true;                                                                                               \
 		}();                                                                                                           \
 	}

@@ -16,6 +16,8 @@
  */
 
 #include "model/clip/instrument_clip.h"
+#include "model/clip/sequencer/sequencer_mode_manager.h"
+#include "model/clip/sequencer/modes/generative_test_mode.h"
 #include "definitions_cxx.hpp"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/browser/browser.h"
@@ -4717,6 +4719,30 @@ void InstrumentClip::incrementPos(ModelStackWithTimelineCounter* modelStack, int
 				thisNoteRow->lastProcessedPosIfIndependent += movement;
 			}
 		}
+	}
+}
+
+// SEQUENCER MODE MANAGEMENT
+
+void InstrumentClip::setSequencerMode(const std::string& modeName) {
+	// Clear existing mode
+	clearSequencerMode();
+
+	// Create new mode
+	auto& manager = deluge::model::clip::sequencer::SequencerModeManager::instance();
+	sequencerMode_ = manager.createMode(modeName);
+
+	if (sequencerMode_) {
+		sequencerModeName_ = modeName;
+		sequencerMode_->initialize();
+	}
+}
+
+void InstrumentClip::clearSequencerMode() {
+	if (sequencerMode_) {
+		sequencerMode_->cleanup();
+		sequencerMode_.reset();
+		sequencerModeName_.clear();
 	}
 }
 

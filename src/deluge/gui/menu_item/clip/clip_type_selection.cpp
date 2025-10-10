@@ -18,6 +18,9 @@
 #include "gui/menu_item/clip/clip_type_selection.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/l10n/l10n.h"
+#include "model/clip/instrument_clip.h"
+#include "model/clip/sequencer/sequencer_mode_manager.h"
+#include "model/song/song.h"
 
 namespace deluge::gui::menu_item::clip {
 
@@ -33,18 +36,35 @@ deluge::vector<std::string_view> ClipTypeSelection::getOptions(OptType optType) 
 }
 
 void ClipTypeSelection::readCurrentValue() {
-	// For now, always default to Piano Roll (index 0)
-	// TODO: Read actual mode from clip when sequencer system is integrated
-	this->setValue(0);
+	// Get current clip and check its sequencer mode
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		// Check which mode is active
+		const std::string& modeName = clip->getSequencerModeName();
+		if (modeName == "generative_test") {
+			this->setValue(1); // GENERATIVE 1
+		} else {
+			this->setValue(0); // Default to PIANO ROLL
+		}
+	} else {
+		this->setValue(0); // PIANO ROLL (default/linear mode)
+	}
 }
 
 void ClipTypeSelection::writeCurrentValue() {
-	// For now, just acknowledge the selection
-	// TODO: Actually switch the clip's sequencer mode
+	// Apply the selected mode to the current clip
 	int32_t selectedMode = this->getValue();
+	InstrumentClip* clip = getCurrentInstrumentClip();
 
-	// Future implementation will connect to sequencer mode system
-	// For now, the selection just shows which mode was chosen
+	if (clip) {
+		if (selectedMode == 0) {
+			// PIANO ROLL - clear sequencer mode (back to linear)
+			clip->clearSequencerMode();
+		} else if (selectedMode == 1) {
+			// GENERATIVE 1 - set test sequencer mode
+			clip->setSequencerMode("generative_test");
+		}
+	}
 }
 
 } // namespace deluge::gui::menu_item::clip
