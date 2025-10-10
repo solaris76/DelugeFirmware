@@ -24,8 +24,16 @@
 
 namespace deluge::model::clip::sequencer::modes {
 
+// Constants
 constexpr int32_t kMaxStages = 8;
 constexpr int32_t kMaxPulseCount = 8;
+constexpr int32_t kMaxNoteSlots = 16;
+constexpr int32_t kPopupBufferSize = 30;
+constexpr int32_t kNoteNameBufferSize = 10;
+constexpr int32_t kFlashDurationTicks = 50;
+constexpr int32_t kOctaveDownRow = 1; // Relative to gate line
+constexpr int32_t kOctaveUpRow = 2;
+constexpr int32_t kNotesStartRow = 3;
 
 class PulseSequencerMode : public SequencerMode {
 public:
@@ -100,13 +108,12 @@ private:
 		// Visual feedback
 		bool gatePadFlashing = false;
 		uint32_t flashStartTime = 0;
-		uint32_t flashDuration = 50;
+		uint32_t flashDuration = kFlashDurationTicks;
 
 		// Per-note tracking for proper note-off handling
-		std::array<int16_t, 16> noteCodeActive;
-		std::array<uint32_t, 16> noteGatePos;
-		std::array<bool, 16> noteActive;
-		std::array<int32_t, 16> noteSourceStage;
+		std::array<int16_t, kMaxNoteSlots> noteCodeActive;
+		std::array<uint32_t, kMaxNoteSlots> noteGatePos;
+		std::array<bool, kMaxNoteSlots> noteActive;
 	} sequencerState_;
 
 	// Performance controls
@@ -138,16 +145,48 @@ private:
 		int32_t numScaleNotes = 0; // How many notes in current scale
 	} displayState_;
 
-	// Helper methods
+	// Core sequencer methods
 	void generateNotes(void* modelStack);
 	void playNoteForStage(void* modelStack, int32_t stage);
 	void switchNoteOff(void* modelStack, int32_t noteSlot);
 	void advanceToNextEnabledStage();
 	bool evaluateRhythmPattern(int32_t stage, int32_t pulsePosition);
-	int32_t calculateTotalPatternLength() const;
-	int32_t getGateLineY() const { return displayState_.gateLineOffset + 4; }
-	const char* getGateTypeName(GateType type) const;
 	void updateScaleNotes(); // Update scale notes from current song
+
+	// Utility helper methods
+	bool isStageValid(int32_t stage) const { return stage >= 0 && stage < kMaxStages; }
+	bool isStageActive(int32_t stage) const;
+	int32_t getNoteRowY(int32_t noteIdx) const { return getGateLineY() + kNotesStartRow + noteIdx; }
+	int32_t getGateLineY() const { return displayState_.gateLineOffset + 4; }
+	int32_t calculateTotalPatternLength() const;
+	void showStagePopup(int32_t stage, const char* format, ...);
+	RGB dimColorIfDisabled(RGB color, int32_t stage) const;
+	RGB getOctaveColor(int32_t octave) const;
+	int32_t cycleValue(int32_t current, const int32_t* values, int32_t count) const;
+	
+	// Rendering sub-methods
+	void renderPulseCounts(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	                      int32_t imageWidth, int32_t gateLineY);
+	void renderGateLine(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	                   int32_t imageWidth, int32_t gateLineY);
+	void renderOctavePads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	                     int32_t imageWidth, int32_t gateLineY);
+	void renderNotePads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	                   int32_t imageWidth, int32_t gateLineY);
+	void renderRightSideControls(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	                            int32_t imageWidth);
+	void renderPlaybackIndicator(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
+	                            int32_t imageWidth, int32_t gateLineY);
+	
+	// Play order advancement methods
+	void advanceForwards(int32_t& nextStage);
+	void advanceBackwards(int32_t& nextStage);
+	void advancePingPong(int32_t& nextStage, int32_t& direction);
+	void advanceRandom();
+	void advancePedal();
+	void advanceSkip2();
+	void advancePendulum();
+	void advanceSpiral();
 
 	// Pad input handlers
 	void handleGateType(int32_t stage);

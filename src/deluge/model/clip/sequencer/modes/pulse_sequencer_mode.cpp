@@ -25,6 +25,7 @@
 #include "gui/views/instrument_clip_view.h"
 #include "hid/display/display.h"
 #include <algorithm>
+#include <cstdarg>
 #include <cstdio>
 
 // Forward declaration for note name conversion
@@ -57,11 +58,10 @@ void PulseSequencerMode::initialize() {
 	sequencerState_.totalPatternLength = calculateTotalPatternLength();
 	sequencerState_.gatePadFlashing = false;
 
-	for (int32_t i = 0; i < 16; i++) {
+	for (int32_t i = 0; i < kMaxNoteSlots; i++) {
 		sequencerState_.noteCodeActive[i] = -1;
 		sequencerState_.noteGatePos[i] = 0;
 		sequencerState_.noteActive[i] = false;
-		sequencerState_.noteSourceStage[i] = -1;
 	}
 
 	// Initialize performance controls
@@ -75,7 +75,7 @@ void PulseSequencerMode::initialize() {
 
 void PulseSequencerMode::cleanup() {
 	// Send all notes off before cleanup
-	for (int32_t n = 0; n < 16; n++) {
+	for (int32_t n = 0; n < kMaxNoteSlots; n++) {
 		if (sequencerState_.noteActive[n] && sequencerState_.noteCodeActive[n] >= 0) {
 			// We don't have modelStack here, so just mark as inactive
 			// The notes will be stopped when mode switches
@@ -116,6 +116,71 @@ void PulseSequencerMode::updateScaleNotes() {
 	}
 }
 
+// ================================================================================================
+// UTILITY HELPER METHODS
+// ================================================================================================
+
+bool PulseSequencerMode::isStageActive(int32_t stage) const {
+	return isStageValid(stage) && stage < performanceControls_.numStages 
+	       && performanceControls_.stageEnabled[stage];
+}
+
+void PulseSequencerMode::showStagePopup(int32_t stage, const char* format, ...) {
+	char buffer[kPopupBufferSize];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(buffer, kPopupBufferSize, format, args);
+	va_end(args);
+	display->displayPopup(buffer);
+}
+
+RGB PulseSequencerMode::dimColorIfDisabled(RGB color, int32_t stage) const {
+	if (!isStageActive(stage)) {
+		color.r /= 8;
+		color.g /= 8;
+		color.b /= 8;
+	}
+	return color;
+}
+
+RGB PulseSequencerMode::getOctaveColor(int32_t octave) const {
+	RGB color;
+	if (octave == 0) {
+		// At default pitch: white
+		color = RGB{200, 200, 200};
+	} else if (octave > 0) {
+		// Going up: brighter orange based on how far up (range 1 to 3)
+		int32_t brightness = (octave * 127) / 3;
+		color = RGB{static_cast<uint8_t>(128 + brightness), static_cast<uint8_t>(64 + brightness/2), 0};
+	} else {
+		// Going down: brighter orange based on how far down (range -2 to -1)
+		int32_t brightness = (-octave * 127) / 2;
+		color = RGB{static_cast<uint8_t>(128 + brightness), static_cast<uint8_t>(64 + brightness/2), 0};
+	}
+	return color;
+}
+
+int32_t PulseSequencerMode::cycleValue(int32_t current, const int32_t* values, int32_t count) const {
+	for (int32_t i = 0; i < count; i++) {
+		if (current == values[i]) {
+			return values[(i + 1) % count];
+		}
+	}
+	return values[0]; // Default to first value if not found
+}
+
+int32_t PulseSequencerMode::calculateTotalPatternLength() const {
+	int32_t totalLength = 0;
+	for (int32_t i = 0; i < performanceControls_.numStages; i++) {
+		totalLength += stages_[i].pulseCount;
+	}
+	return totalLength;
+}
+
+// ================================================================================================
+// RENDERING
+// ================================================================================================
+
 bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
                                    int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) {
 	// Clear all pads first
@@ -140,20 +205,15 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 	int32_t gateLineY = getGateLineY(); // 4 + gateLineOffset
 
 	// Render pulse count rows (below gate line, y0-y3 by default)
-	for (int32_t i = 0; i < 8; i++) {
+	for (int32_t i = 0; i < kMaxPulseCount; i++) {
 		int32_t yPos = gateLineY - 1 - i;
 		if (yPos >= 0 && yPos < kDisplayHeight && (whichRows & (1 << yPos))) {
-			for (int32_t stage = 0; stage < 8; stage++) {
+			for (int32_t stage = 0; stage < kMaxStages; stage++) {
 				if (i < stages_[stage].pulseCount) {
 					// Active pulse - cyan to purple gradient
-					int32_t intensity = (i * 255) / 7;
+					int32_t intensity = (i * 255) / (kMaxPulseCount - 1);
 					RGB color = RGB{static_cast<uint8_t>(intensity), static_cast<uint8_t>(255 - intensity), 255};
-
-					if (!performanceControls_.stageEnabled[stage] || stage >= performanceControls_.numStages) {
-						color.r /= 8;
-						color.g /= 8;
-						color.b /= 8;
-					}
+					color = dimColorIfDisabled(color, stage);
 
 					image[yPos * imageWidth + stage] = color;
 					if (occupancyMask) {
@@ -166,7 +226,7 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 
 	// Render gate line (at gateLineY, y4 by default)
 	if (gateLineY >= 0 && gateLineY < kDisplayHeight && (whichRows & (1 << gateLineY))) {
-		for (int32_t stage = 0; stage < 8; stage++) {
+		for (int32_t stage = 0; stage < kMaxStages; stage++) {
 			bool shouldFlash = false;
 			if (sequencerState_.gatePadFlashing && sequencerState_.lastPlayedStage == stage) {
 				uint32_t currentTime = playbackHandler.getCurrentInternalTickCount();
@@ -190,12 +250,7 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 				}
 			}
 
-			if (!performanceControls_.stageEnabled[stage] || stage >= performanceControls_.numStages) {
-				color.r /= 8;
-				color.g /= 8;
-				color.b /= 8;
-			}
-
+			color = dimColorIfDisabled(color, stage);
 			image[gateLineY * imageWidth + stage] = color;
 			if (occupancyMask) {
 				occupancyMask[gateLineY][stage] = 64;
@@ -204,31 +259,20 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 	}
 
 	// Render octave down (above gate line, y5 by default)
-	int32_t octaveDownY = gateLineY + 1;
+	int32_t octaveDownY = gateLineY + kOctaveDownRow;
 	if (octaveDownY >= 0 && octaveDownY < kDisplayHeight && (whichRows & (1 << octaveDownY))) {
-		for (int32_t stage = 0; stage < 8; stage++) {
+		for (int32_t stage = 0; stage < kMaxStages; stage++) {
 			int32_t octave = stages_[stage].octave;
-			RGB color;
-
-			if (octave == 0) {
-				// At default pitch: white
-				color = RGB{200, 200, 200};
-			} else if (octave < 0) {
-				// Going down: brighter orange based on how far down (range -2 to -1)
-				int32_t brightness = (-octave * 127) / 2; // -1 = 63, -2 = 127
-				color = RGB{static_cast<uint8_t>(128 + brightness), static_cast<uint8_t>(64 + brightness/2), 0};
-			} else {
-				// Going up: dimmer (opposite of up pad)
-				int32_t dimness = (octave * 60) / 3; // Dims as up pad brightens
+			RGB color = getOctaveColor(octave);
+			
+			// For down pad: show active when octave is negative
+			if (octave > 0) {
+				// Dim when going up (opposite direction)
+				int32_t dimness = (octave * 60) / 3;
 				color = RGB{static_cast<uint8_t>(90 - dimness), static_cast<uint8_t>(45 - dimness/2), 0};
 			}
-
-			if (!performanceControls_.stageEnabled[stage] || stage >= performanceControls_.numStages) {
-				color.r /= 8;
-				color.g /= 8;
-				color.b /= 8;
-			}
-
+			
+			color = dimColorIfDisabled(color, stage);
 			image[octaveDownY * imageWidth + stage] = color;
 			if (occupancyMask) {
 				occupancyMask[octaveDownY][stage] = (octave != 0) ? 48 : 32;
@@ -237,31 +281,20 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 	}
 
 	// Render octave up (above octave down, y6 by default)
-	int32_t octaveUpY = gateLineY + 2;
+	int32_t octaveUpY = gateLineY + kOctaveUpRow;
 	if (octaveUpY >= 0 && octaveUpY < kDisplayHeight && (whichRows & (1 << octaveUpY))) {
-		for (int32_t stage = 0; stage < 8; stage++) {
+		for (int32_t stage = 0; stage < kMaxStages; stage++) {
 			int32_t octave = stages_[stage].octave;
-			RGB color;
-
-			if (octave == 0) {
-				// At default pitch: white
-				color = RGB{200, 200, 200};
-			} else if (octave > 0) {
-				// Going up: brighter orange based on how far up (range 1 to 3)
-				int32_t brightness = (octave * 127) / 3; // 1 = 42, 2 = 85, 3 = 127
-				color = RGB{static_cast<uint8_t>(128 + brightness), static_cast<uint8_t>(64 + brightness/2), 0};
-			} else {
-				// Going down: dimmer (opposite of down pad)
-				int32_t dimness = (-octave * 60) / 2; // Dims as down pad brightens
+			RGB color = getOctaveColor(octave);
+			
+			// For up pad: show active when octave is positive
+			if (octave < 0) {
+				// Dim when going down (opposite direction)
+				int32_t dimness = (-octave * 60) / 2;
 				color = RGB{static_cast<uint8_t>(90 - dimness), static_cast<uint8_t>(45 - dimness/2), 0};
 			}
-
-			if (!performanceControls_.stageEnabled[stage] || stage >= performanceControls_.numStages) {
-				color.r /= 8;
-				color.g /= 8;
-				color.b /= 8;
-			}
-
+			
+			color = dimColorIfDisabled(color, stage);
 			image[octaveUpY * imageWidth + stage] = color;
 			if (occupancyMask) {
 				occupancyMask[octaveUpY][stage] = (octave != 0) ? 48 : 32;
@@ -271,22 +304,12 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 
 	// Render note pads (above octave up, y7+ by default)
 	for (int32_t noteIdx = 0; noteIdx < displayState_.numScaleNotes; noteIdx++) {
-		int32_t yPos = gateLineY + 3 + noteIdx; // Start at gate+3 (y7 by default)
+		int32_t yPos = getNoteRowY(noteIdx);
 		if (yPos >= 0 && yPos < kDisplayHeight && (whichRows & (1 << yPos))) {
-			for (int32_t stage = 0; stage < 8; stage++) {
+			for (int32_t stage = 0; stage < kMaxStages; stage++) {
 				bool isSelected = (stages_[stage].noteIndex == noteIdx);
-				RGB color;
-				if (isSelected) {
-					color = RGB{255, 200, 50}; // Bright yellow for selected
-				} else {
-					color = RGB{0, 0, 0}; // Black for unselected
-				}
-
-				if (!performanceControls_.stageEnabled[stage] || stage >= performanceControls_.numStages) {
-					color.r /= 8;
-					color.g /= 8;
-					color.b /= 8;
-				}
+				RGB color = isSelected ? RGB{255, 200, 50} : RGB{0, 0, 0};
+				color = dimColorIfDisabled(color, stage);
 
 				image[yPos * imageWidth + stage] = color;
 				if (occupancyMask) {
@@ -419,7 +442,7 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 
 	// After rendering all pads, brighten the playback position
 	// Show on both gate line AND the selected note pad for the current stage
-	if (performanceControls_.currentStage >= 0 && performanceControls_.currentStage < 8) {
+	if (isStageValid(performanceControls_.currentStage)) {
 		int32_t gateLineY = getGateLineY();
 		int32_t currentStage = performanceControls_.currentStage;
 
@@ -436,9 +459,7 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 		}
 
 		// Also make the selected note pad RED for the current stage (if visible)
-		int32_t noteIdx = stages_[currentStage].noteIndex;
-		int32_t noteY = gateLineY + 3 + noteIdx; // Note position
-
+		int32_t noteY = getNoteRowY(stages_[currentStage].noteIndex);
 		if (noteY >= 0 && noteY < kDisplayHeight && (whichRows & (1 << noteY))) {
 			// Make it red like the gate line flash
 			image[noteY * imageWidth + currentStage] = RGB{255, 0, 0};
@@ -497,7 +518,7 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 	lastAbsolutePlaybackPos_ = clip->lastProcessedPos;
 
 	// Check for any notes that need to be turned off
-	for (int32_t i = 0; i < 16; i++) {
+	for (int32_t i = 0; i < kMaxNoteSlots; i++) {
 		if (sequencerState_.noteActive[i]) {
 			// Check if note should end now
 			if (absolutePlaybackPos >= sequencerState_.noteGatePos[i]) {
@@ -529,19 +550,19 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 
 		// If stage changed, also refresh the note rows for both old and new stages
 		if (oldStage != performanceControls_.currentStage) {
-			if (oldStage >= 0 && oldStage < kMaxStages) {
-				int32_t oldNoteY = gateLineY + 3 + stages_[oldStage].noteIndex;
+			if (isStageValid(oldStage)) {
+				int32_t oldNoteY = getNoteRowY(stages_[oldStage].noteIndex);
 				if (oldNoteY >= 0 && oldNoteY < kDisplayHeight) {
 					rowsToRefresh |= (1 << oldNoteY);
 				}
 			}
 		}
 
-		// Always refresh the current stage's note row
-		int32_t newNoteY = gateLineY + 3 + stages_[performanceControls_.currentStage].noteIndex;
-		if (newNoteY >= 0 && newNoteY < kDisplayHeight) {
-			rowsToRefresh |= (1 << newNoteY);
-		}
+	// Always refresh the current stage's note row
+	int32_t newNoteY = getNoteRowY(stages_[performanceControls_.currentStage].noteIndex);
+	if (newNoteY >= 0 && newNoteY < kDisplayHeight) {
+		rowsToRefresh |= (1 << newNoteY);
+	}
 
 		uiNeedsRendering(&instrumentClipView, rowsToRefresh, 0);
 	}
@@ -622,7 +643,7 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 
 	// Find free slot to track this note
 	int32_t freeSlot = -1;
-	for (int32_t i = 0; i < 16; i++) {
+	for (int32_t i = 0; i < kMaxNoteSlots; i++) {
 		if (!sequencerState_.noteActive[i]) {
 			freeSlot = i;
 			break;
@@ -654,7 +675,7 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 }
 
 void PulseSequencerMode::switchNoteOff(void* modelStackPtr, int32_t noteSlot) {
-	if (noteSlot < 0 || noteSlot >= 16 || !sequencerState_.noteActive[noteSlot]) {
+	if (noteSlot < 0 || noteSlot >= kMaxNoteSlots || !sequencerState_.noteActive[noteSlot]) {
 		return;
 	}
 
@@ -668,138 +689,165 @@ void PulseSequencerMode::switchNoteOff(void* modelStackPtr, int32_t noteSlot) {
 	sequencerState_.noteActive[noteSlot] = false;
 }
 
-void PulseSequencerMode::advanceToNextEnabledStage() {
-	int32_t nextStage = performanceControls_.currentStage;
-	int32_t direction = 1;
-	int32_t attempts = 0;
+// ================================================================================================
+// PLAY ORDER ADVANCEMENT METHODS
+// ================================================================================================
 
-	switch (performanceControls_.playOrder) {
-	case PlayOrder::FORWARDS:
-		direction = 1;
-		break;
-
-	case PlayOrder::BACKWARDS:
-		direction = -1;
-		break;
-
-	case PlayOrder::PING_PONG:
-		direction = performanceControls_.pingPongDirection;
-		break;
-
-	case PlayOrder::RANDOM: {
-		int32_t enabledStages[8];
-		int32_t enabledCount = 0;
-		for (int32_t i = 0; i < performanceControls_.numStages; i++) {
-			if (performanceControls_.stageEnabled[i]) {
-				enabledStages[enabledCount++] = i;
-			}
+void PulseSequencerMode::advanceRandom() {
+	int32_t enabledStages[kMaxStages];
+	int32_t enabledCount = 0;
+	for (int32_t i = 0; i < performanceControls_.numStages; i++) {
+		if (performanceControls_.stageEnabled[i]) {
+			enabledStages[enabledCount++] = i;
 		}
-		if (enabledCount > 0) {
-			performanceControls_.currentStage = enabledStages[getRandom255() % enabledCount];
-		}
-		return;
 	}
+	if (enabledCount > 0) {
+		performanceControls_.currentStage = enabledStages[getRandom255() % enabledCount];
+	}
+}
 
-	case PlayOrder::PEDAL:
-		// Always return to stage 1: 1,2,1,3,1,4,1,5,1,6,1,7,1,8
-		if (performanceControls_.currentStage == 0) {
-			performanceControls_.currentStage = performanceControls_.pedalNextStage;
-			performanceControls_.pedalNextStage++;
-			if (performanceControls_.pedalNextStage >= performanceControls_.numStages) {
-				performanceControls_.pedalNextStage = 1;
-			}
+void PulseSequencerMode::advancePedal() {
+	// Always return to stage 1: 1,2,1,3,1,4,1,5,1,6,1,7,1,8
+	if (performanceControls_.currentStage == 0) {
+		performanceControls_.currentStage = performanceControls_.pedalNextStage;
+		performanceControls_.pedalNextStage++;
+		if (performanceControls_.pedalNextStage >= performanceControls_.numStages) {
+			performanceControls_.pedalNextStage = 1;
 		}
-		else {
+	}
+	else {
+		performanceControls_.currentStage = 0;
+	}
+}
+
+void PulseSequencerMode::advanceSkip2() {
+	// Skip every 2nd: 1,3,5,7,2,4,6,8
+	if (performanceControls_.skip2OddPhase) {
+		performanceControls_.currentStage += 2;
+		if (performanceControls_.currentStage >= performanceControls_.numStages) {
+			performanceControls_.currentStage = 1;
+			performanceControls_.skip2OddPhase = false;
+		}
+	}
+	else {
+		performanceControls_.currentStage += 2;
+		if (performanceControls_.currentStage >= performanceControls_.numStages) {
 			performanceControls_.currentStage = 0;
+			performanceControls_.skip2OddPhase = true;
 		}
-		return;
+	}
+}
 
-	case PlayOrder::SKIP_2:
-		// Skip every 2nd: 1,3,5,7,2,4,6,8
-		if (performanceControls_.skip2OddPhase) {
-			performanceControls_.currentStage += 2;
-			if (performanceControls_.currentStage >= performanceControls_.numStages) {
-				performanceControls_.currentStage = 1;
-				performanceControls_.skip2OddPhase = false;
-			}
-		}
-		else {
-			performanceControls_.currentStage += 2;
-			if (performanceControls_.currentStage >= performanceControls_.numStages) {
-				performanceControls_.currentStage = 0;
-				performanceControls_.skip2OddPhase = true;
-			}
-		}
-		return;
+void PulseSequencerMode::advancePendulum() {
+	// Swing pattern: 1,2,3,2,3,4,3,4,5,4,5,6,5,6,7,6,7,8
+	if (performanceControls_.pendulumGoingUp) {
+		performanceControls_.currentStage = performanceControls_.pendulumHigh;
+		performanceControls_.pendulumGoingUp = false;
+	}
+	else {
+		performanceControls_.currentStage = performanceControls_.pendulumLow;
+		performanceControls_.pendulumGoingUp = true;
 
-	case PlayOrder::PENDULUM:
-		// Swing pattern: 1,2,3,2,3,4,3,4,5,4,5,6,5,6,7,6,7,8
-		if (performanceControls_.pendulumGoingUp) {
-			performanceControls_.currentStage = performanceControls_.pendulumHigh;
-			performanceControls_.pendulumGoingUp = false;
-		}
-		else {
-			performanceControls_.currentStage = performanceControls_.pendulumLow;
-			performanceControls_.pendulumGoingUp = true;
+		performanceControls_.pendulumLow++;
+		performanceControls_.pendulumHigh++;
 
-			performanceControls_.pendulumLow++;
-			performanceControls_.pendulumHigh++;
+		if (performanceControls_.pendulumHigh >= performanceControls_.numStages) {
+			performanceControls_.pendulumLow = 0;
+			performanceControls_.pendulumHigh = 1;
+		}
+	}
+}
 
-			if (performanceControls_.pendulumHigh >= performanceControls_.numStages) {
-				performanceControls_.pendulumLow = 0;
-				performanceControls_.pendulumHigh = 1;
-			}
-		}
-		return;
-
-	case PlayOrder::SPIRAL:
-		// Spiral inward: 1,8,2,7,3,6,4,5
-		if (performanceControls_.spiralFromLow) {
-			performanceControls_.currentStage = performanceControls_.spiralLow;
-			performanceControls_.spiralLow++;
-			performanceControls_.spiralFromLow = false;
-		}
-		else {
-			performanceControls_.currentStage = performanceControls_.spiralHigh;
-			performanceControls_.spiralHigh--;
-			performanceControls_.spiralFromLow = true;
-		}
-
-		if (performanceControls_.spiralLow > performanceControls_.spiralHigh) {
-			performanceControls_.spiralLow = 0;
-			performanceControls_.spiralHigh = performanceControls_.numStages - 1;
-		}
-		return;
+void PulseSequencerMode::advanceSpiral() {
+	// Spiral inward: 1,8,2,7,3,6,4,5
+	if (performanceControls_.spiralFromLow) {
+		performanceControls_.currentStage = performanceControls_.spiralLow;
+		performanceControls_.spiralLow++;
+		performanceControls_.spiralFromLow = false;
+	}
+	else {
+		performanceControls_.currentStage = performanceControls_.spiralHigh;
+		performanceControls_.spiralHigh--;
+		performanceControls_.spiralFromLow = true;
 	}
 
-	// Find next enabled stage (for FORWARDS/BACKWARDS/PING_PONG)
+	if (performanceControls_.spiralLow > performanceControls_.spiralHigh) {
+		performanceControls_.spiralLow = 0;
+		performanceControls_.spiralHigh = performanceControls_.numStages - 1;
+	}
+}
+
+void PulseSequencerMode::advancePingPong(int32_t& nextStage, int32_t& direction) {
+	if (nextStage >= performanceControls_.numStages) {
+		nextStage = performanceControls_.numStages - 2;
+		performanceControls_.pingPongDirection = -1;
+		direction = -1;
+	}
+	else if (nextStage < 0) {
+		nextStage = 1;
+		performanceControls_.pingPongDirection = 1;
+		direction = 1;
+	}
+}
+
+void PulseSequencerMode::advanceForwards(int32_t& nextStage) {
+	if (nextStage >= performanceControls_.numStages) {
+		nextStage = 0;
+	}
+}
+
+void PulseSequencerMode::advanceBackwards(int32_t& nextStage) {
+	if (nextStage < 0) {
+		nextStage = performanceControls_.numStages - 1;
+	}
+}
+
+void PulseSequencerMode::advanceToNextEnabledStage() {
+	// Special play orders that don't use the standard find-next-enabled loop
+	switch (performanceControls_.playOrder) {
+	case PlayOrder::RANDOM:
+		advanceRandom();
+		return;
+	case PlayOrder::PEDAL:
+		advancePedal();
+		return;
+	case PlayOrder::SKIP_2:
+		advanceSkip2();
+		return;
+	case PlayOrder::PENDULUM:
+		advancePendulum();
+		return;
+	case PlayOrder::SPIRAL:
+		advanceSpiral();
+		return;
+	default:
+		break; // Fall through to standard advancement
+	}
+
+	// Standard advancement for FORWARDS/BACKWARDS/PING_PONG
+	int32_t nextStage = performanceControls_.currentStage;
+	int32_t direction = (performanceControls_.playOrder == PlayOrder::BACKWARDS) ? -1 : 1;
+	if (performanceControls_.playOrder == PlayOrder::PING_PONG) {
+		direction = performanceControls_.pingPongDirection;
+	}
+
+	int32_t attempts = 0;
 	do {
 		nextStage += direction;
 		attempts++;
 
-		if (nextStage >= performanceControls_.numStages) {
-			if (performanceControls_.playOrder == PlayOrder::PING_PONG) {
-				nextStage = performanceControls_.numStages - 2;
-				performanceControls_.pingPongDirection = -1;
-				direction = -1;
-			}
-			else {
-				nextStage = 0;
-			}
+		if (performanceControls_.playOrder == PlayOrder::PING_PONG) {
+			advancePingPong(nextStage, direction);
 		}
-		else if (nextStage < 0) {
-			if (performanceControls_.playOrder == PlayOrder::PING_PONG) {
-				nextStage = 1;
-				performanceControls_.pingPongDirection = 1;
-				direction = 1;
-			}
-			else {
-				nextStage = performanceControls_.numStages - 1;
-			}
+		else if (performanceControls_.playOrder == PlayOrder::FORWARDS) {
+			advanceForwards(nextStage);
+		}
+		else {
+			advanceBackwards(nextStage);
 		}
 
 		if (attempts > performanceControls_.numStages) {
-			return;
+			return; // Safety: avoid infinite loop
 		}
 
 	} while (!performanceControls_.stageEnabled[nextStage]);
@@ -822,28 +870,6 @@ bool PulseSequencerMode::evaluateRhythmPattern(int32_t stage, int32_t pulsePosit
 	}
 
 	return false;
-}
-
-int32_t PulseSequencerMode::calculateTotalPatternLength() const {
-	int32_t totalLength = 0;
-	for (int32_t i = 0; i < performanceControls_.numStages; i++) {
-		totalLength += stages_[i].pulseCount;
-	}
-	return totalLength;
-}
-
-const char* PulseSequencerMode::getGateTypeName(GateType type) const {
-	switch (type) {
-	case GateType::OFF:
-		return "OFF";
-	case GateType::SINGLE:
-		return "SINGLE";
-	case GateType::MULTIPLE:
-		return "MULTIPLE";
-	case GateType::HELD:
-		return "HELD";
-	}
-	return "UNKNOWN";
 }
 
 // ================================================================================================
@@ -902,13 +928,10 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 					if (noteCode < 0) noteCode = 0;
 					if (noteCode > 127) noteCode = 127;
 
-					char noteNameBuffer[10];
-					int32_t lengthDummy = 0;
-					noteCodeToString(noteCode, noteNameBuffer, &lengthDummy, true);
-
-					char buffer[30];
-					snprintf(buffer, sizeof(buffer), "Stage %d: %s", stage + 1, noteNameBuffer);
-					display->displayPopup(buffer);
+				char noteNameBuffer[kNoteNameBufferSize];
+				int32_t lengthDummy = 0;
+				noteCodeToString(noteCode, noteNameBuffer, &lengthDummy, true);
+				showStagePopup(stage, "Stage %d: %s", stage + 1, noteNameBuffer);
 				}
 				return true;
 			}
@@ -1020,9 +1043,7 @@ bool PulseSequencerMode::handleVerticalEncoder(int32_t offset) {
 // ================================================================================================
 
 void PulseSequencerMode::handleGateType(int32_t stage) {
-	if (stage < 0 || stage >= kMaxStages) {
-		return;
-	}
+	if (!isStageValid(stage)) return;
 
 	// Cycle through gate types: OFF -> SINGLE -> MULTIPLE -> HELD -> OFF
 	int32_t currentType = static_cast<int32_t>(stages_[stage].gateType);
@@ -1031,15 +1052,13 @@ void PulseSequencerMode::handleGateType(int32_t stage) {
 
 	// Show popup
 	const char* gateNames[] = {"OFF", "SINGLE", "MULTIPLE", "HELD"};
-	char buffer[30];
+	char buffer[kPopupBufferSize];
 	snprintf(buffer, sizeof(buffer), "Stage %d: %s", stage + 1, gateNames[nextType]);
 	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handleNoteSelection(int32_t stage) {
-	if (stage < 0 || stage >= kMaxStages) {
-		return;
-	}
+	if (!isStageValid(stage)) return;
 
 	// Cycle through note indices (0-15 for more range)
 	stages_[stage].noteIndex = (stages_[stage].noteIndex + 1) % 16;
@@ -1066,27 +1085,22 @@ void PulseSequencerMode::handleNoteSelection(int32_t stage) {
 			if (note > 127) note = 127;
 
 			// Convert to note name
-			char noteNameBuffer[10];
+			char noteNameBuffer[kNoteNameBufferSize];
 			int32_t lengthDummy = 0;
 			noteCodeToString(note, noteNameBuffer, &lengthDummy, true);
-
-			char buffer[30];
-			snprintf(buffer, sizeof(buffer), "Stage %d: %s", stage + 1, noteNameBuffer);
-			display->displayPopup(buffer);
+			showStagePopup(stage, "Stage %d: %s", stage + 1, noteNameBuffer);
 			return;
 		}
 	}
 
 	// Fallback
-	char buffer[30];
+	char buffer[kPopupBufferSize];
 	snprintf(buffer, sizeof(buffer), "Stage %d Note: %d", stage + 1, stages_[stage].noteIndex + 1);
 	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handleOctaveAdjustment(int32_t stage, int32_t direction) {
-	if (stage < 0 || stage >= kMaxStages) {
-		return;
-	}
+	if (!isStageValid(stage)) return;
 
 	int32_t newOctave = stages_[stage].octave + direction;
 	if (newOctave < -2) newOctave = -2;
@@ -1095,16 +1109,13 @@ void PulseSequencerMode::handleOctaveAdjustment(int32_t stage, int32_t direction
 	stages_[stage].octave = newOctave;
 
 	// Show popup with octave value
-	char buffer[30];
+	char buffer[kPopupBufferSize];
 	snprintf(buffer, sizeof(buffer), "Stage %d Oct: %+d", stage + 1, stages_[stage].octave);
 	display->displayPopup(buffer);
 }
 
 void PulseSequencerMode::handlePulseCount(int32_t stage, int32_t position) {
-	if (stage < 0 || stage >= kMaxStages) {
-		return;
-	}
-	if (position < 0 || position >= kMaxPulseCount) {
+	if (!isStageValid(stage) || position < 0 || position >= kMaxPulseCount) {
 		return;
 	}
 
@@ -1178,77 +1189,32 @@ void PulseSequencerMode::handleOctaveChange(int32_t direction) {
 }
 
 void PulseSequencerMode::handleStageToggle(int32_t stage) {
-	if (stage < 0 || stage >= kMaxStages) {
-		return;
-	}
-
+	if (!isStageValid(stage)) return;
 	performanceControls_.stageEnabled[stage] = !performanceControls_.stageEnabled[stage];
 }
 
 void PulseSequencerMode::handleVelocitySpread(int32_t stage) {
-	if (stage < 0 || stage >= kMaxStages) {
-		return;
-	}
+	if (!isStageValid(stage)) return;
 
-	// Cycle through velocity spread values: 0, 20, 40, 60, 80, 100, 127
-	int32_t spreads[] = {0, 20, 40, 60, 80, 100, 127};
-	int32_t currentIndex = 0;
-	for (int32_t i = 0; i < 7; i++) {
-		if (stages_[stage].velocitySpread == spreads[i]) {
-			currentIndex = i;
-			break;
-		}
-	}
-	stages_[stage].velocitySpread = spreads[(currentIndex + 1) % 7];
-
-	// Show popup
-	char buffer[30];
-	snprintf(buffer, sizeof(buffer), "Stage %d Spread: %d", stage + 1, stages_[stage].velocitySpread);
-	display->displayPopup(buffer);
+	static const int32_t spreads[] = {0, 20, 40, 60, 80, 100, 127};
+	stages_[stage].velocitySpread = cycleValue(stages_[stage].velocitySpread, spreads, 7);
+	showStagePopup(stage, "Stage %d Spread: %d", stage + 1, stages_[stage].velocitySpread);
 }
 
 void PulseSequencerMode::handleProbability(int32_t stage) {
-	if (stage < 0 || stage >= kMaxStages) {
-		return;
-	}
+	if (!isStageValid(stage)) return;
 
-	// Cycle through probability values: 100%, 80%, 60%, 40%, 20%
-	int32_t probs[] = {100, 80, 60, 40, 20};
-	int32_t currentIndex = 0;
-	for (int32_t i = 0; i < 5; i++) {
-		if (stages_[stage].probability == probs[i]) {
-			currentIndex = i;
-			break;
-		}
-	}
-	stages_[stage].probability = probs[(currentIndex + 1) % 5];
-
-	// Show popup
-	char buffer[30];
-	snprintf(buffer, sizeof(buffer), "Stage %d Prob: %d%%", stage + 1, stages_[stage].probability);
-	display->displayPopup(buffer);
+	static const int32_t probs[] = {100, 80, 60, 40, 20};
+	stages_[stage].probability = cycleValue(stages_[stage].probability, probs, 5);
+	showStagePopup(stage, "Stage %d Prob: %d%%", stage + 1, stages_[stage].probability);
 }
 
 void PulseSequencerMode::handleGateLength(int32_t stage) {
-	if (stage < 0 || stage >= kMaxStages) {
-		return;
-	}
+	if (!isStageValid(stage)) return;
 
-	// Cycle through gate length values: 10%, 25%, 50%, 75%, 90%, 100%
-	int32_t lengths[] = {10, 25, 50, 75, 90, 100};
-	int32_t currentIndex = 2; // default 50%
-	for (int32_t i = 0; i < 6; i++) {
-		if (stages_[stage].gateLength == lengths[i]) {
-			currentIndex = i;
-			break;
-		}
-	}
-	stages_[stage].gateLength = lengths[(currentIndex + 1) % 6];
-
-	// Show popup
-	char buffer[30];
-	snprintf(buffer, sizeof(buffer), "Stage %d Gate: %d%%", stage + 1, stages_[stage].gateLength);
-	display->displayPopup(buffer);
+	static const int32_t lengths[] = {10, 25, 50, 75, 90, 100};
+	stages_[stage].gateLength = cycleValue(stages_[stage].gateLength, lengths, 6);
+	showStagePopup(stage, "Stage %d Gate: %d%%", stage + 1, stages_[stage].gateLength);
 }
 
 void PulseSequencerMode::resetToDefaults() {
@@ -1260,7 +1226,7 @@ void PulseSequencerMode::resetToDefaults() {
 	performanceControls_.pingPongDirection = 1;
 	performanceControls_.currentStage = 0;
 
-	for (int32_t i = 0; i < 8; i++) {
+	for (int32_t i = 0; i < kMaxStages; i++) {
 		performanceControls_.stageEnabled[i] = true;
 		stages_[i].gateType = GateType::OFF;
 		stages_[i].noteIndex = 0;
@@ -1277,7 +1243,7 @@ void PulseSequencerMode::resetToDefaults() {
 
 void PulseSequencerMode::resetPerformanceControls() {
 	// Reset all stages to default performance values
-	for (int32_t i = 0; i < 8; i++) {
+	for (int32_t i = 0; i < kMaxStages; i++) {
 		stages_[i].velocitySpread = 0;
 		stages_[i].probability = 100;
 		stages_[i].gateLength = 50;
@@ -1292,7 +1258,7 @@ void PulseSequencerMode::randomizeSequence() {
 	// Ensure we have at least one note in the scale
 	int32_t maxNoteIndex = (displayState_.numScaleNotes > 0) ? displayState_.numScaleNotes : 1;
 
-	for (int32_t i = 0; i < 8; i++) {
+	for (int32_t i = 0; i < kMaxStages; i++) {
 		// Randomize gate type (skip OFF for interesting patterns)
 		int32_t gateTypeIndex = getRandom255() % 3;
 		stages_[i].gateType = static_cast<GateType>(gateTypeIndex + 1);
