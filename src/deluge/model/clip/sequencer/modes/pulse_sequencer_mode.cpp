@@ -1323,8 +1323,8 @@ void PulseSequencerMode::randomizeSequence() {
 		// Randomize note index within the current scale
 		stages_[i].noteIndex = getRandom255() % maxNoteIndex;
 
-		// Randomize octave (-2 to +3)
-		stages_[i].octave = (getRandom255() % 6) - 2;
+		// Randomize octave (-2 to +2, 4 octave range)
+		stages_[i].octave = (getRandom255() % 5) - 2;
 
 		// Randomize pulse count (bias toward lower values)
 		uint8_t random = getRandom255();
