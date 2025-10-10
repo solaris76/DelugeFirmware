@@ -49,9 +49,18 @@ public:
 	bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	               int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) override;
 
+	// Override playback to generate random notes every 16th note
+	int32_t processPlayback(void* modelStack, int32_t ticksElapsed) override;
+
 private:
 	// Simple test state
 	bool initialized_ = false;
+	
+	// Timing
+	int32_t ticksPerSixteenthNote_ = 0;
+	
+	// Track the last note we played for note-off
+	int32_t lastNoteCode_ = -1;
 };
 
 } // namespace deluge::model::clip::sequencer::modes

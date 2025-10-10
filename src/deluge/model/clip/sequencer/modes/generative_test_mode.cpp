@@ -17,17 +17,25 @@
 
 #include "model/clip/sequencer/modes/generative_test_mode.h"
 #include "model/clip/sequencer/sequencer_mode_manager.h"
+#include "model/clip/instrument_clip.h"
+#include "model/instrument/melodic_instrument.h"
+#include "model/model_stack.h"
+#include "model/song/song.h"
+#include "playback/playback_handler.h"
+#include "util/functions.h"
 
 namespace deluge::model::clip::sequencer::modes {
 
 void GenerativeTestMode::initialize() {
 	initialized_ = true;
-	// TODO: Add initialization logic when we connect to clip system
+	lastNoteCode_ = -1;
+	ticksPerSixteenthNote_ = 0; // Will be calculated during first playback call
 }
 
 void GenerativeTestMode::cleanup() {
 	initialized_ = false;
-	// TODO: Add cleanup logic when we connect to clip system
+	ticksPerSixteenthNote_ = 0;
+	lastNoteCode_ = -1;
 }
 
 bool GenerativeTestMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
@@ -59,6 +67,81 @@ bool GenerativeTestMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 	}
 
 	return true; // We handled the rendering
+}
+
+int32_t GenerativeTestMode::processPlayback(void* modelStackPtr, int32_t clipCurrentPos) {
+	if (!initialized_) {
+		return 2147483647; // Not ready, come back never
+	}
+
+	// Cast the model stack
+	ModelStackWithTimelineCounter* modelStack = static_cast<ModelStackWithTimelineCounter*>(modelStackPtr);
+	InstrumentClip* clip = static_cast<InstrumentClip*>(modelStack->getTimelineCounter());
+
+	// Only work with melodic instruments for now
+	if (clip->output->type != OutputType::SYNTH && clip->output->type != OutputType::MIDI_OUT && clip->output->type != OutputType::CV) {
+		return 2147483647;
+	}
+
+	// Calculate 16th note ticks using Song's built-in method
+	// This accounts for song resolution/tick magnitude automatically
+	if (ticksPerSixteenthNote_ == 0) {
+		ticksPerSixteenthNote_ = modelStack->song->getSixteenthNoteLength();
+	}
+
+	MelodicInstrument* instrument = static_cast<MelodicInstrument*>(clip->output);
+
+	// Use helper to check if we're at a 16th note boundary
+	bool atBoundary = atDivisionBoundary(clipCurrentPos, ticksPerSixteenthNote_);
+
+	// Only play a note if we're AT the boundary
+	if (atBoundary) {
+		// Send note-off for previous note if any
+		if (lastNoteCode_ >= 0) {
+			int16_t mpeValues[kNumExpressionDimensions];
+			memset(mpeValues, 0, sizeof(mpeValues));
+
+			char modelStackMemory[MODEL_STACK_MAX_SIZE];
+			ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+			    setupModelStackWithThreeMainThingsButNoNoteRow(modelStackMemory, modelStack->song,
+			                                                   instrument->toModControllable(), clip, &clip->paramManager);
+
+			// Send note-off
+			instrument->sendNote(modelStackWithThreeMainThings, false, lastNoteCode_, mpeValues,
+			                    MIDI_CHANNEL_NONE, 64, 0, 0);
+			lastNoteCode_ = -1;
+		}
+
+		// Time to play a new random note!
+		// Generate random note (C3 to C5 range: MIDI 60-84)
+		int32_t randomNote = 60 + (getRandom255() % 25);
+
+		// Random velocity (64-127 for some dynamics)
+		uint8_t velocity = 64 + (getRandom255() % 64);
+
+		// Zero MPE values for now
+		int16_t mpeValues[kNumExpressionDimensions];
+		memset(mpeValues, 0, sizeof(mpeValues));
+
+		// Create model stack with three main things for note sending
+		char newModelStackMemory[MODEL_STACK_MAX_SIZE];
+		ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+		    setupModelStackWithThreeMainThingsButNoNoteRow(newModelStackMemory, modelStack->song,
+		                                                   instrument->toModControllable(), clip, &clip->paramManager);
+
+		// Note length: 75% of a 16th note (leaves a gap for staccato feel)
+		int32_t noteLength = (ticksPerSixteenthNote_ * 3) / 4;
+
+		// Send note on
+		instrument->sendNote(modelStackWithThreeMainThings, true, randomNote, mpeValues,
+		                    MIDI_CHANNEL_NONE, velocity, noteLength, 0);
+
+		// Remember this note
+		lastNoteCode_ = randomNote;
+	}
+
+	// Use helper to calculate when we need to be called next
+	return ticksUntilNextDivision(clipCurrentPos, ticksPerSixteenthNote_);
 }
 
 } // namespace deluge::model::clip::sequencer::modes

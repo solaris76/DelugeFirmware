@@ -46,6 +46,32 @@ public:
 	virtual bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	                       int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) { return false; }
 
+	// Playback - called during clip playback to generate notes
+	// Return value: ticks until this mode needs to be called again
+	// modelStack: ModelStackWithTimelineCounter* for note triggering
+	// clipCurrentPos: current absolute position in the clip (wraps at loopLength)
+	virtual int32_t processPlayback(void* modelStack, int32_t clipCurrentPos) { return 2147483647; } // Max int = never
+
+	// Simple callback when a musical division boundary is crossed
+	// Override this for easy timing - base class handles the modulo math
+	// syncLevel: 7=16th, 6=8th, 8=32nd (same as arpeggiator)
+	virtual void onMusicalDivision(void* modelStack) {}
+
+protected:
+	// Simple timing helpers - use Song's getSixteenthNoteLength(), getQuarterNoteLength(), etc.
+	// for calculating tick periods with proper resolution
+
+	// Helper to check if we're at a musical division boundary
+	static bool atDivisionBoundary(int32_t clipCurrentPos, int32_t ticksPerPeriod) {
+		return (clipCurrentPos % ticksPerPeriod) == 0;
+	}
+
+	// Helper to get ticks until next division
+	static int32_t ticksUntilNextDivision(int32_t clipCurrentPos, int32_t ticksPerPeriod) {
+		int32_t howFarIntoPeriod = clipCurrentPos % ticksPerPeriod;
+		return howFarIntoPeriod == 0 ? ticksPerPeriod : (ticksPerPeriod - howFarIntoPeriod);
+	}
+
 	// Track type compatibility (default: support all)
 	virtual bool supportsInstrument() { return true; }
 	virtual bool supportsKit() { return true; }

@@ -701,6 +701,15 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 	// We already incremented / decremented noteRowsNumTicksBehindClip and ticksTilNextNoteRowEvent, in the call to
 	// incrementPos().
 
+	// If we have an active sequencer mode, let it process playback first
+	if (hasSequencerMode()) {
+		// Pass the actual clip position for timing calculations
+		int32_t ticksTilNextSequencerEvent = sequencerMode_->processPlayback(modelStack, lastProcessedPos);
+		if (ticksTilNextSequencerEvent < ticksTilNextNoteRowEvent) {
+			ticksTilNextNoteRowEvent = ticksTilNextSequencerEvent;
+		}
+	}
+
 	if (ticksTilNextNoteRowEvent <= 0) {
 
 		// Ok, time to do some ticks
