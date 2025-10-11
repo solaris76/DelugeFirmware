@@ -38,7 +38,7 @@ private:
 	// Available clip types for Synth/MIDI/CV tracks
 	static constexpr l10n::String clipTypeOptions[] = {
 	    l10n::String::STRING_FOR_PIANO_ROLL,
-	    l10n::String::STRING_FOR_GENERATIVE_1,
+	    l10n::String::STRING_FOR_STEP_SEQ,
 	    l10n::String::STRING_FOR_PULSE_SEQ,
 	};
 };

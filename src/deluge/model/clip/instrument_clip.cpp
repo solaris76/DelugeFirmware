@@ -17,7 +17,7 @@
 
 #include "model/clip/instrument_clip.h"
 #include "model/clip/sequencer/sequencer_mode_manager.h"
-#include "model/clip/sequencer/modes/generative_test_mode.h"
+#include "model/clip/sequencer/modes/step_sequencer_mode.h"
 #include "definitions_cxx.hpp"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/browser/browser.h"

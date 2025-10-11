@@ -43,8 +43,8 @@ void ClipTypeSelection::readCurrentValue() {
 	if (clip && clip->hasSequencerMode()) {
 		// Check which mode is active
 		const std::string& modeName = clip->getSequencerModeName();
-		if (modeName == "generative_test") {
-			this->setValue(1); // GENERATIVE 1
+		if (modeName == "step_sequencer") {
+			this->setValue(1); // STEP SEQ
 		} else if (modeName == "pulse_seq") {
 			this->setValue(2); // PULSE SEQ
 		} else {
@@ -65,8 +65,8 @@ void ClipTypeSelection::writeCurrentValue() {
 			// PIANO ROLL - clear sequencer mode (back to linear)
 			clip->clearSequencerMode();
 		} else if (selectedMode == 1) {
-			// GENERATIVE 1 - set test sequencer mode
-			clip->setSequencerMode("generative_test");
+			// STEP SEQ - set step sequencer mode
+			clip->setSequencerMode("step_sequencer");
 		} else if (selectedMode == 2) {
 			// PULSE SEQ - set pulse sequencer mode
 			clip->setSequencerMode("pulse_seq");
