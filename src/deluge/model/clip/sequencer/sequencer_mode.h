@@ -20,6 +20,10 @@
 #include "definitions_cxx.hpp"
 #include "gui/l10n/l10n.h"
 #include "hid/led/pad_leds.h"
+#include "model/clip/sequencer/control_columns/control_column_state.h"
+
+class Serializer;
+class Deserializer;
 
 namespace deluge::model::clip::sequencer {
 
@@ -45,17 +49,28 @@ public:
 	// Returns true if the mode handled rendering, false to use default linear rendering
 	virtual bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	                       int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) { return false; }
-	
+
 	// Sidebar rendering - allow sequencer modes to override sidebar (x16-17)
 	// Returns true if the mode handled sidebar, false to use default mute/audition
+	// Default implementation renders control columns
 	virtual bool renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
-	                          uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) { return false; }
+	                          uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]);
 
 	// Pad input - handle user interaction with pads
 	// Returns true if the mode handled the pad press, false to use default behavior
-	// x, y: pad coordinates (0-15, 0-7)
+	// x, y: pad coordinates (0-17, 0-7) - includes sidebar
 	// velocity: press velocity (0 = release, 1-127 = press)
-	virtual bool handlePadPress(int32_t x, int32_t y, int32_t velocity) { return false; }
+	// Default implementation handles control column pads (x16-17)
+	virtual bool handlePadPress(int32_t x, int32_t y, int32_t velocity);
+	
+	// Horizontal encoder - handle horizontal scrolling/adjustment
+	// Returns true if the mode handled the encoder, false to use default behavior
+	// Default implementation handles control column value adjustment
+	virtual bool handleHorizontalEncoder(int32_t offset, bool encoderPressed);
+	
+	// Track which control column pad is currently held
+	int8_t heldControlColumnPad_ = -1;  // -1 = none, 0-7 = y position
+	bool heldControlColumnIsLeft_ = false; // true = left (x16), false = right (x17)
 
 	// Vertical encoder - handle vertical scrolling
 	// Returns true if the mode handled the encoder, false to use default behavior
@@ -125,9 +140,42 @@ protected:
 	virtual bool supportsCV() { return true; }
 	virtual bool supportsAudio() { return false; } // Audio modes need special handling
 
+	// ========== CONTROL COLUMNS ==========
+
+	/**
+	 * Get control column state for this sequencer mode.
+	 * Control columns provide per-pad configurable parameters (clock div, octave, transpose, etc.)
+	 * that affect playback in real-time.
+	 */
+	ControlColumnState& getControlColumnState() { return controlColumnState_; }
+	const ControlColumnState& getControlColumnState() const { return controlColumnState_; }
+
+	/**
+	 * Get the combined active control values from both columns.
+	 * Use this during playback to apply clock div, transpose, probability, etc.
+	 */
+	SequencerControlColumn::ActiveControls getActiveControls() const {
+		return controlColumnState_.getActiveControls();
+	}
+
+	/**
+	 * Serialization - override in subclasses to save/load control column state.
+	 * Call these from your mode's serialization methods.
+	 */
+	virtual void writeControlColumnsToFile(Serializer& writer) {
+		controlColumnState_.writeToFile(writer);
+	}
+
+	virtual void readControlColumnsFromFile(Deserializer& reader) {
+		controlColumnState_.readFromFile(reader);
+	}
+
 protected:
 	// Protected constructor - only concrete implementations can be instantiated
 	SequencerMode() = default;
+
+	// Control column state (per-mode instance)
+	ControlColumnState controlColumnState_;
 };
 
 } // namespace deluge::model::clip::sequencer

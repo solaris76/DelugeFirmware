@@ -1,7 +1,5 @@
 /*
- * Copyright © 2024 Synthstrom Audible Limited
- *
- * This file is part of The Synthstrom Audible Deluge Firmware.
+ * Copyright © 2024 Synthstrom Audible Deluge Firmware.
  *
  * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software Foundation,
@@ -15,32 +13,30 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "model/clip/sequencer/sequencer_mode_manager.h"
-#include "model/clip/sequencer/sequencer_mode.h"
+#include "model/clip/sequencer/control_columns/control_column_state.h"
+#include "storage/storage_manager.h"
+#include <cstring>
 
 namespace deluge::model::clip::sequencer {
 
-SequencerModeManager& SequencerModeManager::instance() {
-	static SequencerModeManager instance;
-	return instance;
-}
+void ControlColumnState::readFromFile(Deserializer& reader) {
+	char const* tagName;
+	reader.match('{');
 
-std::unique_ptr<SequencerMode> SequencerModeManager::createMode(const std::string& name) {
-	auto it = factories_.find(name);
-	if (it != factories_.end()) {
-		return it->second();
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "leftControlColumn")) {
+			leftColumn.readFromFile(reader);
+		}
+		else if (!strcmp(tagName, "rightControlColumn")) {
+			rightColumn.readFromFile(reader);
+		}
+		else {
+			reader.exitTag(tagName);
+		}
 	}
-	return nullptr;
-}
 
-bool SequencerModeManager::isValidMode(const std::string& name) const {
-	return factories_.find(name) != factories_.end();
-}
-
-const std::vector<std::string>& SequencerModeManager::getAvailableModes() const {
-	return modeNames_;
+	reader.match('}');
 }
 
 } // namespace deluge::model::clip::sequencer
-
 

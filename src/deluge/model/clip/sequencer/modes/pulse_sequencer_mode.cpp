@@ -498,19 +498,8 @@ bool PulseSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occu
 
 bool PulseSequencerMode::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
                                        uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
-	// Blank out the sidebar - no mute/audition pads in sequencer mode
-	for (int32_t y = 0; y < kDisplayHeight; y++) {
-		if (whichRows & (1 << y)) {
-			image[y][kDisplayWidth] = RGB{0, 0, 0};      // x16 - blank
-			image[y][kDisplayWidth + 1] = RGB{0, 0, 0};  // x17 - blank
-			if (occupancyMask) {
-				occupancyMask[y][kDisplayWidth] = 0;
-				occupancyMask[y][kDisplayWidth + 1] = 0;
-			}
-		}
-	}
-
-	return true; // We handled it
+	// Use base class implementation to render control columns
+	return SequencerMode::renderSidebar(whichRows, image, occupancyMask);
 }
 
 int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolutePlaybackPos) {
@@ -1180,7 +1169,7 @@ void PulseSequencerMode::handleStageCountChange(int32_t numStages) {
 	if (performanceControls_.numStages != numStages) {
 		performanceControls_.numStages = numStages;
 		sequencerState_.totalPatternLength = calculateTotalPatternLength();
-		
+
 		char buffer[30];
 		snprintf(buffer, sizeof(buffer), "Stages: %d", numStages);
 		display->displayPopup(buffer);
@@ -1252,7 +1241,7 @@ void PulseSequencerMode::handleOctaveChange(int32_t direction) {
 void PulseSequencerMode::handleStageToggle(int32_t stage) {
 	if (!isStageValid(stage)) return;
 	performanceControls_.stageEnabled[stage] = !performanceControls_.stageEnabled[stage];
-	
+
 	const char* status = performanceControls_.stageEnabled[stage] ? "ON" : "OFF";
 	char buffer[30];
 	snprintf(buffer, sizeof(buffer), "Stage %d: %s", stage + 1, status);

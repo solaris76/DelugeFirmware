@@ -21,8 +21,74 @@
 #include "model/model_stack.h"
 #include "model/song/song.h"
 #include "util/functions.h"
+#include "hid/buttons.h"
 
 namespace deluge::model::clip::sequencer {
+
+// ========== CONTROL COLUMN DEFAULT IMPLEMENTATIONS ==========
+
+bool SequencerMode::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+                                  uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
+	// Safety check
+	if (!image) {
+		return false;
+	}
+
+	// Render control columns on sidebar (x16 = left, x17 = right)
+	controlColumnState_.leftColumn.renderColumn(image, kDisplayWidth, heldControlColumnIsLeft_ ? heldControlColumnPad_ : -1);
+	controlColumnState_.rightColumn.renderColumn(image, kDisplayWidth + 1, !heldControlColumnIsLeft_ ? heldControlColumnPad_ : -1);
+
+	return true; // We handled the sidebar
+}
+
+bool SequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
+	// Only handle sidebar pads (x16-17)
+	if (x != kDisplayWidth && x != kDisplayWidth + 1) {
+		return false; // Not a control column pad
+	}
+
+	bool isLeft = (x == kDisplayWidth);
+	bool pressed = (velocity > 0);
+	bool shiftPressed = Buttons::isShiftButtonPressed();
+
+	// Track held pad
+	if (pressed) {
+		heldControlColumnPad_ = y;
+		heldControlColumnIsLeft_ = isLeft;
+	}
+	else if (heldControlColumnPad_ == y && heldControlColumnIsLeft_ == isLeft) {
+		heldControlColumnPad_ = -1; // Released
+	}
+
+	// Route to appropriate column
+	bool handled = false;
+	if (isLeft) {
+		handled = controlColumnState_.leftColumn.handlePad(y, pressed, shiftPressed);
+	}
+	else {
+		handled = controlColumnState_.rightColumn.handlePad(y, pressed, shiftPressed);
+	}
+
+	return handled; // Control column handled it
+}
+
+bool SequencerMode::handleHorizontalEncoder(int32_t offset, bool encoderPressed) {
+	// Only handle encoder if a control column pad is held
+	if (heldControlColumnPad_ < 0) {
+		return false; // No control column pad held
+	}
+
+	// Route to appropriate column
+	bool handled = false;
+	if (heldControlColumnIsLeft_) {
+		handled = controlColumnState_.leftColumn.handleEncoder(heldControlColumnPad_, offset, encoderPressed);
+	}
+	else {
+		handled = controlColumnState_.rightColumn.handleEncoder(heldControlColumnPad_, offset, encoderPressed);
+	}
+
+	return handled;
+}
 
 // ========== HELPER IMPLEMENTATIONS ==========
 
