@@ -53,6 +53,8 @@ namespace {
 
 	constexpr int32_t kSceneValues[] = {0, 1, 2, 3};
 
+	constexpr int32_t kDirectionValues[] = {0, 1, 2, 3}; // Forward, Backward, Ping Pong, Random
+
 	// Helper: Format signed integer with + or - prefix
 	void formatSignedInt(char* buffer, int32_t value) {
 		if (value > 0) {
@@ -160,6 +162,7 @@ const int32_t* SequencerControlGroup::getAvailableValues() const {
 	case ControlType::OCTAVE:    return kOctaveValues;
 	case ControlType::TRANSPOSE: return kTransposeValues;
 	case ControlType::SCENE:     return kSceneValues;
+	case ControlType::DIRECTION: return kDirectionValues;
 	default:                     return nullptr;
 	}
 }
@@ -170,6 +173,7 @@ int32_t SequencerControlGroup::getNumAvailableValues() const {
 	case ControlType::OCTAVE:    return sizeof(kOctaveValues) / sizeof(kOctaveValues[0]);
 	case ControlType::TRANSPOSE: return sizeof(kTransposeValues) / sizeof(kTransposeValues[0]);
 	case ControlType::SCENE:     return sizeof(kSceneValues) / sizeof(kSceneValues[0]);
+	case ControlType::DIRECTION: return sizeof(kDirectionValues) / sizeof(kDirectionValues[0]);
 	default:                     return 0;
 	}
 }
@@ -201,6 +205,7 @@ const char* SequencerControlGroup::getTypeName() const {
 	case ControlType::TRANSPOSE:  return "TRANSPOSE";
 	case ControlType::SCENE:      return "SCENE";
 	case ControlType::GENERATIVE: return "GENERATIVE";
+	case ControlType::DIRECTION:  return "DIRECTION";
 	default:                      return "UNKNOWN";
 	}
 }
@@ -212,6 +217,7 @@ RGB SequencerControlGroup::getColorForType() const {
 	case ControlType::TRANSPOSE:  return RGB{255, 255, 0};  // Yellow
 	case ControlType::SCENE:      return RGB{0, 128, 255};  // Blue
 	case ControlType::GENERATIVE: return RGB{255, 255, 255}; // White (will gradient to pink per pad)
+	case ControlType::DIRECTION:  return RGB{0, 200, 255};  // Cyan/Light Blue
 	default:                      return RGB{128, 128, 128}; // Gray
 	}
 }
@@ -263,6 +269,16 @@ const char* SequencerControlGroup::formatValue(int32_t value) const {
 		default: return "?";
 		}
 
+	case ControlType::DIRECTION:
+		// value is direction mode (0-3)
+		switch (value) {
+		case 0: return "FWD";
+		case 1: return "BACK";
+		case 2: return "PING";
+		case 3: return "RAND";
+		default: return "?";
+		}
+
 	default:
 		return "?";
 	}
@@ -281,7 +297,7 @@ void SequencerControlGroup::render(RGB image[][kDisplayWidth + kSideBarWidth], i
 		if (type_ == ControlType::GENERATIVE) {
 			switch (i) {
 			case 0: // Reset - light blue
-				padColor = RGB{100, 150, 255};
+				padColor = RGB{80, 50, 255};
 				break;
 			case 1: // Randomize - light magenta
 				padColor = RGB{255, 100, 255};
@@ -290,7 +306,7 @@ void SequencerControlGroup::render(RGB image[][kDisplayWidth + kSideBarWidth], i
 				padColor = RGB{255, 150, 200};
 				break;
 			case 3: // Mutate - light pink
-				padColor = RGB{255, 180, 230};
+				padColor = RGB{255, 200, 100};
 				break;
 			default:
 				padColor = baseColor;
@@ -354,9 +370,17 @@ bool SequencerControlGroup::handlePad(int32_t yLocal, int32_t velocity, Sequence
 	// SCENE MODE: Special handling
 	if (type_ == ControlType::SCENE && mode) {
 		if (pressed) {
-			// Check if BACK button is held for scene capture
-			if (Buttons::isButtonPressed(deluge::hid::button::BACK)) {
+			// Check if SAVE button is held for scene capture
+			if (Buttons::isButtonPressed(deluge::hid::button::SAVE)) {
 				captureSceneToSlot(yLocal, mode, groupIndex);
+				heldPad_ = yLocal;
+				refreshSidebar();
+				return true;
+			}
+
+			// Check if SHIFT button is held for scene clear
+			if (Buttons::isShiftButtonPressed()) {
+				clearSceneSlot(yLocal);
 				heldPad_ = yLocal;
 				refreshSidebar();
 				return true;
@@ -438,7 +462,7 @@ bool SequencerControlGroup::handleVerticalEncoder(int32_t yLocal, int32_t offset
 
 	// Show current value with type prefix
 	if (display) {
-		char popup[30];
+		static char popup[40];
 		const char* typeName = getTypeName();
 		const char* value = formatValue(getValue(yLocal));
 		snprintf(popup, sizeof(popup), "%s: %s", typeName, value);
@@ -507,6 +531,13 @@ int32_t SequencerControlGroup::getTranspose() const {
 		return getValue(activePad_);
 	}
 	return 0; // Default: no transpose
+}
+
+int32_t SequencerControlGroup::getDirection() const {
+	if (type_ == ControlType::DIRECTION && isActive()) {
+		return getValue(activePad_);
+	}
+	return 0; // Default: forward
 }
 
 bool SequencerControlGroup::captureSceneToSlot(int32_t padIndex, SequencerMode* mode, int32_t groupIndex) {
@@ -609,6 +640,27 @@ bool SequencerControlGroup::isSceneValid(int32_t padIndex) const {
 	}
 
 	return pads_[padIndex].sceneValid;
+}
+
+bool SequencerControlGroup::clearSceneSlot(int32_t padIndex) {
+	if (type_ != ControlType::SCENE) {
+		return false;
+	}
+
+	if (padIndex < 0 || padIndex >= kNumPadsPerGroup) {
+		return false;
+	}
+
+	// Clear scene data
+	PadData& pad = pads_[padIndex];
+	pad.sceneValid = false;
+	pad.sceneSize = 0;
+
+	if (display) {
+		display->displayPopup("CLEARED");
+	}
+
+	return true;
 }
 
 bool SequencerControlGroup::triggerGenerativeAction(int32_t padIndex, SequencerMode* mode) {

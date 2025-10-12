@@ -27,6 +27,7 @@ struct CombinedEffects {
 	int32_t octaveShift = 0;    // From OCTAVE group
 	int32_t transpose = 0;      // From TRANSPOSE group
 	int32_t sceneIndex = -1;    // From SCENE group (-1 = none)
+	int32_t direction = 0;      // From DIRECTION group (0=forward, 1=backward, 2=pingpong, 3=random)
 };
 
 // Manages all 4 control groups for a sequencer mode

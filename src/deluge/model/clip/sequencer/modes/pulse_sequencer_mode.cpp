@@ -178,18 +178,35 @@ int32_t PulseSequencerMode::calculateTotalPatternLength() const {
 }
 
 int32_t PulseSequencerMode::getTicksPerPeriod(int32_t baseTicks) const {
+	// Apply performance control clock divider first
 	// Clock divider modes: 0=*2, 1=*1(default), 2=/2, 3=/4, 4=/8, 5=/16, 6=/32, 7=/64
+	int32_t ticks = baseTicks;
 	switch (performanceControls_.clockDivider) {
-	case 0: return baseTicks / 2;   // *2 (32nd notes, faster)
-	case 1: return baseTicks;       // *1 (16th notes, default)
-	case 2: return baseTicks * 2;   // /2 (8th notes)
-	case 3: return baseTicks * 4;   // /4 (quarter notes)
-	case 4: return baseTicks * 8;   // /8
-	case 5: return baseTicks * 16;  // /16
-	case 6: return baseTicks * 32;  // /32
-	case 7: return baseTicks * 64;  // /64
-	default: return baseTicks;
+	case 0: ticks = baseTicks / 2;   // *2 (32nd notes, faster)
+		break;
+	case 1: ticks = baseTicks;       // *1 (16th notes, default)
+		break;
+	case 2: ticks = baseTicks * 2;   // /2 (8th notes)
+		break;
+	case 3: ticks = baseTicks * 4;   // /4 (quarter notes)
+		break;
+	case 4: ticks = baseTicks * 8;   // /8
+		break;
+	case 5: ticks = baseTicks * 16;  // /16
+		break;
+	case 6: ticks = baseTicks * 32;  // /32
+		break;
+	case 7: ticks = baseTicks * 64;  // /64
+		break;
+	default: ticks = baseTicks;
+		break;
 	}
+
+	// Apply control column clock divider on top
+	CombinedEffects effects = getCombinedEffects();
+	ticks = ticks / effects.clockDivider;
+
+	return ticks;
 }
 
 // ================================================================================================
@@ -632,8 +649,12 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 		return;
 	}
 
-	// Calculate note index with transpose
-	int32_t noteIndexInScale = stageData.noteIndex + performanceControls_.transpose;
+	// Get control column effects
+	CombinedEffects effects = getCombinedEffects();
+
+	// Calculate note index with transpose (performance controls + control columns)
+	int32_t totalTranspose = performanceControls_.transpose + effects.transpose;
+	int32_t noteIndexInScale = stageData.noteIndex + totalTranspose;
 
 	// Wrap to scale
 	while (noteIndexInScale < 0) noteIndexInScale += numNotes;
@@ -646,8 +667,9 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 	// The root note from scale is already included, so we just shift up to C3 range
 	note += 48; // Shift up 4 octaves to C3 range
 
-	// Apply stage octave and global octave offsets
-	note += (stageData.octave * 12) + (performanceControls_.octave * 12);
+	// Apply stage octave and global octave offsets (performance controls + control columns)
+	int32_t totalOctaveShift = performanceControls_.octave + effects.octaveShift;
+	note += (stageData.octave * 12) + (totalOctaveShift * 12);
 
 	// Clamp to MIDI range
 	if (note < 0) note = 0;
@@ -952,10 +974,14 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 				// Show popup with note name
 				Song* song = currentSong;
 				if (song) {
+					// Get control column effects
+					CombinedEffects effects = getCombinedEffects();
+
 					int32_t rootNote = song->key.rootNote;
 					int32_t scaleNoteOffset = displayState_.scaleNotes[noteIdx];
 					int32_t noteCode = rootNote + scaleNoteOffset + 48;
-					noteCode += (stages_[stage].octave * 12) + (performanceControls_.octave * 12);
+					int32_t totalOctaveShift = performanceControls_.octave + effects.octaveShift;
+					noteCode += (stages_[stage].octave * 12) + (totalOctaveShift * 12);
 
 					if (noteCode < 0) noteCode = 0;
 					if (noteCode > 127) noteCode = 127;
@@ -1110,13 +1136,18 @@ void PulseSequencerMode::handleNoteSelection(int32_t stage) {
 		int32_t numNotes = getScaleNotes(modelStack, scaleNotes, 64, 6, 0);
 
 		if (numNotes > 0) {
-			// Calculate note with current settings
-			int32_t noteIndexInScale = stages_[stage].noteIndex + performanceControls_.transpose;
+			// Get control column effects
+			CombinedEffects effects = getCombinedEffects();
+
+			// Calculate note with current settings (performance controls + control columns)
+			int32_t totalTranspose = performanceControls_.transpose + effects.transpose;
+			int32_t noteIndexInScale = stages_[stage].noteIndex + totalTranspose;
 			while (noteIndexInScale < 0) noteIndexInScale += numNotes;
 			while (noteIndexInScale >= numNotes) noteIndexInScale -= numNotes;
 
 			int32_t note = scaleNotes[noteIndexInScale] + 48; // Base C3 offset
-			note += (stages_[stage].octave * 12) + (performanceControls_.octave * 12);
+			int32_t totalOctaveShift = performanceControls_.octave + effects.octaveShift;
+			note += (stages_[stage].octave * 12) + (totalOctaveShift * 12);
 
 			if (note < 0) note = 0;
 			if (note > 127) note = 127;
@@ -1385,6 +1416,112 @@ void PulseSequencerMode::evolveSequence() {
 		}
 	}
 	display->displayPopup("EVOLVE");
+}
+
+// ========== GENERATIVE MUTATIONS (wired to existing functionality) ==========
+
+void PulseSequencerMode::resetToInit() {
+	// Reset to defaults and clear performance controls
+	resetToDefaults();
+	resetPerformanceControls();
+
+	// Full UI refresh
+	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+}
+
+void PulseSequencerMode::randomizeAll() {
+	// Use existing randomize implementation
+	randomizeSequence();
+
+	// Full UI refresh
+	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+}
+
+void PulseSequencerMode::evolveNotesLow() {
+	// Use existing evolve implementation (already does gentle mutation)
+	evolveSequence();
+
+	// Full UI refresh
+	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+}
+
+void PulseSequencerMode::evolveNotesHigh() {
+	// For high mutation, run evolve multiple times
+	evolveSequence();
+	evolveSequence();
+
+	// Full UI refresh
+	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+}
+
+// ========== SCENE MANAGEMENT ==========
+
+size_t PulseSequencerMode::captureScene(void* buffer, size_t maxSize) {
+	if (!buffer || maxSize == 0) {
+		return 0;
+	}
+
+	uint8_t* ptr = static_cast<uint8_t*>(buffer);
+	size_t offset = 0;
+
+	// Calculate required size
+	size_t stagesSize = sizeof(stages_);
+	size_t perfControlsSize = sizeof(performanceControls_);
+	size_t displayStateSize = sizeof(displayState_.gateLineOffset);
+	size_t totalSize = stagesSize + perfControlsSize + displayStateSize;
+
+	if (offset + totalSize > maxSize) {
+		return 0; // Not enough space
+	}
+
+	// Copy stages data
+	memcpy(&ptr[offset], stages_.data(), stagesSize);
+	offset += stagesSize;
+
+	// Copy performance controls
+	memcpy(&ptr[offset], &performanceControls_, perfControlsSize);
+	offset += perfControlsSize;
+
+	// Copy display state offset
+	memcpy(&ptr[offset], &displayState_.gateLineOffset, displayStateSize);
+	offset += displayStateSize;
+
+	return offset;
+}
+
+bool PulseSequencerMode::recallScene(const void* buffer, size_t size) {
+	if (!buffer || size == 0) {
+		return false;
+	}
+
+	const uint8_t* ptr = static_cast<const uint8_t*>(buffer);
+	size_t offset = 0;
+
+	size_t stagesSize = sizeof(stages_);
+	size_t perfControlsSize = sizeof(performanceControls_);
+	size_t displayStateSize = sizeof(displayState_.gateLineOffset);
+	size_t totalSize = stagesSize + perfControlsSize + displayStateSize;
+
+	if (size < totalSize) {
+		return false; // Not enough data
+	}
+
+	// Restore stages data
+	memcpy(stages_.data(), &ptr[offset], stagesSize);
+	offset += stagesSize;
+
+	// Restore performance controls
+	memcpy(&performanceControls_, &ptr[offset], perfControlsSize);
+	offset += perfControlsSize;
+
+	// Restore display state offset
+	memcpy(&displayState_.gateLineOffset, &ptr[offset], displayStateSize);
+	offset += displayStateSize;
+
+	// Update scale notes to current scale
+	updateScaleNotes();
+
+	return true;
 }
 
 } // namespace deluge::model::clip::sequencer::modes

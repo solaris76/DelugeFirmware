@@ -25,11 +25,16 @@ namespace deluge::model::clip::sequencer {
 
 // Control types available for sequencer columns
 enum class ControlType {
+	NONE,        // Empty/unused pad
 	CLOCK_DIV,
 	OCTAVE,
 	TRANSPOSE,
 	SCENE,
-	GENERATIVE,
+	DIRECTION,
+	RESET,       // Generative: reset to init (no value)
+	RANDOM,      // Generative: randomize (with % intensity)
+	EVOLVE,      // Generative: evolve notes (with % mutation rate)
+	MUTATE,      // Generative: mutate notes (with % mutation rate)
 	MAX
 };
 
@@ -70,10 +75,12 @@ public:
 	int32_t getClockDivider() const;  // Returns divider if CLOCK_DIV, else 1
 	int32_t getOctaveShift() const;   // Returns octave if OCTAVE, else 0
 	int32_t getTranspose() const;     // Returns semitones if TRANSPOSE, else 0
+	int32_t getDirection() const;     // Returns direction if DIRECTION, else 0 (forward)
 
 	// Scene management (only works when type == SCENE)
 	bool captureSceneToSlot(int32_t padIndex, class SequencerMode* mode, int32_t groupIndex = -1);
 	bool recallSceneFromSlot(int32_t padIndex, class SequencerMode* mode, int32_t groupIndex = -1);
+	bool clearSceneSlot(int32_t padIndex);
 	bool isSceneValid(int32_t padIndex) const;
 
 	// Generative actions (only works when type == GENERATIVE)

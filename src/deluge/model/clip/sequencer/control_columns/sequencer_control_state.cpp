@@ -37,14 +37,14 @@ SequencerControlState::SequencerControlState() {
 
 void SequencerControlState::initialize() {
 	// Default configuration:
-	// Group 0 (x14 top): Clock Divider
-	// Group 1 (x14 bottom): Octave
-	// Group 2 (x15 top): Transpose
-	// Group 3 (x15 bottom): Clock Divider
+	// Group 0 (x16 top, y7): Clock Divider
+	// Group 1 (x16 bottom, y3): Octave
+	// Group 2 (x17 top, y7): Generative
+	// Group 3 (x17 bottom, y3): Scene
 	groups_[0].initialize(ControlType::CLOCK_DIV);
 	groups_[1].initialize(ControlType::OCTAVE);
-	groups_[2].initialize(ControlType::TRANSPOSE);
-	groups_[3].initialize(ControlType::CLOCK_DIV);
+	groups_[2].initialize(ControlType::GENERATIVE);
+	groups_[3].initialize(ControlType::SCENE);
 }
 
 void SequencerControlState::render(RGB image[][kDisplayWidth + kSideBarWidth],
@@ -143,7 +143,8 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 		static_cast<int32_t>(ControlType::OCTAVE),
 		static_cast<int32_t>(ControlType::TRANSPOSE),
 		static_cast<int32_t>(ControlType::SCENE),
-		static_cast<int32_t>(ControlType::GENERATIVE)
+		static_cast<int32_t>(ControlType::GENERATIVE),
+		static_cast<int32_t>(ControlType::DIRECTION)
 	};
 	constexpr int32_t numTypes = sizeof(availableTypes) / sizeof(availableTypes[0]);
 
@@ -220,6 +221,9 @@ CombinedEffects SequencerControlState::getCombinedEffects() const {
 				break;
 			case ControlType::SCENE:
 				effects.sceneIndex = group.getActiveValue();
+				break;
+			case ControlType::DIRECTION:
+				effects.direction = group.getDirection();
 				break;
 			default:
 				break;

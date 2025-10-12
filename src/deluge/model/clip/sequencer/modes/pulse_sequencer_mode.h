@@ -69,6 +69,16 @@ public:
 	// Override playback to generate pulsed notes
 	int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) override;
 
+	// Scene management
+	size_t captureScene(void* buffer, size_t maxSize) override;
+	bool recallScene(const void* buffer, size_t size) override;
+
+	// Generative mutations (wired to existing functionality)
+	void resetToInit() override;
+	void randomizeAll() override;
+	void evolveNotesLow() override;
+	void evolveNotesHigh() override;
+
 	// Gate types enum
 	enum class GateType : int32_t { OFF = 0, SINGLE = 1, MULTIPLE = 2, HELD = 3 };
 

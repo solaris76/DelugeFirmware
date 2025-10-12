@@ -150,10 +150,20 @@ int32_t StepSequencerMode::calculateNoteCode(const Step& step, const CombinedEff
 	if (!song) return 60;
 
 	int32_t rootNote = song->key.rootNote;
-	int32_t scaleDegree = scaleNotes_[step.noteIndex]; // 0-11
 
-	// Calculate: rootNote + scaleDegree + C3 offset (48 for MIDI note C3) + step octave + control octave + transpose
-	int32_t noteCode = rootNote + scaleDegree + 48 + (step.octave * 12) + (effects.octaveShift * 12) + effects.transpose;
+	// Apply transpose to note index (keeps us in scale!)
+	int32_t noteIndexInScale = step.noteIndex + effects.transpose;
+
+	// Wrap to scale (same as Pulse Sequencer)
+	while (noteIndexInScale < 0) noteIndexInScale += numScaleNotes_;
+	while (noteIndexInScale >= numScaleNotes_) noteIndexInScale -= numScaleNotes_;
+
+	// Get scale degree from transposed index
+	int32_t scaleDegree = scaleNotes_[noteIndexInScale]; // 0-11
+
+	// Calculate: rootNote + scaleDegree + C3 offset (48 for MIDI note C3) + step octave + control octave
+	// (transpose already applied to noteIndex above)
+	int32_t noteCode = rootNote + scaleDegree + 48 + (step.octave * 12) + (effects.octaveShift * 12);
 
 	// Clamp to MIDI range
 	if (noteCode < 0) noteCode = 0;
@@ -420,17 +430,17 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 				activeNoteCode_ = noteCode;
 			}
 
-			currentStep_ = (currentStep_ + 1) % kNumSteps;
+			advanceStep(effects.direction);
 			break;
 		}
 		else if (step.gateType == GateType::OFF) {
 			// Silent step - count duration but don't play
-			currentStep_ = (currentStep_ + 1) % kNumSteps;
+			advanceStep(effects.direction);
 			break;
 		}
 		else { // SKIP
 			// Skip this step immediately, check next
-			currentStep_ = (currentStep_ + 1) % kNumSteps;
+			advanceStep(effects.direction);
 			stepsChecked++;
 		}
 	}
@@ -497,6 +507,39 @@ bool StepSequencerMode::recallScene(const void* buffer, size_t size) {
 	}
 
 	return true;
+}
+
+void StepSequencerMode::advanceStep(int32_t direction) {
+	switch (direction) {
+	case 0: // Forward
+		currentStep_ = (currentStep_ + 1) % kNumSteps;
+		break;
+
+	case 1: // Backward
+		currentStep_ = (currentStep_ - 1);
+		if (currentStep_ < 0) currentStep_ = kNumSteps - 1;
+		break;
+
+	case 2: // Ping Pong
+		currentStep_ += pingPongDirection_;
+		if (currentStep_ >= kNumSteps) {
+			currentStep_ = kNumSteps - 2;
+			pingPongDirection_ = -1;
+		}
+		else if (currentStep_ < 0) {
+			currentStep_ = 1;
+			pingPongDirection_ = 1;
+		}
+		break;
+
+	case 3: // Random
+		currentStep_ = rand() % kNumSteps;
+		break;
+
+	default: // Fallback to forward
+		currentStep_ = (currentStep_ + 1) % kNumSteps;
+		break;
+	}
 }
 
 void StepSequencerMode::resetToInit() {

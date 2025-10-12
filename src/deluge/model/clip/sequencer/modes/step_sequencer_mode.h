@@ -111,6 +111,7 @@ private:
 	int32_t ticksPerSixteenthNote_ = 0;
 	int32_t currentStep_ = 0; // 0-15, which step we're on
 	int32_t lastAbsolutePlaybackPos_ = 0;
+	int32_t pingPongDirection_ = 1; // 1=forward, -1=backward (for ping pong mode)
 
 	// Currently playing note (for note-off)
 	int32_t activeNoteCode_ = -1;
@@ -123,6 +124,7 @@ private:
 	int32_t calculateNoteCode(const Step& step, const CombinedEffects& effects) const;
 	RGB getNoteGradientColor(int32_t yPos) const; // y3=blue, y7=magenta
 	void displayOctaveValue(int32_t octave);
+	void advanceStep(int32_t direction); // Advance step based on direction mode
 };
 
 } // namespace deluge::model::clip::sequencer::modes
