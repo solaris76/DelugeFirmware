@@ -1047,3 +1047,5 @@ The result is a robust, extensible system that adds powerful new creative tools 
 - Forums and Discord for user feedback
 - Issue tracker for bug reports and feature requests
 
+
+

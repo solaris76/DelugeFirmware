@@ -21,8 +21,72 @@
 #include "model/model_stack.h"
 #include "model/song/song.h"
 #include "util/functions.h"
+#include "hid/buttons.h"
 
 namespace deluge::model::clip::sequencer {
+
+// ========== CONTROL COLUMN DEFAULT IMPLEMENTATIONS ==========
+
+bool SequencerMode::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+                                  uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
+	// Safety check
+	if (!image) {
+		return false;
+	}
+
+	// Render control columns on sidebar (x14-x15, split into 4 groups)
+	controlColumnState_.render(image);
+
+	return true; // We handled the sidebar
+}
+
+bool SequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
+	// Track control column pad holds (for encoder routing)
+	if (x == kDisplayWidth || x == (kDisplayWidth + 1)) {
+		if (velocity > 0) {
+			// Pad pressed - track it
+			heldControlColumnX_ = x;
+			heldControlColumnY_ = y;
+		}
+		else if (heldControlColumnX_ == x && heldControlColumnY_ == y) {
+			// Pad released - clear tracking
+			heldControlColumnX_ = -1;
+			heldControlColumnY_ = -1;
+		}
+	}
+
+	// Delegate to control column state
+	return controlColumnState_.handlePad(x, y, velocity);
+}
+
+bool SequencerMode::handleHorizontalEncoder(int32_t offset, bool encoderPressed) {
+	// Only handle encoder if a control column pad is held
+	if (heldControlColumnX_ < 0 || heldControlColumnY_ < 0) {
+		return false; // No control column pad held
+	}
+
+	// Delegate to control column state
+	return controlColumnState_.handleHorizontalEncoder(heldControlColumnX_, heldControlColumnY_, offset);
+}
+
+bool SequencerMode::handleVerticalEncoder(int32_t offset) {
+	// If a control column pad is held, use vertical encoder to adjust value
+	if (heldControlColumnX_ >= 0 && heldControlColumnY_ >= 0) {
+		return controlColumnState_.handleVerticalEncoder(heldControlColumnX_, heldControlColumnY_, offset);
+	}
+
+	// Otherwise, allow default behavior (scrolling, etc.)
+	return false;
+}
+
+bool SequencerMode::handleVerticalEncoderButton() {
+	// If a control column pad is held, toggle momentary/toggle mode
+	if (heldControlColumnX_ >= 0 && heldControlColumnY_ >= 0) {
+		return controlColumnState_.handleVerticalEncoderButton(heldControlColumnX_, heldControlColumnY_);
+	}
+
+	return false;
+}
 
 // ========== HELPER IMPLEMENTATIONS ==========
 

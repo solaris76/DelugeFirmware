@@ -731,6 +731,19 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 	// Horizontal encoder button
 	else if (b == X_ENC) {
 
+		// Check if sequencer mode wants to handle encoder button (for toggle/momentary mode switch)
+		if (on) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip && clip->hasSequencerMode()) {
+				auto* sequencerMode = clip->getSequencerMode();
+				// Call with offset=0 and encoderPressed=true to trigger mode toggle
+				if (sequencerMode && sequencerMode->handleHorizontalEncoder(0, true)) {
+					uiNeedsRendering(this, 0xFFFFFFFF, 0);
+					return ActionResult::DEALT_WITH;
+				}
+			}
+		}
+
 		// If user wants to "multiple" Clip contents
 		if (on && Buttons::isShiftButtonPressed() && !isUIModeActiveExclusively(UI_MODE_NOTES_PRESSED)) {
 			if (isNoUIModeActive()) {
@@ -780,6 +793,18 @@ doCancelPopup:
 
 	// Vertical encoder button
 	else if (b == Y_ENC) {
+
+		// Check if sequencer mode wants to handle vertical encoder button (for toggle/momentary mode switch)
+		if (on) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip && clip->hasSequencerMode()) {
+				auto* sequencerMode = clip->getSequencerMode();
+				if (sequencerMode && sequencerMode->handleVerticalEncoderButton()) {
+					uiNeedsRendering(this, 0xFFFFFFFF, 0);
+					return ActionResult::DEALT_WITH;
+				}
+			}
+		}
 
 		// If holding notes down...
 		if (isUIModeActiveExclusively(UI_MODE_NOTES_PRESSED)) {
@@ -6263,6 +6288,18 @@ static const uint32_t noteNudgeUIModes[] = {UI_MODE_NOTES_PRESSED, UI_MODE_HOLDI
 ActionResult InstrumentClipView::horizontalEncoderAction(int32_t offset) {
 	if (sdRoutineLock) {
 		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE; // Just be safe - maybe not necessary
+	}
+
+	// Check if sequencer mode wants to handle encoder (for control column value adjustment)
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		bool encoderPressed = isUIModeActive(UI_MODE_HOLDING_HORIZONTAL_ENCODER_BUTTON);
+		if (sequencerMode && sequencerMode->handleHorizontalEncoder(offset, encoderPressed)) {
+			// Sequencer mode handled the encoder (control column adjustment)
+			uiNeedsRendering(this, 0xFFFFFFFF, 0);
+			return ActionResult::DEALT_WITH;
+		}
 	}
 
 	// If holding down notes

@@ -20,6 +20,10 @@
 #include "definitions_cxx.hpp"
 #include "gui/l10n/l10n.h"
 #include "hid/led/pad_leds.h"
+#include "model/clip/sequencer/control_columns/sequencer_control_state.h"
+
+class Serializer;
+class Deserializer;
 
 namespace deluge::model::clip::sequencer {
 
@@ -45,22 +49,38 @@ public:
 	// Returns true if the mode handled rendering, false to use default linear rendering
 	virtual bool renderPads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	                       int32_t xScroll, uint32_t xZoom, int32_t renderWidth, int32_t imageWidth) { return false; }
-	
+
 	// Sidebar rendering - allow sequencer modes to override sidebar (x16-17)
 	// Returns true if the mode handled sidebar, false to use default mute/audition
+	// Default implementation renders control columns
 	virtual bool renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
-	                          uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) { return false; }
+	                          uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]);
 
 	// Pad input - handle user interaction with pads
 	// Returns true if the mode handled the pad press, false to use default behavior
-	// x, y: pad coordinates (0-15, 0-7)
+	// x, y: pad coordinates (0-17, 0-7) - includes sidebar
 	// velocity: press velocity (0 = release, 1-127 = press)
-	virtual bool handlePadPress(int32_t x, int32_t y, int32_t velocity) { return false; }
+	// Default implementation handles control column pads (x16-17)
+	virtual bool handlePadPress(int32_t x, int32_t y, int32_t velocity);
 
-	// Vertical encoder - handle vertical scrolling
+	// Horizontal encoder - handle horizontal scrolling/adjustment
+	// Returns true if the mode handled the encoder, false to use default behavior
+	// Default implementation routes to control column state
+	virtual bool handleHorizontalEncoder(int32_t offset, bool encoderPressed);
+
+	// Track which control column pad is currently held
+	int8_t heldControlColumnX_ = -1; // -1 = none, 16-17 = x position
+	int8_t heldControlColumnY_ = -1; // -1 = none, 0-7 = y position
+
+	// Vertical encoder - handle vertical scrolling or control column value adjustment
 	// Returns true if the mode handled the encoder, false to use default behavior
 	// offset: encoder rotation amount (positive = clockwise, negative = counter-clockwise)
-	virtual bool handleVerticalEncoder(int32_t offset) { return false; }
+	// Default implementation routes to control columns if pad is held, otherwise allows scrolling
+	virtual bool handleVerticalEncoder(int32_t offset);
+
+	// Vertical encoder button - toggle momentary/toggle mode for control columns
+	// Returns true if the mode handled the button, false to use default behavior
+	virtual bool handleVerticalEncoderButton();
 
 	// Playback - called during clip playback to generate notes
 	// Return value: ticks until this mode needs to be called again
@@ -125,9 +145,30 @@ protected:
 	virtual bool supportsCV() { return true; }
 	virtual bool supportsAudio() { return false; } // Audio modes need special handling
 
+	// ========== CONTROL COLUMNS ==========
+
+	/**
+	 * Get control column state for this sequencer mode.
+	 * Control columns provide 4 groups of 4 pads each (x16-x17 sidebar, split top/bottom)
+	 * for configurable parameters (clock div, octave, transpose, scenes).
+	 */
+	SequencerControlState& getControlColumnState() { return controlColumnState_; }
+	const SequencerControlState& getControlColumnState() const { return controlColumnState_; }
+
+	/**
+	 * Get the combined active control values from all groups.
+	 * Use this during playback to apply clock div, transpose, octave, etc.
+	 */
+	CombinedEffects getCombinedEffects() const {
+		return controlColumnState_.getCombinedEffects();
+	}
+
 protected:
 	// Protected constructor - only concrete implementations can be instantiated
 	SequencerMode() = default;
+
+	// Control column state (per-mode instance)
+	SequencerControlState controlColumnState_;
 };
 
 } // namespace deluge::model::clip::sequencer
