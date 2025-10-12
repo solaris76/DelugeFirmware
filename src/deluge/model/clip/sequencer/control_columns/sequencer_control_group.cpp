@@ -47,7 +47,7 @@ namespace {
 		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 	};
 
-	constexpr int32_t kSceneValues[] = {0, 1, 2, 3};
+	constexpr int32_t kSceneValues[] = {0, 1, 2, 3, 4, 5, 6, 7};
 
 	constexpr int32_t kDirectionValues[] = {0, 1, 2, 3}; // Forward, Backward, Ping Pong, Random
 

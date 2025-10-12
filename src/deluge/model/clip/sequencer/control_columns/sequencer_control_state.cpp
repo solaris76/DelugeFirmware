@@ -106,11 +106,11 @@ void SequencerControlState::initialize() {
 	pads_[6].valueIndex = 4;  // /4
 	pads_[7].valueIndex = 16; // /16
 
-	// Scenes: 0-3
-	pads_[8].valueIndex = 0;
-	pads_[9].valueIndex = 1;
-	pads_[10].valueIndex = 2;
-	pads_[11].valueIndex = 3;
+	// Scenes: 1-4 (out of 8 available scenes 1-8)
+	pads_[8].valueIndex = 0;  // Scene 1
+	pads_[9].valueIndex = 1;  // Scene 2
+	pads_[10].valueIndex = 2; // Scene 3
+	pads_[11].valueIndex = 3; // Scene 4
 
 	// Mutations: default to 50%
 	pads_[12].valueIndex = 4; // 50% for evolve
@@ -497,10 +497,55 @@ bool SequencerControlState::handleVerticalEncoder(int32_t heldX, int32_t heldY, 
 		return false;
 	}
 
-	// Cycle through values with wrapping
-	pad.valueIndex = (pad.valueIndex + offset) % numValues;
-	if (pad.valueIndex < 0) {
-		pad.valueIndex += numValues;
+	// Special handling for SCENE type: skip scene numbers already assigned to other pads
+	if (pad.type == ControlType::SCENE) {
+		int32_t startIndex = pad.valueIndex;
+		int32_t direction = (offset > 0) ? 1 : -1;
+		int32_t attempts = 0;
+		
+		// Keep trying until we find an available scene number
+		while (attempts < numValues) {
+			// Move to next/prev value
+			pad.valueIndex = (pad.valueIndex + direction + numValues) % numValues;
+			
+			// Get the actual scene number
+			int32_t sceneNum = helpers::getValue(pad.type, pad.valueIndex);
+			
+			// Check if this scene number is already assigned to another pad
+			bool isAvailable = true;
+			for (size_t i = 0; i < pads_.size(); ++i) {
+				if (i != static_cast<size_t>(padIndex) && pads_[i].type == ControlType::SCENE) {
+					int32_t otherSceneNum = helpers::getValue(pads_[i].type, pads_[i].valueIndex);
+					if (otherSceneNum == sceneNum) {
+						isAvailable = false;
+						break;
+					}
+				}
+			}
+			
+			// If available, we're done
+			if (isAvailable) {
+				break;
+			}
+			
+			attempts++;
+		}
+		
+		// If all scene numbers are taken, stay at current
+		if (attempts >= numValues) {
+			pad.valueIndex = startIndex;
+			if (display) {
+				display->displayPopup("ALL SCENES USED");
+			}
+			return true;
+		}
+	}
+	else {
+		// Normal cycling for non-SCENE types
+		pad.valueIndex = (pad.valueIndex + offset) % numValues;
+		if (pad.valueIndex < 0) {
+			pad.valueIndex += numValues;
+		}
 	}
 
 	// Show current value
