@@ -105,6 +105,22 @@ public:
 	// Returns true if scene was successfully recalled
 	virtual bool recallScene(const void* buffer, size_t size) { return false; }
 
+	// Access to control columns (for scene capture/recall)
+	SequencerControlState& getControlColumnState() { return controlColumnState_; }
+	const SequencerControlState& getControlColumnState() const { return controlColumnState_; }
+
+	// ========== GENERATIVE MUTATIONS ==========
+
+	// Generative mutation actions - implement these in derived classes to support generative control group
+	// Reset to initial state
+	virtual void resetToInit() {}
+	// Randomize all parameters
+	virtual void randomizeAll() {}
+	// Evolve notes with low mutation rate (~20%)
+	virtual void evolveNotesLow() {}
+	// Evolve notes with high mutation rate (~50%)
+	virtual void evolveNotesHigh() {}
+
 protected:
 	// ========== MODE-SPECIFIC ENCODER HANDLING ==========
 
@@ -166,14 +182,6 @@ protected:
 	virtual bool supportsAudio() { return false; } // Audio modes need special handling
 
 	// ========== CONTROL COLUMNS ==========
-
-	/**
-	 * Get control column state for this sequencer mode.
-	 * Control columns provide 4 groups of 4 pads each (x16-x17 sidebar, split top/bottom)
-	 * for configurable parameters (clock div, octave, transpose, scenes).
-	 */
-	SequencerControlState& getControlColumnState() { return controlColumnState_; }
-	const SequencerControlState& getControlColumnState() const { return controlColumnState_; }
 
 	/**
 	 * Get the combined active control values from all groups.

@@ -106,7 +106,7 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 		return false;
 	}
 
-	bool handled = groups_[groupIndex].handlePad(yLocal, velocity, mode);
+	bool handled = groups_[groupIndex].handlePad(yLocal, velocity, mode, groupIndex);
 	if (handled) {
 		refreshSidebar();
 	}
@@ -142,7 +142,8 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 		static_cast<int32_t>(ControlType::CLOCK_DIV),
 		static_cast<int32_t>(ControlType::OCTAVE),
 		static_cast<int32_t>(ControlType::TRANSPOSE),
-		static_cast<int32_t>(ControlType::SCENE)
+		static_cast<int32_t>(ControlType::SCENE),
+		static_cast<int32_t>(ControlType::GENERATIVE)
 	};
 	constexpr int32_t numTypes = sizeof(availableTypes) / sizeof(availableTypes[0]);
 
@@ -235,6 +236,99 @@ SequencerControlGroup& SequencerControlState::getGroup(int32_t groupIndex) {
 
 const SequencerControlGroup& SequencerControlState::getGroup(int32_t groupIndex) const {
 	return groups_[groupIndex];
+}
+
+size_t SequencerControlState::captureState(void* buffer, size_t maxSize, int32_t excludeGroupIndex) const {
+	uint8_t* ptr = static_cast<uint8_t*>(buffer);
+	size_t offset = 0;
+
+	// Store which groups we're saving (as a bitmask)
+	uint8_t groupMask = 0;
+	for (size_t i = 0; i < groups_.size(); ++i) {
+		if (static_cast<int32_t>(i) != excludeGroupIndex) {
+			groupMask |= (1 << i);
+		}
+	}
+	ptr[offset++] = groupMask;
+
+	// For each group (except the excluded one)
+	for (size_t i = 0; i < groups_.size(); ++i) {
+		if (static_cast<int32_t>(i) == excludeGroupIndex) {
+			continue; // Skip scene group itself
+		}
+
+		const auto& group = groups_[i];
+
+		// Check buffer space (1 byte type + 16 bytes valueIndex + 4 bytes mode = 21 bytes per group)
+		if (offset + 21 > maxSize) {
+			return 0; // Not enough space
+		}
+
+		// Save control type (1 byte)
+		ptr[offset++] = static_cast<uint8_t>(group.getType());
+
+		// Save each pad's valueIndex (4 * 4 bytes = 16 bytes)
+		for (int32_t padIdx = 0; padIdx < 4; ++padIdx) {
+			int32_t valueIndex = group.getPadValueIndex(padIdx);
+			memcpy(&ptr[offset], &valueIndex, sizeof(int32_t));
+			offset += sizeof(int32_t);
+		}
+
+		// Save each pad's mode (4 * 1 byte = 4 bytes)
+		for (int32_t padIdx = 0; padIdx < 4; ++padIdx) {
+			ptr[offset++] = static_cast<uint8_t>(group.getPadMode(padIdx));
+		}
+	}
+
+	return offset;
+}
+
+bool SequencerControlState::restoreState(const void* buffer, size_t size) {
+	const uint8_t* ptr = static_cast<const uint8_t*>(buffer);
+	size_t offset = 0;
+
+	// Check minimum size
+	if (size < 1) {
+		return false;
+	}
+
+	// Read which groups were saved (bitmask)
+	uint8_t groupMask = ptr[offset++];
+
+	// For each group that was saved
+	for (size_t i = 0; i < groups_.size(); ++i) {
+		// Check if this group was saved
+		if ((groupMask & (1 << i)) == 0) {
+			continue; // This group was not saved (it was the scene group)
+		}
+
+		auto& group = groups_[i];
+
+		// Check if we have enough data
+		if (offset + 21 > size) {
+			return false; // Not enough data
+		}
+
+		// Restore control type (1 byte)
+		ControlType type = static_cast<ControlType>(ptr[offset++]);
+		group.setType(type);
+
+		// Restore each pad's valueIndex (4 * 4 bytes = 16 bytes)
+		for (int32_t padIdx = 0; padIdx < 4; ++padIdx) {
+			int32_t valueIndex;
+			memcpy(&valueIndex, &ptr[offset], sizeof(int32_t));
+			offset += sizeof(int32_t);
+			group.setPadValueIndex(padIdx, valueIndex);
+		}
+
+		// Restore each pad's mode (4 * 1 byte = 4 bytes)
+		for (int32_t padIdx = 0; padIdx < 4; ++padIdx) {
+			PadMode mode = static_cast<PadMode>(ptr[offset++]);
+			group.setPadMode(padIdx, mode);
+		}
+	}
+
+	return true;
 }
 
 } // namespace deluge::model::clip::sequencer

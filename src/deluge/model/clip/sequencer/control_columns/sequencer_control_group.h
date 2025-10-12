@@ -29,6 +29,7 @@ enum class ControlType {
 	OCTAVE,
 	TRANSPOSE,
 	SCENE,
+	GENERATIVE,
 	MAX
 };
 
@@ -50,7 +51,7 @@ public:
 	void render(RGB image[][kDisplayWidth + kSideBarWidth], int32_t x, int32_t yStart);
 
 	// Input handling
-	bool handlePad(int32_t yLocal, int32_t velocity, class SequencerMode* mode = nullptr); // yLocal = 0-3 within group
+	bool handlePad(int32_t yLocal, int32_t velocity, class SequencerMode* mode = nullptr, int32_t groupIndex = -1); // yLocal = 0-3 within group
 	bool handleVerticalEncoder(int32_t yLocal, int32_t offset); // Adjust value for pad
 	bool handleVerticalEncoderButton(int32_t yLocal); // Toggle momentary/toggle mode
 
@@ -71,9 +72,19 @@ public:
 	int32_t getTranspose() const;     // Returns semitones if TRANSPOSE, else 0
 
 	// Scene management (only works when type == SCENE)
-	bool captureSceneToSlot(int32_t padIndex, class SequencerMode* mode);
-	bool recallSceneFromSlot(int32_t padIndex, class SequencerMode* mode);
+	bool captureSceneToSlot(int32_t padIndex, class SequencerMode* mode, int32_t groupIndex = -1);
+	bool recallSceneFromSlot(int32_t padIndex, class SequencerMode* mode, int32_t groupIndex = -1);
 	bool isSceneValid(int32_t padIndex) const;
+
+	// Generative actions (only works when type == GENERATIVE)
+	// Each pad triggers a different mutation action on the sequencer mode
+	bool triggerGenerativeAction(int32_t padIndex, class SequencerMode* mode);
+
+	// Pad state access (for scene capture/restore)
+	int32_t getPadValueIndex(int32_t padIndex) const { return pads_[padIndex].valueIndex; }
+	void setPadValueIndex(int32_t padIndex, int32_t value) { pads_[padIndex].valueIndex = value; }
+	PadMode getPadMode(int32_t padIndex) const { return pads_[padIndex].mode; }
+	void setPadMode(int32_t padIndex, PadMode mode) { pads_[padIndex].mode = mode; }
 
 private:
 	static constexpr size_t kMaxSceneDataSize = 512; // Max bytes per scene

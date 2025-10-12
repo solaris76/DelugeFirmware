@@ -56,6 +56,10 @@ public:
 	SequencerControlGroup& getGroup(int32_t groupIndex); // 0-3
 	const SequencerControlGroup& getGroup(int32_t groupIndex) const;
 
+	// Scene capture/restore (excludes the scene group itself)
+	size_t captureState(void* buffer, size_t maxSize, int32_t excludeGroupIndex) const;
+	bool restoreState(const void* buffer, size_t size);
+
 private:
 	// 4 control groups:
 	// [0] = x16 top (y4-y7)

@@ -74,6 +74,12 @@ public:
 	size_t captureScene(void* buffer, size_t maxSize) override;
 	bool recallScene(const void* buffer, size_t size) override;
 
+	// Generative mutations
+	void resetToInit() override;
+	void randomizeAll() override;
+	void evolveNotesLow() override;
+	void evolveNotesHigh() override;
+
 private:
 	static constexpr int32_t kNumSteps = 16; // x0-x15
 	static constexpr int32_t kMaxScaleNotes = 32;
