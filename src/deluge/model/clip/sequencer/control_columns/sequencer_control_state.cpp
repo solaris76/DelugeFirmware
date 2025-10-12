@@ -16,12 +16,25 @@
  */
 
 #include "model/clip/sequencer/control_columns/sequencer_control_state.h"
+#include "model/clip/sequencer/sequencer_mode.h"
 #include "hid/display/display.h"
 #include "hid/led/pad_leds.h"
+#include "hid/buttons.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
+#include <cstring>
 
 namespace deluge::model::clip::sequencer {
+
+// Forward declare helper functions from sequencer_control_group.cpp
+namespace helpers {
+	const char* getTypeName(ControlType type);
+	RGB getColorForType(ControlType type);
+	const int32_t* getAvailableValues(ControlType type);
+	int32_t getNumAvailableValues(ControlType type);
+	int32_t getValue(ControlType type, int32_t valueIndex);
+	const char* formatValue(ControlType type, int32_t value);
+}
 
 namespace {
 	// Helper: Request UI refresh for sidebar
@@ -36,122 +49,389 @@ SequencerControlState::SequencerControlState() {
 }
 
 void SequencerControlState::initialize() {
-	// Default configuration:
-	// Group 0 (x16 top, y7): Clock Divider
-	// Group 1 (x16 bottom, y3): Octave
-	// Group 2 (x17 top, y7): Generative
-	// Group 3 (x17 bottom, y3): Scene
-	groups_[0].initialize(ControlType::CLOCK_DIV);
-	groups_[1].initialize(ControlType::OCTAVE);
-	groups_[2].initialize(ControlType::GENERATIVE);
-	groups_[3].initialize(ControlType::SCENE);
+	// Default configuration for 16 pads:
+	// x16 (pads 0-7):
+	//   y0: OCTAVE
+	//   y1: OCTAVE
+	//   y2: OCTAVE
+	//   y3: OCTAVE
+	//   y4: CLOCK
+	//   y5: CLOCK
+	//   y6: CLOCK
+	//   y7: CLOCK
+	// x17 (pads 8-15):
+	//   y0: SCENE
+	//   y1: SCENE
+	//   y2: SCENE
+	//   y3: SCENE
+	//   y4: EVOLVE
+	//   y5: MUTATE
+	//   y6: RANDOM
+	//   y7: RESET
+
+	// x16 bottom: Octave pads
+	pads_[0].type = ControlType::OCTAVE;
+	pads_[1].type = ControlType::OCTAVE;
+	pads_[2].type = ControlType::OCTAVE;
+	pads_[3].type = ControlType::OCTAVE;
+
+	// x16 top: Clock pads
+	pads_[4].type = ControlType::CLOCK_DIV;
+	pads_[5].type = ControlType::CLOCK_DIV;
+	pads_[6].type = ControlType::CLOCK_DIV;
+	pads_[7].type = ControlType::CLOCK_DIV;
+
+	// x17 bottom: Scene pads
+	pads_[8].type = ControlType::SCENE;
+	pads_[9].type = ControlType::SCENE;
+	pads_[10].type = ControlType::SCENE;
+	pads_[11].type = ControlType::SCENE;
+
+	// x17 top: Generative pads
+	pads_[12].type = ControlType::EVOLVE;
+	pads_[13].type = ControlType::MUTATE;
+	pads_[14].type = ControlType::RANDOM;
+	pads_[15].type = ControlType::RESET;
+
+	// Set useful default values
+	// Octaves: -1, 0, +1, +2
+	pads_[0].valueIndex = 4;  // 0
+	pads_[1].valueIndex = 3;  // -1
+	pads_[2].valueIndex = 5;  // +1
+	pads_[3].valueIndex = 6;  // +2
+
+	// Clock: /1, /2, /4, /16
+	pads_[4].valueIndex = 1;  // /1
+	pads_[5].valueIndex = 2;  // /2
+	pads_[6].valueIndex = 4;  // /4
+	pads_[7].valueIndex = 16; // /16
+
+	// Scenes: 0-3
+	pads_[8].valueIndex = 0;
+	pads_[9].valueIndex = 1;
+	pads_[10].valueIndex = 2;
+	pads_[11].valueIndex = 3;
+
+	// Mutations: default to 50%
+	pads_[12].valueIndex = 4; // 50% for evolve
+	pads_[13].valueIndex = 4; // 50% for mutate
+	pads_[14].valueIndex = 4; // 50% for random
+	pads_[15].valueIndex = 0; // Reset has no value
+}
+
+int32_t SequencerControlState::getPadIndex(int32_t x, int32_t y) const {
+	if (x == kDisplayWidth) {
+		// x16 column
+		if (y >= 0 && y < 8) {
+			return y; // pads 0-7
+		}
+	}
+	else if (x == (kDisplayWidth + 1)) {
+		// x17 column
+		if (y >= 0 && y < 8) {
+			return 8 + y; // pads 8-15
+		}
+	}
+	return -1; // Invalid
 }
 
 void SequencerControlState::render(RGB image[][kDisplayWidth + kSideBarWidth],
                                     uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
-	// x16 column (kDisplayWidth = 16)
-	groups_[0].render(image, kDisplayWidth, 4);     // Top group (y4-y7)
-	groups_[1].render(image, kDisplayWidth, 0);     // Bottom group (y0-y3)
+	// Render x16 column (pads 0-7)
+	for (int32_t y = 0; y < 8; y++) {
+		ControlPad& pad = pads_[y];
+		RGB color = helpers::getColorForType(pad.type);
 
-	// x17 column
-	groups_[2].render(image, kDisplayWidth + 1, 4); // Top group (y4-y7)
-	groups_[3].render(image, kDisplayWidth + 1, 0); // Bottom group (y0-y3)
+		// Adjust brightness
+		bool isBright = pad.active || pad.held;
+		bool isEmpty = (pad.type == ControlType::SCENE && !pad.sceneValid) || (pad.type == ControlType::NONE);
 
-	// Set occupancy mask for all control column pads
-	if (occupancyMask) {
-		for (int32_t y = 0; y < kDisplayHeight; y++) {
-			occupancyMask[y][kDisplayWidth] = 64;     // x16
-			occupancyMask[y][kDisplayWidth + 1] = 64; // x17
+		if (isBright) {
+			image[y][kDisplayWidth] = color;
 		}
-	}
-}
-
-bool SequencerControlState::mapToGroup(int32_t x, int32_t y, int32_t& groupIndex, int32_t& yLocal) const {
-	// Check if this is a control column pad (x16 or x17)
-	if (x != kDisplayWidth && x != (kDisplayWidth + 1)) {
-		return false;
-	}
-
-	// Determine which group based on column and y position
-	bool isX16 = (x == kDisplayWidth);
-	bool isTopHalf = (y >= 4);
-
-	if (isX16) {
-		if (isTopHalf) {
-			groupIndex = 0; // x16 top
-			yLocal = y - 4; // Map y4-y7 to 0-3
+		else if (isEmpty) {
+			// Very dim for empty scenes or unused pads
+			image[y][kDisplayWidth] = RGB{
+				static_cast<uint8_t>(color.r / 16),
+				static_cast<uint8_t>(color.g / 16),
+				static_cast<uint8_t>(color.b / 16)
+			};
 		}
 		else {
-			groupIndex = 1; // x16 bottom
-			yLocal = y;     // Map y0-y3 to 0-3
+			// Normal dim
+			image[y][kDisplayWidth] = RGB{
+				static_cast<uint8_t>(color.r / 8),
+				static_cast<uint8_t>(color.g / 8),
+				static_cast<uint8_t>(color.b / 8)
+			};
 		}
-	}
-	else { // x17
-		if (isTopHalf) {
-			groupIndex = 2; // x17 top
-			yLocal = y - 4;
-		}
-		else {
-			groupIndex = 3; // x17 bottom
-			yLocal = y;
+
+		if (occupancyMask) {
+			occupancyMask[y][kDisplayWidth] = 64;
 		}
 	}
 
-	return true;
+	// Render x17 column (pads 8-15)
+	for (int32_t y = 0; y < 8; y++) {
+		ControlPad& pad = pads_[8 + y];
+		RGB color = helpers::getColorForType(pad.type);
+
+		bool isBright = pad.active || pad.held;
+		bool isEmpty = (pad.type == ControlType::SCENE && !pad.sceneValid) || (pad.type == ControlType::NONE);
+
+		if (isBright) {
+			image[y][kDisplayWidth + 1] = color;
+		}
+		else if (isEmpty) {
+			image[y][kDisplayWidth + 1] = RGB{
+				static_cast<uint8_t>(color.r / 16),
+				static_cast<uint8_t>(color.g / 16),
+				static_cast<uint8_t>(color.b / 16)
+			};
+		}
+		else {
+			image[y][kDisplayWidth + 1] = RGB{
+				static_cast<uint8_t>(color.r / 8),
+				static_cast<uint8_t>(color.g / 8),
+				static_cast<uint8_t>(color.b / 8)
+			};
+		}
+
+		if (occupancyMask) {
+			occupancyMask[y][kDisplayWidth + 1] = 64;
+		}
+	}
 }
 
 bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, SequencerMode* mode) {
-	int32_t groupIndex, yLocal;
-	if (!mapToGroup(x, y, groupIndex, yLocal)) {
+	int32_t padIndex = getPadIndex(x, y);
+	if (padIndex < 0) {
 		return false;
 	}
 
-	bool handled = groups_[groupIndex].handlePad(yLocal, velocity, mode, groupIndex);
-	if (handled) {
-		refreshSidebar();
+	ControlPad& pad = pads_[padIndex];
+	bool pressed = (velocity > 0);
+
+	// SCENE TYPE: Special handling
+	if (pad.type == ControlType::SCENE && mode) {
+		if (pressed) {
+			// SAVE button = capture scene
+			if (Buttons::isButtonPressed(deluge::hid::button::SAVE)) {
+				// Capture scene
+				size_t modeDataSize = mode->captureScene(&pad.sceneData[4], ControlPad::kMaxSceneDataSize - 4);
+				if (modeDataSize > 0) {
+					// Store mode data size
+					memcpy(&pad.sceneData[0], &modeDataSize, sizeof(uint32_t));
+
+					// Capture control state (excluding scene pads)
+					size_t controlStateSize = captureState(&pad.sceneData[4 + modeDataSize + 4],
+					                                        ControlPad::kMaxSceneDataSize - 4 - modeDataSize - 4);
+					memcpy(&pad.sceneData[4 + modeDataSize], &controlStateSize, sizeof(uint32_t));
+
+					pad.sceneSize = 8 + modeDataSize + controlStateSize;
+					pad.sceneValid = true;
+
+					if (display) {
+						display->displayPopup("CAPTURED");
+					}
+				}
+				pad.held = true;
+				refreshSidebar();
+				return true;
+			}
+
+			// SHIFT button = clear scene
+			if (Buttons::isShiftButtonPressed()) {
+				pad.sceneValid = false;
+				pad.sceneSize = 0;
+				if (display) {
+					display->displayPopup("CLEARED");
+				}
+				pad.held = true;
+				refreshSidebar();
+				return true;
+			}
+
+			// Otherwise = recall scene
+			if (pad.sceneValid) {
+				size_t offset = 0;
+
+				// Restore mode data
+				uint32_t modeDataSize;
+				memcpy(&modeDataSize, &pad.sceneData[offset], sizeof(uint32_t));
+				offset += 4;
+
+				bool success = mode->recallScene(&pad.sceneData[offset], modeDataSize);
+				if (success) {
+					offset += modeDataSize;
+
+					// Restore control state
+					if (offset < pad.sceneSize) {
+						uint32_t controlStateSize;
+						memcpy(&controlStateSize, &pad.sceneData[offset], sizeof(uint32_t));
+						offset += 4;
+
+						if (controlStateSize > 0 && offset + controlStateSize <= pad.sceneSize) {
+							restoreState(&pad.sceneData[offset], controlStateSize);
+						}
+					}
+
+					pad.active = true;
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+
+					if (display) {
+						int32_t val = helpers::getValue(pad.type, pad.valueIndex);
+						display->displayPopup(helpers::formatValue(pad.type, val));
+					}
+				}
+			}
+			else {
+				if (display) {
+					display->displayPopup("EMPTY");
+				}
+			}
+
+			pad.held = true;
+			refreshSidebar();
+			return true;
+		}
+		else {
+			// Release
+			pad.held = false;
+			refreshSidebar();
+			return true;
+		}
 	}
-	return handled;
+
+	// RESET TYPE: Instant trigger, no state
+	if (pad.type == ControlType::RESET && mode) {
+		if (pressed) {
+			mode->resetToInit();
+			if (display) {
+				display->displayPopup("RESET");
+			}
+			pad.held = true;
+			pad.active = true;
+			uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+			refreshSidebar();
+			return true;
+		}
+		else {
+			pad.held = false;
+			pad.active = false;
+			refreshSidebar();
+			return true;
+		}
+	}
+
+	// RANDOM/EVOLVE/MUTATE: Instant trigger with % value
+	if ((pad.type == ControlType::RANDOM || pad.type == ControlType::EVOLVE || pad.type == ControlType::MUTATE) && mode) {
+		if (pressed) {
+			int32_t mutationRate = helpers::getValue(pad.type, pad.valueIndex);
+
+			if (pad.type == ControlType::RANDOM) {
+				mode->randomizeAll();
+			}
+			else if (pad.type == ControlType::EVOLVE) {
+				mode->evolveNotesLow(); // Uses mutation rate from pad value
+			}
+			else if (pad.type == ControlType::MUTATE) {
+				mode->evolveNotesHigh(); // Uses mutation rate from pad value
+			}
+
+			if (display) {
+				static char popup[40];
+				snprintf(popup, sizeof(popup), "%s: %s", helpers::getTypeName(pad.type),
+				         helpers::formatValue(pad.type, mutationRate));
+				display->displayPopup(popup);
+			}
+
+			pad.held = true;
+			pad.active = true;
+			uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+			refreshSidebar();
+			return true;
+		}
+		else {
+			pad.held = false;
+			pad.active = false;
+			refreshSidebar();
+			return true;
+		}
+	}
+
+	// NORMAL CONTROLS: Clock, Octave, Transpose, Direction
+	if (pressed) {
+		pad.held = true;
+
+		if (pad.mode == PadMode::TOGGLE) {
+			// Toggle mode: flip state
+			pad.active = !pad.active;
+
+			if (display && pad.type != ControlType::NONE) {
+				if (pad.active) {
+					int32_t val = helpers::getValue(pad.type, pad.valueIndex);
+					static char popup[40];
+					snprintf(popup, sizeof(popup), "%s: %s", helpers::getTypeName(pad.type),
+					         helpers::formatValue(pad.type, val));
+					display->displayPopup(popup);
+				}
+				else {
+					display->displayPopup("OFF");
+				}
+			}
+		}
+		else {
+			// Momentary mode: activate on press
+			pad.active = true;
+			if (display && pad.type != ControlType::NONE) {
+				int32_t val = helpers::getValue(pad.type, pad.valueIndex);
+				static char popup[40];
+				snprintf(popup, sizeof(popup), "%s: %s", helpers::getTypeName(pad.type),
+				         helpers::formatValue(pad.type, val));
+				display->displayPopup(popup);
+			}
+		}
+	}
+	else {
+		// Release
+		if (pad.mode == PadMode::MOMENTARY) {
+			pad.active = false;
+		}
+		pad.held = false;
+	}
+
+	refreshSidebar();
+	return true;
 }
 
 bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY, int32_t offset) {
-	// Check if holding a "mode switch" pad (y7 or y3)
-	if (heldY != 7 && heldY != 3) {
+	int32_t padIndex = getPadIndex(heldX, heldY);
+	if (padIndex < 0) {
 		return false;
 	}
 
-	// Determine which group to change
-	int32_t groupIndex = -1;
-	if (heldX == kDisplayWidth) {
-		// x16 column
-		groupIndex = (heldY == 7) ? 0 : 1; // Top or bottom group
-	}
-	else if (heldX == (kDisplayWidth + 1)) {
-		// x17 column
-		groupIndex = (heldY == 7) ? 2 : 3; // Top or bottom group
-	}
-	else {
-		return false;
-	}
+	ControlPad& pad = pads_[padIndex];
 
-	// Cycle control type
-	auto& group = groups_[groupIndex];
-	int32_t currentType = static_cast<int32_t>(group.getType());
-
-	// Available types for cycling
-	constexpr int32_t availableTypes[] = {
-		static_cast<int32_t>(ControlType::CLOCK_DIV),
-		static_cast<int32_t>(ControlType::OCTAVE),
-		static_cast<int32_t>(ControlType::TRANSPOSE),
-		static_cast<int32_t>(ControlType::SCENE),
-		static_cast<int32_t>(ControlType::GENERATIVE),
-		static_cast<int32_t>(ControlType::DIRECTION)
+	// Cycle through available control types
+	constexpr ControlType availableTypes[] = {
+		ControlType::NONE,
+		ControlType::CLOCK_DIV,
+		ControlType::OCTAVE,
+		ControlType::TRANSPOSE,
+		ControlType::SCENE,
+		ControlType::DIRECTION,
+		ControlType::RESET,
+		ControlType::RANDOM,
+		ControlType::EVOLVE,
+		ControlType::MUTATE
 	};
 	constexpr int32_t numTypes = sizeof(availableTypes) / sizeof(availableTypes[0]);
 
 	// Find current type index
 	int32_t currentIndex = 0;
 	for (int32_t i = 0; i < numTypes; i++) {
-		if (availableTypes[i] == currentType) {
+		if (availableTypes[i] == pad.type) {
 			currentIndex = i;
 			break;
 		}
@@ -166,10 +446,33 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 		newIndex = 0;
 	}
 
-	group.setType(static_cast<ControlType>(availableTypes[newIndex]));
+	// Set new type
+	pad.type = availableTypes[newIndex];
+	pad.active = false; // Reset active state
+	pad.valueIndex = 0; // Reset to first value
+
+	// Set sensible default value based on type
+	switch (pad.type) {
+	case ControlType::OCTAVE:
+		pad.valueIndex = 5; // 0 octaves
+		break;
+	case ControlType::TRANSPOSE:
+		pad.valueIndex = 12; // 0 semitones
+		break;
+	case ControlType::CLOCK_DIV:
+		pad.valueIndex = 1; // /1
+		break;
+	case ControlType::RANDOM:
+	case ControlType::EVOLVE:
+	case ControlType::MUTATE:
+		pad.valueIndex = 4; // 50%
+		break;
+	default:
+		break;
+	}
 
 	if (display) {
-		display->displayPopup(group.getTypeName());
+		display->displayPopup(helpers::getTypeName(pad.type));
 	}
 
 	refreshSidebar();
@@ -177,53 +480,90 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 }
 
 bool SequencerControlState::handleVerticalEncoder(int32_t heldX, int32_t heldY, int32_t offset) {
-	int32_t groupIndex, yLocal;
-	if (!mapToGroup(heldX, heldY, groupIndex, yLocal)) {
+	int32_t padIndex = getPadIndex(heldX, heldY);
+	if (padIndex < 0) {
 		return false;
 	}
 
-	return groups_[groupIndex].handleVerticalEncoder(yLocal, offset);
+	ControlPad& pad = pads_[padIndex];
+
+	// Skip types with no values
+	if (pad.type == ControlType::NONE || pad.type == ControlType::RESET) {
+		return false;
+	}
+
+	int32_t numValues = helpers::getNumAvailableValues(pad.type);
+	if (numValues == 0) {
+		return false;
+	}
+
+	// Cycle through values with wrapping
+	pad.valueIndex = (pad.valueIndex + offset) % numValues;
+	if (pad.valueIndex < 0) {
+		pad.valueIndex += numValues;
+	}
+
+	// Show current value
+	if (display) {
+		int32_t val = helpers::getValue(pad.type, pad.valueIndex);
+		static char popup[40];
+		snprintf(popup, sizeof(popup), "%s: %s", helpers::getTypeName(pad.type),
+		         helpers::formatValue(pad.type, val));
+		display->displayPopup(popup);
+	}
+
+	refreshSidebar();
+	return true;
 }
 
 bool SequencerControlState::handleVerticalEncoderButton(int32_t heldX, int32_t heldY) {
-	int32_t groupIndex, yLocal;
-	if (!mapToGroup(heldX, heldY, groupIndex, yLocal)) {
+	int32_t padIndex = getPadIndex(heldX, heldY);
+	if (padIndex < 0) {
 		return false;
 	}
 
-	return groups_[groupIndex].handleVerticalEncoderButton(yLocal);
-}
+	ControlPad& pad = pads_[padIndex];
 
-bool SequencerControlState::isAnyPadHeld() const {
-	for (const auto& group : groups_) {
-		if (group.getActivePad() >= 0) {
-			return true;
+	// Toggle mode for pads that support it
+	if (pad.type != ControlType::NONE && pad.type != ControlType::SCENE
+	    && pad.type != ControlType::RESET && pad.type != ControlType::RANDOM
+	    && pad.type != ControlType::EVOLVE && pad.type != ControlType::MUTATE) {
+
+		pad.mode = (pad.mode == PadMode::TOGGLE) ? PadMode::MOMENTARY : PadMode::TOGGLE;
+
+		if (display) {
+			display->displayPopup(pad.mode == PadMode::TOGGLE ? "TOGGLE" : "MOMENTARY");
 		}
+
+		return true;
 	}
+
 	return false;
 }
 
 CombinedEffects SequencerControlState::getCombinedEffects() const {
 	CombinedEffects effects;
 
-	// Collect effects from all active groups
-	for (const auto& group : groups_) {
-		if (group.isActive()) {
-			switch (group.getType()) {
+	// Collect effects from all active pads
+	for (const auto& pad : pads_) {
+		if (pad.active) {
+			int32_t value = helpers::getValue(pad.type, pad.valueIndex);
+
+			switch (pad.type) {
 			case ControlType::CLOCK_DIV:
-				effects.clockDivider = group.getClockDivider();
+				effects.clockDivider = value;
 				break;
 			case ControlType::OCTAVE:
-				effects.octaveShift += group.getOctaveShift();
+				effects.octaveShift += value;
 				break;
 			case ControlType::TRANSPOSE:
-				effects.transpose += group.getTranspose();
+				effects.transpose += value;
 				break;
 			case ControlType::SCENE:
-				effects.sceneIndex = group.getActiveValue();
+				effects.sceneIndex = value;
 				break;
 			case ControlType::DIRECTION:
-				effects.direction = group.getDirection();
+				effects.direction = value;
 				break;
 			default:
 				break;
@@ -234,54 +574,39 @@ CombinedEffects SequencerControlState::getCombinedEffects() const {
 	return effects;
 }
 
-SequencerControlGroup& SequencerControlState::getGroup(int32_t groupIndex) {
-	return groups_[groupIndex];
+bool SequencerControlState::isAnyPadHeld() const {
+	for (const auto& pad : pads_) {
+		if (pad.held) {
+			return true;
+		}
+	}
+	return false;
 }
 
-const SequencerControlGroup& SequencerControlState::getGroup(int32_t groupIndex) const {
-	return groups_[groupIndex];
-}
-
-size_t SequencerControlState::captureState(void* buffer, size_t maxSize, int32_t excludeGroupIndex) const {
+size_t SequencerControlState::captureState(void* buffer, size_t maxSize) const {
 	uint8_t* ptr = static_cast<uint8_t*>(buffer);
 	size_t offset = 0;
 
-	// Store which groups we're saving (as a bitmask)
-	uint8_t groupMask = 0;
-	for (size_t i = 0; i < groups_.size(); ++i) {
-		if (static_cast<int32_t>(i) != excludeGroupIndex) {
-			groupMask |= (1 << i);
-		}
-	}
-	ptr[offset++] = groupMask;
+	// For each pad (excluding SCENE pads)
+	for (size_t i = 0; i < pads_.size(); ++i) {
+		const auto& pad = pads_[i];
 
-	// For each group (except the excluded one)
-	for (size_t i = 0; i < groups_.size(); ++i) {
-		if (static_cast<int32_t>(i) == excludeGroupIndex) {
-			continue; // Skip scene group itself
+		// Skip scene pads (they store the scene data itself)
+		if (pad.type == ControlType::SCENE) {
+			continue;
 		}
 
-		const auto& group = groups_[i];
-
-		// Check buffer space (1 byte type + 16 bytes valueIndex + 4 bytes mode = 21 bytes per group)
-		if (offset + 21 > maxSize) {
+		// Check buffer space (1 byte type + 4 bytes valueIndex + 1 byte mode + 1 byte active = 7 bytes)
+		if (offset + 7 > maxSize) {
 			return 0; // Not enough space
 		}
 
-		// Save control type (1 byte)
-		ptr[offset++] = static_cast<uint8_t>(group.getType());
-
-		// Save each pad's valueIndex (4 * 4 bytes = 16 bytes)
-		for (int32_t padIdx = 0; padIdx < 4; ++padIdx) {
-			int32_t valueIndex = group.getPadValueIndex(padIdx);
-			memcpy(&ptr[offset], &valueIndex, sizeof(int32_t));
-			offset += sizeof(int32_t);
-		}
-
-		// Save each pad's mode (4 * 1 byte = 4 bytes)
-		for (int32_t padIdx = 0; padIdx < 4; ++padIdx) {
-			ptr[offset++] = static_cast<uint8_t>(group.getPadMode(padIdx));
-		}
+		// Save pad data
+		ptr[offset++] = static_cast<uint8_t>(pad.type);
+		memcpy(&ptr[offset], &pad.valueIndex, sizeof(int32_t));
+		offset += sizeof(int32_t);
+		ptr[offset++] = static_cast<uint8_t>(pad.mode);
+		ptr[offset++] = pad.active ? 1 : 0;
 	}
 
 	return offset;
@@ -291,49 +616,29 @@ bool SequencerControlState::restoreState(const void* buffer, size_t size) {
 	const uint8_t* ptr = static_cast<const uint8_t*>(buffer);
 	size_t offset = 0;
 
-	// Check minimum size
-	if (size < 1) {
-		return false;
-	}
+	// For each pad (excluding scene pads)
+	for (size_t i = 0; i < pads_.size(); ++i) {
+		auto& pad = pads_[i];
 
-	// Read which groups were saved (bitmask)
-	uint8_t groupMask = ptr[offset++];
-
-	// For each group that was saved
-	for (size_t i = 0; i < groups_.size(); ++i) {
-		// Check if this group was saved
-		if ((groupMask & (1 << i)) == 0) {
-			continue; // This group was not saved (it was the scene group)
+		// Skip scene pads
+		if (pad.type == ControlType::SCENE) {
+			continue;
 		}
-
-		auto& group = groups_[i];
 
 		// Check if we have enough data
-		if (offset + 21 > size) {
-			return false; // Not enough data
+		if (offset + 7 > size) {
+			return false;
 		}
 
-		// Restore control type (1 byte)
-		ControlType type = static_cast<ControlType>(ptr[offset++]);
-		group.setType(type);
-
-		// Restore each pad's valueIndex (4 * 4 bytes = 16 bytes)
-		for (int32_t padIdx = 0; padIdx < 4; ++padIdx) {
-			int32_t valueIndex;
-			memcpy(&valueIndex, &ptr[offset], sizeof(int32_t));
-			offset += sizeof(int32_t);
-			group.setPadValueIndex(padIdx, valueIndex);
-		}
-
-		// Restore each pad's mode (4 * 1 byte = 4 bytes)
-		for (int32_t padIdx = 0; padIdx < 4; ++padIdx) {
-			PadMode mode = static_cast<PadMode>(ptr[offset++]);
-			group.setPadMode(padIdx, mode);
-		}
+		// Restore pad data
+		pad.type = static_cast<ControlType>(ptr[offset++]);
+		memcpy(&pad.valueIndex, &ptr[offset], sizeof(int32_t));
+		offset += sizeof(int32_t);
+		pad.mode = static_cast<PadMode>(ptr[offset++]);
+		pad.active = (ptr[offset++] != 0);
 	}
 
 	return true;
 }
 
 } // namespace deluge::model::clip::sequencer
-

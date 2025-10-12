@@ -30,7 +30,22 @@ struct CombinedEffects {
 	int32_t direction = 0;      // From DIRECTION group (0=forward, 1=backward, 2=pingpong, 3=random)
 };
 
-// Manages all 4 control groups for a sequencer mode
+// Individual pad configuration
+struct ControlPad {
+	ControlType type = ControlType::NONE;
+	int32_t valueIndex = 0;
+	PadMode mode = PadMode::TOGGLE;
+	bool active = false;
+	bool held = false;
+
+	// Scene data (only used when type == SCENE)
+	static constexpr size_t kMaxSceneDataSize = 512;
+	uint8_t sceneData[kMaxSceneDataSize];
+	size_t sceneSize = 0;
+	bool sceneValid = false;
+};
+
+// Manages all 16 individual control pads for a sequencer mode
 class SequencerControlState {
 public:
 	SequencerControlState();
@@ -41,36 +56,30 @@ public:
 	// Rendering
 	void render(RGB image[][kDisplayWidth + kSideBarWidth], uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]);
 
-	// Input handling - returns which group (if any) handled the input
+	// Input handling
 	bool handlePad(int32_t x, int32_t y, int32_t velocity, class SequencerMode* mode = nullptr);
 	bool handleHorizontalEncoder(int32_t heldX, int32_t heldY, int32_t offset);
 	bool handleVerticalEncoder(int32_t heldX, int32_t heldY, int32_t offset);
 	bool handleVerticalEncoderButton(int32_t heldX, int32_t heldY);
 
-	// Get combined effects from all active groups
+	// Get combined effects from all active pads
 	CombinedEffects getCombinedEffects() const;
 
-	// Check if any control column pad is currently held (for overriding scroll)
+	// Check if any control column pad is currently held
 	bool isAnyPadHeld() const;
 
-	// Group access
-	SequencerControlGroup& getGroup(int32_t groupIndex); // 0-3
-	const SequencerControlGroup& getGroup(int32_t groupIndex) const;
-
-	// Scene capture/restore (excludes the scene group itself)
-	size_t captureState(void* buffer, size_t maxSize, int32_t excludeGroupIndex) const;
+	// Scene capture/restore (excludes scene pads)
+	size_t captureState(void* buffer, size_t maxSize) const;
 	bool restoreState(const void* buffer, size_t size);
 
 private:
-	// 4 control groups:
-	// [0] = x16 top (y4-y7)
-	// [1] = x16 bottom (y0-y3)
-	// [2] = x17 top (y4-y7)
-	// [3] = x17 bottom (y0-y3)
-	std::array<SequencerControlGroup, 4> groups_;
+	// 16 individual control pads:
+	// [0-7] = x16 (y0-y7)
+	// [8-15] = x17 (y0-y7)
+	std::array<ControlPad, 16> pads_;
 
-	// Helper to map x,y to group index and local y
-	bool mapToGroup(int32_t x, int32_t y, int32_t& groupIndex, int32_t& yLocal) const;
+	// Helper to map x,y to pad index
+	int32_t getPadIndex(int32_t x, int32_t y) const;
 };
 
 } // namespace deluge::model::clip::sequencer
