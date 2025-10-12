@@ -44,3 +44,4 @@ const std::vector<std::string>& SequencerModeManager::getAvailableModes() const 
 } // namespace deluge::model::clip::sequencer
 
 
+

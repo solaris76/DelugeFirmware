@@ -20,7 +20,7 @@
 #include "definitions_cxx.hpp"
 #include "gui/l10n/l10n.h"
 #include "hid/led/pad_leds.h"
-#include "model/clip/sequencer/control_columns/control_column_state.h"
+#include "model/clip/sequencer/control_columns/sequencer_control_state.h"
 
 class Serializer;
 class Deserializer;
@@ -62,20 +62,25 @@ public:
 	// velocity: press velocity (0 = release, 1-127 = press)
 	// Default implementation handles control column pads (x16-17)
 	virtual bool handlePadPress(int32_t x, int32_t y, int32_t velocity);
-	
+
 	// Horizontal encoder - handle horizontal scrolling/adjustment
 	// Returns true if the mode handled the encoder, false to use default behavior
-	// Default implementation handles control column value adjustment
+	// Default implementation routes to control column state
 	virtual bool handleHorizontalEncoder(int32_t offset, bool encoderPressed);
-	
-	// Track which control column pad is currently held
-	int8_t heldControlColumnPad_ = -1;  // -1 = none, 0-7 = y position
-	bool heldControlColumnIsLeft_ = false; // true = left (x16), false = right (x17)
 
-	// Vertical encoder - handle vertical scrolling
+	// Track which control column pad is currently held
+	int8_t heldControlColumnX_ = -1; // -1 = none, 16-17 = x position
+	int8_t heldControlColumnY_ = -1; // -1 = none, 0-7 = y position
+
+	// Vertical encoder - handle vertical scrolling or control column value adjustment
 	// Returns true if the mode handled the encoder, false to use default behavior
 	// offset: encoder rotation amount (positive = clockwise, negative = counter-clockwise)
-	virtual bool handleVerticalEncoder(int32_t offset) { return false; }
+	// Default implementation routes to control columns if pad is held, otherwise allows scrolling
+	virtual bool handleVerticalEncoder(int32_t offset);
+
+	// Vertical encoder button - toggle momentary/toggle mode for control columns
+	// Returns true if the mode handled the button, false to use default behavior
+	virtual bool handleVerticalEncoderButton();
 
 	// Playback - called during clip playback to generate notes
 	// Return value: ticks until this mode needs to be called again
@@ -144,30 +149,18 @@ protected:
 
 	/**
 	 * Get control column state for this sequencer mode.
-	 * Control columns provide per-pad configurable parameters (clock div, octave, transpose, etc.)
-	 * that affect playback in real-time.
+	 * Control columns provide 4 groups of 4 pads each (x16-x17 sidebar, split top/bottom)
+	 * for configurable parameters (clock div, octave, transpose, scenes).
 	 */
-	ControlColumnState& getControlColumnState() { return controlColumnState_; }
-	const ControlColumnState& getControlColumnState() const { return controlColumnState_; }
+	SequencerControlState& getControlColumnState() { return controlColumnState_; }
+	const SequencerControlState& getControlColumnState() const { return controlColumnState_; }
 
 	/**
-	 * Get the combined active control values from both columns.
-	 * Use this during playback to apply clock div, transpose, probability, etc.
+	 * Get the combined active control values from all groups.
+	 * Use this during playback to apply clock div, transpose, octave, etc.
 	 */
-	SequencerControlColumn::ActiveControls getActiveControls() const {
-		return controlColumnState_.getActiveControls();
-	}
-
-	/**
-	 * Serialization - override in subclasses to save/load control column state.
-	 * Call these from your mode's serialization methods.
-	 */
-	virtual void writeControlColumnsToFile(Serializer& writer) {
-		controlColumnState_.writeToFile(writer);
-	}
-
-	virtual void readControlColumnsFromFile(Deserializer& reader) {
-		controlColumnState_.readFromFile(reader);
+	CombinedEffects getCombinedEffects() const {
+		return controlColumnState_.getCombinedEffects();
 	}
 
 protected:
@@ -175,7 +168,7 @@ protected:
 	SequencerMode() = default;
 
 	// Control column state (per-mode instance)
-	ControlColumnState controlColumnState_;
+	SequencerControlState controlColumnState_;
 };
 
 } // namespace deluge::model::clip::sequencer

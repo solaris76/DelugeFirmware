@@ -794,6 +794,18 @@ doCancelPopup:
 	// Vertical encoder button
 	else if (b == Y_ENC) {
 
+		// Check if sequencer mode wants to handle vertical encoder button (for toggle/momentary mode switch)
+		if (on) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip && clip->hasSequencerMode()) {
+				auto* sequencerMode = clip->getSequencerMode();
+				if (sequencerMode && sequencerMode->handleVerticalEncoderButton()) {
+					uiNeedsRendering(this, 0xFFFFFFFF, 0);
+					return ActionResult::DEALT_WITH;
+				}
+			}
+		}
+
 		// If holding notes down...
 		if (isUIModeActiveExclusively(UI_MODE_NOTES_PRESSED)) {
 			if (on) {

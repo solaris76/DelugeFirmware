@@ -34,60 +34,58 @@ bool SequencerMode::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth 
 		return false;
 	}
 
-	// Render control columns on sidebar (x16 = left, x17 = right)
-	controlColumnState_.leftColumn.renderColumn(image, kDisplayWidth, heldControlColumnIsLeft_ ? heldControlColumnPad_ : -1);
-	controlColumnState_.rightColumn.renderColumn(image, kDisplayWidth + 1, !heldControlColumnIsLeft_ ? heldControlColumnPad_ : -1);
+	// Render control columns on sidebar (x14-x15, split into 4 groups)
+	controlColumnState_.render(image);
 
 	return true; // We handled the sidebar
 }
 
 bool SequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
-	// Only handle sidebar pads (x16-17)
-	if (x != kDisplayWidth && x != kDisplayWidth + 1) {
-		return false; // Not a control column pad
+	// Track control column pad holds (for encoder routing)
+	if (x == kDisplayWidth || x == (kDisplayWidth + 1)) {
+		if (velocity > 0) {
+			// Pad pressed - track it
+			heldControlColumnX_ = x;
+			heldControlColumnY_ = y;
+		}
+		else if (heldControlColumnX_ == x && heldControlColumnY_ == y) {
+			// Pad released - clear tracking
+			heldControlColumnX_ = -1;
+			heldControlColumnY_ = -1;
+		}
 	}
 
-	bool isLeft = (x == kDisplayWidth);
-	bool pressed = (velocity > 0);
-	bool shiftPressed = Buttons::isShiftButtonPressed();
-
-	// Track held pad
-	if (pressed) {
-		heldControlColumnPad_ = y;
-		heldControlColumnIsLeft_ = isLeft;
-	}
-	else if (heldControlColumnPad_ == y && heldControlColumnIsLeft_ == isLeft) {
-		heldControlColumnPad_ = -1; // Released
-	}
-
-	// Route to appropriate column
-	bool handled = false;
-	if (isLeft) {
-		handled = controlColumnState_.leftColumn.handlePad(y, pressed, shiftPressed);
-	}
-	else {
-		handled = controlColumnState_.rightColumn.handlePad(y, pressed, shiftPressed);
-	}
-
-	return handled; // Control column handled it
+	// Delegate to control column state
+	return controlColumnState_.handlePad(x, y, velocity);
 }
 
 bool SequencerMode::handleHorizontalEncoder(int32_t offset, bool encoderPressed) {
 	// Only handle encoder if a control column pad is held
-	if (heldControlColumnPad_ < 0) {
+	if (heldControlColumnX_ < 0 || heldControlColumnY_ < 0) {
 		return false; // No control column pad held
 	}
 
-	// Route to appropriate column
-	bool handled = false;
-	if (heldControlColumnIsLeft_) {
-		handled = controlColumnState_.leftColumn.handleEncoder(heldControlColumnPad_, offset, encoderPressed);
-	}
-	else {
-		handled = controlColumnState_.rightColumn.handleEncoder(heldControlColumnPad_, offset, encoderPressed);
+	// Delegate to control column state
+	return controlColumnState_.handleHorizontalEncoder(heldControlColumnX_, heldControlColumnY_, offset);
+}
+
+bool SequencerMode::handleVerticalEncoder(int32_t offset) {
+	// If a control column pad is held, use vertical encoder to adjust value
+	if (heldControlColumnX_ >= 0 && heldControlColumnY_ >= 0) {
+		return controlColumnState_.handleVerticalEncoder(heldControlColumnX_, heldControlColumnY_, offset);
 	}
 
-	return handled;
+	// Otherwise, allow default behavior (scrolling, etc.)
+	return false;
+}
+
+bool SequencerMode::handleVerticalEncoderButton() {
+	// If a control column pad is held, toggle momentary/toggle mode
+	if (heldControlColumnX_ >= 0 && heldControlColumnY_ >= 0) {
+		return controlColumnState_.handleVerticalEncoderButton(heldControlColumnX_, heldControlColumnY_);
+	}
+
+	return false;
 }
 
 // ========== HELPER IMPLEMENTATIONS ==========
