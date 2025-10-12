@@ -70,6 +70,10 @@ public:
 	// Playback - plays the sequence at 16th note intervals
 	int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) override;
 
+	// Scene management
+	size_t captureScene(void* buffer, size_t maxSize) override;
+	bool recallScene(const void* buffer, size_t size) override;
+
 private:
 	static constexpr int32_t kNumSteps = 16; // x0-x15
 	static constexpr int32_t kMaxScaleNotes = 32;

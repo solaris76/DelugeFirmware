@@ -100,13 +100,13 @@ bool SequencerControlState::mapToGroup(int32_t x, int32_t y, int32_t& groupIndex
 	return true;
 }
 
-bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity) {
+bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, SequencerMode* mode) {
 	int32_t groupIndex, yLocal;
 	if (!mapToGroup(x, y, groupIndex, yLocal)) {
 		return false;
 	}
 
-	bool handled = groups_[groupIndex].handlePad(yLocal, velocity);
+	bool handled = groups_[groupIndex].handlePad(yLocal, velocity, mode);
 	if (handled) {
 		refreshSidebar();
 	}
@@ -137,13 +137,12 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 	auto& group = groups_[groupIndex];
 	int32_t currentType = static_cast<int32_t>(group.getType());
 
-	// Skip SCENE in cycling (for now)
-	// Available types: CLOCK_DIV (0), OCTAVE (1), TRANSPOSE (2), GATE_LENGTH (4)
+	// Available types for cycling
 	constexpr int32_t availableTypes[] = {
 		static_cast<int32_t>(ControlType::CLOCK_DIV),
 		static_cast<int32_t>(ControlType::OCTAVE),
 		static_cast<int32_t>(ControlType::TRANSPOSE),
-		static_cast<int32_t>(ControlType::GATE_LENGTH)
+		static_cast<int32_t>(ControlType::SCENE)
 	};
 	constexpr int32_t numTypes = sizeof(availableTypes) / sizeof(availableTypes[0]);
 
@@ -220,9 +219,6 @@ CombinedEffects SequencerControlState::getCombinedEffects() const {
 				break;
 			case ControlType::SCENE:
 				effects.sceneIndex = group.getActiveValue();
-				break;
-			case ControlType::GATE_LENGTH:
-				effects.gateLength = group.getGateLength();
 				break;
 			default:
 				break;

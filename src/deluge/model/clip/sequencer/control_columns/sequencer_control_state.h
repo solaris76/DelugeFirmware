@@ -27,7 +27,6 @@ struct CombinedEffects {
 	int32_t octaveShift = 0;    // From OCTAVE group
 	int32_t transpose = 0;      // From TRANSPOSE group
 	int32_t sceneIndex = -1;    // From SCENE group (-1 = none)
-	int32_t gateLength = 75;    // From GATE_LENGTH group (percentage)
 };
 
 // Manages all 4 control groups for a sequencer mode
@@ -42,7 +41,7 @@ public:
 	void render(RGB image[][kDisplayWidth + kSideBarWidth], uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]);
 
 	// Input handling - returns which group (if any) handled the input
-	bool handlePad(int32_t x, int32_t y, int32_t velocity);
+	bool handlePad(int32_t x, int32_t y, int32_t velocity, class SequencerMode* mode = nullptr);
 	bool handleHorizontalEncoder(int32_t heldX, int32_t heldY, int32_t offset);
 	bool handleVerticalEncoder(int32_t heldX, int32_t heldY, int32_t offset);
 	bool handleVerticalEncoderButton(int32_t heldX, int32_t heldY);

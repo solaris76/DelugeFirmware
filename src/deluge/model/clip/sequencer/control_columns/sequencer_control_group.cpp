@@ -16,10 +16,13 @@
  */
 
 #include "model/clip/sequencer/control_columns/sequencer_control_group.h"
+#include "model/clip/sequencer/sequencer_mode.h"
 #include "hid/display/display.h"
 #include "hid/led/pad_leds.h"
+#include "hid/buttons.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
+#include <cstring>
 
 namespace deluge::model::clip::sequencer {
 
@@ -49,8 +52,6 @@ namespace {
 	};
 
 	constexpr int32_t kSceneValues[] = {0, 1, 2, 3};
-
-	constexpr int32_t kGateLengthValues[] = {10, 25, 50, 75, 90, 100};
 
 	// Helper: Format signed integer with + or - prefix
 	void formatSignedInt(char* buffer, int32_t value) {
@@ -128,15 +129,6 @@ void SequencerControlGroup::initialize(ControlType type) {
 		defaultIndices[3] = 17; // +5 (value: 5)
 		break;
 
-	case ControlType::GATE_LENGTH:
-		// 25%, 50%, 75%, 100%
-		// kGateLengthValues: [10, 25, 50, 75, 90, 100]
-		defaultIndices[0] = 1;  // 25%
-		defaultIndices[1] = 2;  // 50%
-		defaultIndices[2] = 3;  // 75%
-		defaultIndices[3] = 5;  // 100%
-		break;
-
 	case ControlType::SCENE:
 	default:
 		// Default: first 4 values (0, 1, 2, 3)
@@ -164,23 +156,21 @@ void SequencerControlGroup::setType(ControlType newType) {
 
 const int32_t* SequencerControlGroup::getAvailableValues() const {
 	switch (type_) {
-	case ControlType::CLOCK_DIV:   return kClockDivValues;
-	case ControlType::OCTAVE:      return kOctaveValues;
-	case ControlType::TRANSPOSE:   return kTransposeValues;
-	case ControlType::SCENE:       return kSceneValues;
-	case ControlType::GATE_LENGTH: return kGateLengthValues;
-	default:                       return nullptr;
+	case ControlType::CLOCK_DIV: return kClockDivValues;
+	case ControlType::OCTAVE:    return kOctaveValues;
+	case ControlType::TRANSPOSE: return kTransposeValues;
+	case ControlType::SCENE:     return kSceneValues;
+	default:                     return nullptr;
 	}
 }
 
 int32_t SequencerControlGroup::getNumAvailableValues() const {
 	switch (type_) {
-	case ControlType::CLOCK_DIV:   return sizeof(kClockDivValues) / sizeof(kClockDivValues[0]);
-	case ControlType::OCTAVE:      return sizeof(kOctaveValues) / sizeof(kOctaveValues[0]);
-	case ControlType::TRANSPOSE:   return sizeof(kTransposeValues) / sizeof(kTransposeValues[0]);
-	case ControlType::SCENE:       return sizeof(kSceneValues) / sizeof(kSceneValues[0]);
-	case ControlType::GATE_LENGTH: return sizeof(kGateLengthValues) / sizeof(kGateLengthValues[0]);
-	default:                       return 0;
+	case ControlType::CLOCK_DIV: return sizeof(kClockDivValues) / sizeof(kClockDivValues[0]);
+	case ControlType::OCTAVE:    return sizeof(kOctaveValues) / sizeof(kOctaveValues[0]);
+	case ControlType::TRANSPOSE: return sizeof(kTransposeValues) / sizeof(kTransposeValues[0]);
+	case ControlType::SCENE:     return sizeof(kSceneValues) / sizeof(kSceneValues[0]);
+	default:                     return 0;
 	}
 }
 
@@ -206,23 +196,21 @@ int32_t SequencerControlGroup::getValue(int32_t padIndex) const {
 
 const char* SequencerControlGroup::getTypeName() const {
 	switch (type_) {
-	case ControlType::CLOCK_DIV:   return "CLOCK DIV";
-	case ControlType::OCTAVE:      return "OCTAVE";
-	case ControlType::TRANSPOSE:   return "TRANSPOSE";
-	case ControlType::SCENE:       return "SCENE";
-	case ControlType::GATE_LENGTH: return "GATE LEN";
-	default:                       return "UNKNOWN";
+	case ControlType::CLOCK_DIV: return "CLOCK DIV";
+	case ControlType::OCTAVE:    return "OCTAVE";
+	case ControlType::TRANSPOSE: return "TRANSPOSE";
+	case ControlType::SCENE:     return "SCENE";
+	default:                     return "UNKNOWN";
 	}
 }
 
 RGB SequencerControlGroup::getColorForType() const {
 	switch (type_) {
-	case ControlType::CLOCK_DIV:   return RGB{255, 0, 0};    // Red
-	case ControlType::OCTAVE:      return RGB{255, 128, 0};  // Orange
-	case ControlType::TRANSPOSE:   return RGB{255, 255, 0};  // Yellow
-	case ControlType::SCENE:       return RGB{255, 0, 255};  // Magenta
-	case ControlType::GATE_LENGTH: return RGB{0, 255, 128};  // Cyan/Green
-	default:                       return RGB{128, 128, 128}; // Gray
+	case ControlType::CLOCK_DIV: return RGB{255, 0, 0};    // Red
+	case ControlType::OCTAVE:    return RGB{255, 128, 0};  // Orange
+	case ControlType::TRANSPOSE: return RGB{255, 255, 0};  // Yellow
+	case ControlType::SCENE:     return RGB{0, 128, 255};  // Blue
+	default:                     return RGB{128, 128, 128}; // Gray
 	}
 }
 
@@ -260,25 +248,11 @@ const char* SequencerControlGroup::formatValue(int32_t value) const {
 
 	case ControlType::SCENE:
 		buffer[0] = 'S';
-		buffer[1] = '0' + (value + 1); // 1-indexed
-		buffer[2] = '\0';
-		return buffer;
-
-	case ControlType::GATE_LENGTH:
-		if (value >= 100) {
-			return "100%";
-		}
-		else if (value >= 10) {
-			buffer[0] = '0' + (value / 10);
-			buffer[1] = '0' + (value % 10);
-			buffer[2] = '%';
-			buffer[3] = '\0';
-		}
-		else {
-			buffer[0] = '0' + value;
-			buffer[1] = '%';
-			buffer[2] = '\0';
-		}
+		buffer[1] = 'C';
+		buffer[2] = 'N';
+		buffer[3] = ' ';
+		buffer[4] = '0' + (value + 1); // 1-indexed (SCN 1, SCN 2, etc.)
+		buffer[5] = '\0';
 		return buffer;
 
 	default:
@@ -292,12 +266,21 @@ void SequencerControlGroup::render(RGB image[][kDisplayWidth + kSideBarWidth], i
 	for (int32_t i = 0; i < kNumPadsPerGroup; i++) {
 		int32_t y = yStart + i;
 		bool isBright = (activePad_ == i) || (heldPad_ == i);
+		bool isValid = (type_ == ControlType::SCENE) ? pads_[i].sceneValid : true;
 
 		if (isBright) {
 			image[y][x] = baseColor;
 		}
+		else if (!isValid) {
+			// Empty scene slot - very dim
+			image[y][x] = RGB{
+				static_cast<uint8_t>(baseColor.r / 16),
+				static_cast<uint8_t>(baseColor.g / 16),
+				static_cast<uint8_t>(baseColor.b / 16)
+			};
+		}
 		else {
-			// Dim: divide by 8 for 12.5% brightness
+			// Normal dim: 12.5% brightness
 			image[y][x] = RGB{
 				static_cast<uint8_t>(baseColor.r / 8),
 				static_cast<uint8_t>(baseColor.g / 8),
@@ -307,18 +290,49 @@ void SequencerControlGroup::render(RGB image[][kDisplayWidth + kSideBarWidth], i
 	}
 }
 
-bool SequencerControlGroup::handlePad(int32_t yLocal, int32_t velocity) {
+bool SequencerControlGroup::handlePad(int32_t yLocal, int32_t velocity, SequencerMode* mode) {
 	if (yLocal < 0 || yLocal >= kNumPadsPerGroup) {
 		return false;
 	}
 
 	bool pressed = (velocity > 0);
-	PadMode mode = pads_[yLocal].mode;
+	PadMode padMode = pads_[yLocal].mode;
 
+	// SCENE MODE: Special handling
+	if (type_ == ControlType::SCENE && mode) {
+		if (pressed) {
+			// Check if BACK button is held for scene capture
+			if (Buttons::isButtonPressed(deluge::hid::button::BACK)) {
+				captureSceneToSlot(yLocal, mode);
+				heldPad_ = yLocal;
+				refreshSidebar();
+				return true;
+			}
+
+			// Otherwise, recall scene
+			heldPad_ = yLocal;
+			if (recallSceneFromSlot(yLocal, mode)) {
+				activePad_ = yLocal;
+				uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF); // Full refresh after scene recall
+			}
+			refreshSidebar();
+			return true;
+		}
+		else {
+			// Release
+			if (heldPad_ == yLocal) {
+				heldPad_ = -1;
+			}
+			refreshSidebar();
+			return true;
+		}
+	}
+
+	// NORMAL CONTROLS: Clock, Octave, Transpose
 	if (pressed) {
 		heldPad_ = yLocal;
 
-		if (mode == PadMode::TOGGLE) {
+		if (padMode == PadMode::TOGGLE) {
 			// Toggle mode: flip state
 			bool wasActive = (activePad_ == yLocal);
 			activePad_ = wasActive ? -1 : yLocal;
@@ -342,7 +356,7 @@ bool SequencerControlGroup::handlePad(int32_t yLocal, int32_t velocity) {
 			heldPad_ = -1;
 
 			// Momentary mode: deactivate on release
-			if (mode == PadMode::MOMENTARY && activePad_ == yLocal) {
+			if (padMode == PadMode::MOMENTARY && activePad_ == yLocal) {
 				activePad_ = -1;
 			}
 		}
@@ -438,11 +452,64 @@ int32_t SequencerControlGroup::getTranspose() const {
 	return 0; // Default: no transpose
 }
 
-int32_t SequencerControlGroup::getGateLength() const {
-	if (type_ == ControlType::GATE_LENGTH && isActive()) {
-		return getValue(activePad_);
+bool SequencerControlGroup::captureSceneToSlot(int32_t padIndex, SequencerMode* mode) {
+	if (type_ != ControlType::SCENE || !mode) {
+		return false;
 	}
-	return 75; // Default: 75%
+
+	if (padIndex < 0 || padIndex >= kNumPadsPerGroup) {
+		return false;
+	}
+
+	// Capture scene from mode
+	PadData& pad = pads_[padIndex];
+	pad.sceneSize = mode->captureScene(pad.sceneData, kMaxSceneDataSize);
+	pad.sceneValid = (pad.sceneSize > 0);
+
+	if (pad.sceneValid && display) {
+		display->displayPopup("CAPTURED");
+	}
+
+	return pad.sceneValid;
+}
+
+bool SequencerControlGroup::recallSceneFromSlot(int32_t padIndex, SequencerMode* mode) {
+	if (type_ != ControlType::SCENE || !mode) {
+		return false;
+	}
+
+	if (padIndex < 0 || padIndex >= kNumPadsPerGroup) {
+		return false;
+	}
+
+	const PadData& pad = pads_[padIndex];
+	if (!pad.sceneValid) {
+		if (display) {
+			display->displayPopup("EMPTY");
+		}
+		return false;
+	}
+
+	// Recall scene to mode
+	bool success = mode->recallScene(pad.sceneData, pad.sceneSize);
+
+	if (success && display) {
+		display->displayPopup(formatValue(getValue(padIndex)));
+	}
+
+	return success;
+}
+
+bool SequencerControlGroup::isSceneValid(int32_t padIndex) const {
+	if (type_ != ControlType::SCENE) {
+		return false;
+	}
+
+	if (padIndex < 0 || padIndex >= kNumPadsPerGroup) {
+		return false;
+	}
+
+	return pads_[padIndex].sceneValid;
 }
 
 } // namespace deluge::model::clip::sequencer

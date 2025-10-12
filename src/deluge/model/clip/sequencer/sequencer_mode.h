@@ -94,6 +94,17 @@ public:
 	// syncLevel: 7=16th, 6=8th, 8=32nd (same as arpeggiator)
 	virtual void onMusicalDivision(void* modelStack) {}
 
+	// ========== SCENE MANAGEMENT ==========
+
+	// Scene capture/recall - allows saving and restoring sequencer state
+	// Each mode implements its own scene data structure
+	// Returns size of captured data, or 0 if scenes not supported
+	virtual size_t captureScene(void* buffer, size_t maxSize) { return 0; }
+
+	// Recall scene from captured data
+	// Returns true if scene was successfully recalled
+	virtual bool recallScene(const void* buffer, size_t size) { return false; }
+
 protected:
 	// ========== MODE-SPECIFIC ENCODER HANDLING ==========
 

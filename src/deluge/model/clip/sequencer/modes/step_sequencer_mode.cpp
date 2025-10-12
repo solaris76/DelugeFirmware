@@ -57,10 +57,6 @@ void StepSequencerMode::initialize() {
 		// Wrap noteIndex to valid scale range
 		steps_[i].noteIndex = (numScaleNotes_ > 0) ? (i % numScaleNotes_) : 0;
 	}
-
-	// Customize control columns for Step Sequencer
-	// Replace x17 bottom (group 3) with GATE_LENGTH instead of CLOCK_DIV
-	controlColumnState_.getGroup(3).setType(ControlType::GATE_LENGTH);
 }
 
 void StepSequencerMode::cleanup() {
@@ -418,8 +414,8 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 			int32_t noteCode = calculateNoteCode(step, effects);
 
 			if (noteCode >= 0 && noteCode <= 127) {
-				// Apply gate length from control columns (percentage)
-				int32_t noteLength = (adjustedTicksPerStep * effects.gateLength) / 100;
+				// 75% gate length
+				int32_t noteLength = (adjustedTicksPerStep * 3) / 4;
 				playNote(modelStackPtr, noteCode, 100, noteLength);
 				activeNoteCode_ = noteCode;
 			}
@@ -445,6 +441,62 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 	uiNeedsRendering(&instrumentClipView, kGateRow | kNoteRows, 0);
 
 	return ticksPerSixteenthNote_;
+}
+
+// ================================================================================================
+// SCENE MANAGEMENT
+// ================================================================================================
+
+size_t StepSequencerMode::captureScene(void* buffer, size_t maxSize) {
+	// Scene structure: all 16 steps + scroll offset
+	struct Scene {
+		Step steps[kNumSteps];
+		int32_t noteScrollOffset;
+	};
+
+	if (maxSize < sizeof(Scene)) {
+		return 0; // Buffer too small
+	}
+
+	Scene* scene = static_cast<Scene*>(buffer);
+
+	// Copy current state
+	for (int32_t i = 0; i < kNumSteps; i++) {
+		scene->steps[i] = steps_[i];
+	}
+	scene->noteScrollOffset = noteScrollOffset_;
+
+	return sizeof(Scene);
+}
+
+bool StepSequencerMode::recallScene(const void* buffer, size_t size) {
+	struct Scene {
+		Step steps[kNumSteps];
+		int32_t noteScrollOffset;
+	};
+
+	if (size < sizeof(Scene)) {
+		return false; // Invalid data
+	}
+
+	const Scene* scene = static_cast<const Scene*>(buffer);
+
+	// Restore state
+	for (int32_t i = 0; i < kNumSteps; i++) {
+		steps_[i] = scene->steps[i];
+	}
+	noteScrollOffset_ = scene->noteScrollOffset;
+
+	// Clamp scroll offset to valid range
+	int32_t maxScroll = (numScaleNotes_ > 5) ? (numScaleNotes_ - 5) : 0;
+	if (noteScrollOffset_ > maxScroll) {
+		noteScrollOffset_ = maxScroll;
+	}
+	if (noteScrollOffset_ < 0) {
+		noteScrollOffset_ = 0;
+	}
+
+	return true;
 }
 
 } // namespace deluge::model::clip::sequencer::modes

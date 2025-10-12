@@ -55,8 +55,8 @@ bool SequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 		}
 	}
 
-	// Delegate to control column state
-	return controlColumnState_.handlePad(x, y, velocity);
+	// Delegate to control column state, passing 'this' for scene capture/recall
+	return controlColumnState_.handlePad(x, y, velocity, this);
 }
 
 bool SequencerMode::handleHorizontalEncoder(int32_t offset, bool encoderPressed) {

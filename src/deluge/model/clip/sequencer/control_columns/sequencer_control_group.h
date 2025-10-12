@@ -28,8 +28,7 @@ enum class ControlType {
 	CLOCK_DIV,
 	OCTAVE,
 	TRANSPOSE,
-	SCENE, // Future
-	GATE_LENGTH, // Step sequencer specific
+	SCENE,
 	MAX
 };
 
@@ -51,7 +50,7 @@ public:
 	void render(RGB image[][kDisplayWidth + kSideBarWidth], int32_t x, int32_t yStart);
 
 	// Input handling
-	bool handlePad(int32_t yLocal, int32_t velocity); // yLocal = 0-3 within group
+	bool handlePad(int32_t yLocal, int32_t velocity, class SequencerMode* mode = nullptr); // yLocal = 0-3 within group
 	bool handleVerticalEncoder(int32_t yLocal, int32_t offset); // Adjust value for pad
 	bool handleVerticalEncoderButton(int32_t yLocal); // Toggle momentary/toggle mode
 
@@ -70,12 +69,23 @@ public:
 	int32_t getClockDivider() const;  // Returns divider if CLOCK_DIV, else 1
 	int32_t getOctaveShift() const;   // Returns octave if OCTAVE, else 0
 	int32_t getTranspose() const;     // Returns semitones if TRANSPOSE, else 0
-	int32_t getGateLength() const;    // Returns percentage if GATE_LENGTH, else 75
+
+	// Scene management (only works when type == SCENE)
+	bool captureSceneToSlot(int32_t padIndex, class SequencerMode* mode);
+	bool recallSceneFromSlot(int32_t padIndex, class SequencerMode* mode);
+	bool isSceneValid(int32_t padIndex) const;
 
 private:
+	static constexpr size_t kMaxSceneDataSize = 512; // Max bytes per scene
+
 	struct PadData {
 		int32_t valueIndex = 0;        // Index into available values array
 		PadMode mode = PadMode::TOGGLE; // Toggle or momentary
+
+		// Scene data (only used when type == SCENE)
+		uint8_t sceneData[kMaxSceneDataSize]; // Raw scene data
+		size_t sceneSize = 0;                   // Actual size of captured data
+		bool sceneValid = false;                // Whether this scene has been captured
 	};
 
 	ControlType type_ = ControlType::CLOCK_DIV;
