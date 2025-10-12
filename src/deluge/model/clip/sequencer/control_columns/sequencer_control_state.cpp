@@ -197,42 +197,19 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 		if (pressed) {
 			// SAVE button = capture scene
 			if (Buttons::isButtonPressed(deluge::hid::button::SAVE)) {
-				// Capture scene - bounds check first!
-				if (ControlPad::kMaxSceneDataSize < 12) { // Need at least 12 bytes
+				// Simplified: Only capture mode-specific pattern data, no control state
+				size_t modeDataSize = mode->captureScene(pad.sceneData, ControlPad::kMaxSceneDataSize);
+				
+				if (modeDataSize > 0 && modeDataSize <= ControlPad::kMaxSceneDataSize) {
+					pad.sceneSize = modeDataSize;
+					pad.sceneValid = true;
+
 					if (display) {
-						display->displayPopup("SCENE TOO BIG");
-					}
-					pad.held = true;
-					refreshSidebar();
-					return true;
-				}
-
-				size_t modeDataSize = mode->captureScene(&pad.sceneData[4], ControlPad::kMaxSceneDataSize - 4);
-				if (modeDataSize > 0 && modeDataSize <= (ControlPad::kMaxSceneDataSize - 12)) {
-					// Store mode data size
-					memcpy(&pad.sceneData[0], &modeDataSize, sizeof(uint32_t));
-
-					// Bounds check for control state
-					size_t remainingSpace = ControlPad::kMaxSceneDataSize - 4 - modeDataSize - 4;
-					if (remainingSpace > 0) {
-						// Capture control state (excluding scene pads)
-						size_t controlStateSize = captureState(&pad.sceneData[4 + modeDataSize + 4], remainingSpace);
-						memcpy(&pad.sceneData[4 + modeDataSize], &controlStateSize, sizeof(uint32_t));
-
-						pad.sceneSize = 8 + modeDataSize + controlStateSize;
-						pad.sceneValid = true;
-
-						if (display) {
-							display->displayPopup("CAPTURED");
-						}
-					} else {
-						if (display) {
-							display->displayPopup("SCENE TOO BIG");
-						}
+						display->displayPopup("CAPTURED");
 					}
 				} else {
 					if (display) {
-						display->displayPopup("CAPTURE FAILED");
+						display->displayPopup(modeDataSize > ControlPad::kMaxSceneDataSize ? "SCENE TOO BIG" : "CAPTURE FAILED");
 					}
 				}
 				pad.held = true;
@@ -254,28 +231,9 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 
 			// Otherwise = recall scene
 			if (pad.sceneValid) {
-				size_t offset = 0;
-
-				// Restore mode data
-				uint32_t modeDataSize;
-				memcpy(&modeDataSize, &pad.sceneData[offset], sizeof(uint32_t));
-				offset += 4;
-
-				bool success = mode->recallScene(&pad.sceneData[offset], modeDataSize);
+				// Simplified: Only restore mode-specific pattern data
+				bool success = mode->recallScene(pad.sceneData, pad.sceneSize);
 				if (success) {
-					offset += modeDataSize;
-
-					// Restore control state
-					if (offset < pad.sceneSize) {
-						uint32_t controlStateSize;
-						memcpy(&controlStateSize, &pad.sceneData[offset], sizeof(uint32_t));
-						offset += 4;
-
-						if (controlStateSize > 0 && offset + controlStateSize <= pad.sceneSize) {
-							restoreState(&pad.sceneData[offset], controlStateSize);
-						}
-					}
-
 					pad.active = true;
 					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
 
