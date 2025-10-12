@@ -340,6 +340,23 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 		}
 	}
 
+	// NONE TYPE: Show configuration hint
+	if (pad.type == ControlType::NONE) {
+		if (pressed) {
+			if (display) {
+				display->displayPopup("<> TO CONFIGURE");
+			}
+			pad.held = true;
+			refreshSidebar();
+			return true;
+		}
+		else {
+			pad.held = false;
+			refreshSidebar();
+			return true;
+		}
+	}
+
 	// NORMAL CONTROLS: Clock, Octave, Transpose, Direction
 	if (pressed) {
 		pad.held = true;
