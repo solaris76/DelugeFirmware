@@ -51,72 +51,52 @@ SequencerControlState::SequencerControlState() {
 void SequencerControlState::initialize() {
 	// Default configuration for 16 pads:
 	// x16 (pads 0-7):
-	//   y0: OCTAVE
-	//   y1: OCTAVE
-	//   y2: OCTAVE
-	//   y3: OCTAVE
-	//   y4: CLOCK
-	//   y5: CLOCK
-	//   y6: CLOCK
-	//   y7: CLOCK
+	//   y0: OCTAVE +1
+	//   y1: TRANSPOSE +5
+	//   y2-y7: NONE (user configurable)
 	// x17 (pads 8-15):
-	//   y0: SCENE
-	//   y1: SCENE
-	//   y2: SCENE
-	//   y3: SCENE
-	//   y4: EVOLVE
-	//   y5: MUTATE
+	//   y0: SCENE 1
+	//   y1: SCENE 2
+	//   y2-y5: NONE (user configurable)
 	//   y6: RANDOM
 	//   y7: RESET
 
-	// x16 bottom: Octave pads
+	// x16 column - mostly empty for user configuration
 	pads_[0].type = ControlType::OCTAVE;
-	pads_[1].type = ControlType::OCTAVE;
-	pads_[2].type = ControlType::OCTAVE;
-	pads_[3].type = ControlType::OCTAVE;
+	pads_[1].type = ControlType::TRANSPOSE;
+	pads_[2].type = ControlType::NONE;
+	pads_[3].type = ControlType::NONE;
+	pads_[4].type = ControlType::NONE;
+	pads_[5].type = ControlType::NONE;
+	pads_[6].type = ControlType::NONE;
+	pads_[7].type = ControlType::NONE;
 
-	// x16 top: Clock pads
-	pads_[4].type = ControlType::CLOCK_DIV;
-	pads_[5].type = ControlType::CLOCK_DIV;
-	pads_[6].type = ControlType::CLOCK_DIV;
-	pads_[7].type = ControlType::CLOCK_DIV;
-
-	// x17 bottom: Scene pads
+	// x17 column - basic scene + generative controls
 	pads_[8].type = ControlType::SCENE;
 	pads_[9].type = ControlType::SCENE;
-	pads_[10].type = ControlType::SCENE;
-	pads_[11].type = ControlType::SCENE;
-
-	// x17 top: Generative pads
-	pads_[12].type = ControlType::EVOLVE;
-	pads_[13].type = ControlType::MUTATE;
+	pads_[10].type = ControlType::NONE;
+	pads_[11].type = ControlType::NONE;
+	pads_[12].type = ControlType::NONE;
+	pads_[13].type = ControlType::NONE;
 	pads_[14].type = ControlType::RANDOM;
 	pads_[15].type = ControlType::RESET;
 
 	// Set useful default values
-	// Octaves: -1, 0, +1, +2
-	pads_[0].valueIndex = 4;  // 0
-	pads_[1].valueIndex = 3;  // -1
-	pads_[2].valueIndex = 5;  // +1
-	pads_[3].valueIndex = 6;  // +2
+	// Octave +1 (valueIndex 5 in kOctaveValues = +1)
+	pads_[0].valueIndex = 6;  // +1 octave (kOctaveValues[6] = +1)
 
-	// Clock: /1, /2, /4, /16
-	pads_[4].valueIndex = 1;  // /1
-	pads_[5].valueIndex = 2;  // /2
-	pads_[6].valueIndex = 4;  // /4
-	pads_[7].valueIndex = 16; // /16
+	// Transpose +5 (valueIndex 17 in kTransposeValues = +5)
+	pads_[1].valueIndex = 17; // +5 semitones (kTransposeValues[17] = +5)
 
-	// Scenes: 1-4 (out of 8 available scenes 1-8)
+	// Scenes: 1-2
 	pads_[8].valueIndex = 0;  // Scene 1
 	pads_[9].valueIndex = 1;  // Scene 2
-	pads_[10].valueIndex = 2; // Scene 3
-	pads_[11].valueIndex = 3; // Scene 4
 
-	// Mutations: default to 50%
-	pads_[12].valueIndex = 4; // 50% for evolve
-	pads_[13].valueIndex = 4; // 50% for mutate
+	// Random: default to 50%
 	pads_[14].valueIndex = 4; // 50% for random
-	pads_[15].valueIndex = 0; // Reset has no value
+
+	// Reset has no value
+	pads_[15].valueIndex = 0;
 }
 
 int32_t SequencerControlState::getPadIndex(int32_t x, int32_t y) const {
@@ -502,15 +482,15 @@ bool SequencerControlState::handleVerticalEncoder(int32_t heldX, int32_t heldY, 
 		int32_t startIndex = pad.valueIndex;
 		int32_t direction = (offset > 0) ? 1 : -1;
 		int32_t attempts = 0;
-		
+
 		// Keep trying until we find an available scene number
 		while (attempts < numValues) {
 			// Move to next/prev value
 			pad.valueIndex = (pad.valueIndex + direction + numValues) % numValues;
-			
+
 			// Get the actual scene number
 			int32_t sceneNum = helpers::getValue(pad.type, pad.valueIndex);
-			
+
 			// Check if this scene number is already assigned to another pad
 			bool isAvailable = true;
 			for (size_t i = 0; i < pads_.size(); ++i) {
@@ -522,15 +502,15 @@ bool SequencerControlState::handleVerticalEncoder(int32_t heldX, int32_t heldY, 
 					}
 				}
 			}
-			
+
 			// If available, we're done
 			if (isAvailable) {
 				break;
 			}
-			
+
 			attempts++;
 		}
-		
+
 		// If all scene numbers are taken, stay at current
 		if (attempts >= numValues) {
 			pad.valueIndex = startIndex;
