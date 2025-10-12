@@ -176,19 +176,22 @@ RGB StepSequencerMode::getNoteGradientColor(int32_t yPos) const {
 void StepSequencerMode::displayOctaveValue(int32_t octave) {
 	if (!display) return;
 
+	char buffer[8];
 	if (octave > 0) {
-		char buffer[8];
 		buffer[0] = '+';
 		buffer[1] = '0' + octave;
 		buffer[2] = '\0';
-		display->displayPopup(buffer);
 	}
 	else if (octave < 0) {
-		display->displayPopup(octave);
+		buffer[0] = '-';
+		buffer[1] = '0' + (-octave); // Convert to positive for display
+		buffer[2] = '\0';
 	}
 	else {
-		display->displayPopup("0");
+		buffer[0] = '0';
+		buffer[1] = '\0';
 	}
+	display->displayPopup(buffer);
 }
 
 bool StepSequencerMode::handleVerticalEncoder(int32_t offset) {
