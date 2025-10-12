@@ -197,22 +197,42 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 		if (pressed) {
 			// SAVE button = capture scene
 			if (Buttons::isButtonPressed(deluge::hid::button::SAVE)) {
-				// Capture scene
+				// Capture scene - bounds check first!
+				if (ControlPad::kMaxSceneDataSize < 12) { // Need at least 12 bytes
+					if (display) {
+						display->displayPopup("SCENE TOO BIG");
+					}
+					pad.held = true;
+					refreshSidebar();
+					return true;
+				}
+
 				size_t modeDataSize = mode->captureScene(&pad.sceneData[4], ControlPad::kMaxSceneDataSize - 4);
-				if (modeDataSize > 0) {
+				if (modeDataSize > 0 && modeDataSize <= (ControlPad::kMaxSceneDataSize - 12)) {
 					// Store mode data size
 					memcpy(&pad.sceneData[0], &modeDataSize, sizeof(uint32_t));
 
-					// Capture control state (excluding scene pads)
-					size_t controlStateSize = captureState(&pad.sceneData[4 + modeDataSize + 4],
-					                                        ControlPad::kMaxSceneDataSize - 4 - modeDataSize - 4);
-					memcpy(&pad.sceneData[4 + modeDataSize], &controlStateSize, sizeof(uint32_t));
+					// Bounds check for control state
+					size_t remainingSpace = ControlPad::kMaxSceneDataSize - 4 - modeDataSize - 4;
+					if (remainingSpace > 0) {
+						// Capture control state (excluding scene pads)
+						size_t controlStateSize = captureState(&pad.sceneData[4 + modeDataSize + 4], remainingSpace);
+						memcpy(&pad.sceneData[4 + modeDataSize], &controlStateSize, sizeof(uint32_t));
 
-					pad.sceneSize = 8 + modeDataSize + controlStateSize;
-					pad.sceneValid = true;
+						pad.sceneSize = 8 + modeDataSize + controlStateSize;
+						pad.sceneValid = true;
 
+						if (display) {
+							display->displayPopup("CAPTURED");
+						}
+					} else {
+						if (display) {
+							display->displayPopup("SCENE TOO BIG");
+						}
+					}
+				} else {
 					if (display) {
-						display->displayPopup("CAPTURED");
+						display->displayPopup("CAPTURE FAILED");
 					}
 				}
 				pad.held = true;

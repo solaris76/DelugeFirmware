@@ -85,7 +85,7 @@ private:
 	static constexpr int32_t kMaxScaleNotes = 32;
 
 	// Gate types for each step
-	enum class GateType : uint8_t {
+	enum class GateType : int32_t {
 		OFF = 0,   // No note, but step duration counts
 		ON = 1,    // Play note
 		SKIP = 2,  // Skip step entirely, jump to next
