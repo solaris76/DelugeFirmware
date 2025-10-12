@@ -904,7 +904,12 @@ bool PulseSequencerMode::evaluateRhythmPattern(int32_t stage, int32_t pulsePosit
 // ================================================================================================
 
 bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
-	// Only handle presses (not releases) for most controls
+	// Control columns (x16-x17) - delegate to base class (handles both presses and releases)
+	if (x >= kDisplayWidth) {
+		return SequencerMode::handlePadPress(x, y, velocity);
+	}
+
+	// Only handle presses (not releases) for mode-specific controls
 	if (velocity == 0) {
 		return false; // Let releases pass through
 	}
@@ -1042,7 +1047,7 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 	return false; // Didn't handle this pad
 }
 
-bool PulseSequencerMode::handleVerticalEncoder(int32_t offset) {
+bool PulseSequencerMode::handleModeSpecificVerticalEncoder(int32_t offset) {
 	// Scroll the entire left side (gate line + pulse counts + octave controls + notes)
 	displayState_.gateLineOffset += offset;
 

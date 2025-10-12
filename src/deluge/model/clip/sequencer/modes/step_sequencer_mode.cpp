@@ -57,6 +57,10 @@ void StepSequencerMode::initialize() {
 		// Wrap noteIndex to valid scale range
 		steps_[i].noteIndex = (numScaleNotes_ > 0) ? (i % numScaleNotes_) : 0;
 	}
+
+	// Customize control columns for Step Sequencer
+	// Replace x17 bottom (group 3) with GATE_LENGTH instead of CLOCK_DIV
+	controlColumnState_.getGroup(3).setType(ControlType::GATE_LENGTH);
 }
 
 void StepSequencerMode::cleanup() {
@@ -143,7 +147,7 @@ void StepSequencerMode::setNoteIndex(int32_t step, int32_t noteIndex) {
 	steps_[step].noteIndex = noteIndex;
 }
 
-int32_t StepSequencerMode::calculateNoteCode(const Step& step) const {
+int32_t StepSequencerMode::calculateNoteCode(const Step& step, const CombinedEffects& effects) const {
 	if (numScaleNotes_ == 0) return 60; // Default to middle C
 
 	Song* song = currentSong;
@@ -152,8 +156,8 @@ int32_t StepSequencerMode::calculateNoteCode(const Step& step) const {
 	int32_t rootNote = song->key.rootNote;
 	int32_t scaleDegree = scaleNotes_[step.noteIndex]; // 0-11
 
-	// Calculate: rootNote + scaleDegree + C3 offset (48 for MIDI note C3) + octave shift
-	int32_t noteCode = rootNote + scaleDegree + 48 + (step.octave * 12);
+	// Calculate: rootNote + scaleDegree + C3 offset (48 for MIDI note C3) + step octave + control octave + transpose
+	int32_t noteCode = rootNote + scaleDegree + 48 + (step.octave * 12) + (effects.octaveShift * 12) + effects.transpose;
 
 	// Clamp to MIDI range
 	if (noteCode < 0) noteCode = 0;
@@ -194,7 +198,7 @@ void StepSequencerMode::displayOctaveValue(int32_t octave) {
 	display->displayPopup(buffer);
 }
 
-bool StepSequencerMode::handleVerticalEncoder(int32_t offset) {
+bool StepSequencerMode::handleModeSpecificVerticalEncoder(int32_t offset) {
 	if (!initialized_ || numScaleNotes_ == 0) {
 		return false;
 	}
@@ -295,23 +299,18 @@ bool StepSequencerMode::renderPads(uint32_t whichRows, RGB* image, uint8_t occup
 
 bool StepSequencerMode::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
                                       uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
-	// Blank out sidebar - no controls needed for step sequencer
-	for (int32_t y = 0; y < kDisplayHeight; y++) {
-		if (whichRows & (1 << y)) {
-			image[y][kDisplayWidth] = RGB{0, 0, 0};      // x16
-			image[y][kDisplayWidth + 1] = RGB{0, 0, 0};  // x17
-			if (occupancyMask) {
-				occupancyMask[y][kDisplayWidth] = 0;
-				occupancyMask[y][kDisplayWidth + 1] = 0;
-			}
-		}
-	}
-	return true;
+	// Use base class implementation to render control columns
+	return SequencerMode::renderSidebar(whichRows, image, occupancyMask);
 }
 
 bool StepSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
+	// Let base class handle control columns (x16-x17)
+	if (x >= kDisplayWidth) {
+		return SequencerMode::handlePadPress(x, y, velocity);
+	}
+
 	// Only handle main grid pads (x0-x15) and presses (not releases)
-	if (x < 0 || x >= kDisplayWidth || velocity == 0) {
+	if (x < 0 || velocity == 0) {
 		return false;
 	}
 
@@ -355,7 +354,9 @@ bool StepSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 			setNoteIndex(x, actualNoteIndex);
 
 			if (display) {
-				int32_t noteCode = calculateNoteCode(steps_[x]);
+				// Show note with current control column effects applied
+				CombinedEffects effects = getCombinedEffects();
+				int32_t noteCode = calculateNoteCode(steps_[x], effects);
 				char buffer[16];
 				noteCodeToString(noteCode, buffer, nullptr, true);
 				display->displayPopup(buffer);
@@ -376,17 +377,29 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 
 	ModelStackWithTimelineCounter* modelStack = static_cast<ModelStackWithTimelineCounter*>(modelStackPtr);
 
-	// Calculate timing on first call
+	// Get control column effects
+	CombinedEffects effects = getCombinedEffects();
+
+	// Calculate base timing on first call
 	if (ticksPerSixteenthNote_ == 0) {
 		ticksPerSixteenthNote_ = modelStack->song->getSixteenthNoteLength();
+	}
+
+	// Apply clock divider to timing
+	// Positive = slower (/2, /4), Negative = faster (*2, *4)
+	int32_t adjustedTicksPerStep = ticksPerSixteenthNote_;
+	if (effects.clockDivider > 1) {
+		adjustedTicksPerStep *= effects.clockDivider; // Divide: slower
+	} else if (effects.clockDivider < -1) {
+		adjustedTicksPerStep /= (-effects.clockDivider); // Multiply: faster
 	}
 
 	// Always update scale notes (like Pulse Sequencer does)
 	updateScaleNotes(modelStackPtr);
 
-	// Check if we're at a 16th note boundary
-	if (!atDivisionBoundary(absolutePlaybackPos, ticksPerSixteenthNote_)) {
-		return ticksUntilNextDivision(absolutePlaybackPos, ticksPerSixteenthNote_);
+	// Check if we're at a step boundary
+	if (!atDivisionBoundary(absolutePlaybackPos, adjustedTicksPerStep)) {
+		return ticksUntilNextDivision(absolutePlaybackPos, adjustedTicksPerStep);
 	}
 
 	// Stop previous note if still playing
@@ -401,11 +414,12 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 		const Step& step = steps_[currentStep_];
 
 		if (step.gateType == GateType::ON) {
-			// Play this step
-			int32_t noteCode = calculateNoteCode(step);
+			// Play this step with control column effects applied
+			int32_t noteCode = calculateNoteCode(step, effects);
 
 			if (noteCode >= 0 && noteCode <= 127) {
-				int32_t noteLength = ticksPerSixteenthNote_ * 3 / 4; // 75% gate length
+				// Apply gate length from control columns (percentage)
+				int32_t noteLength = (adjustedTicksPerStep * effects.gateLength) / 100;
 				playNote(modelStackPtr, noteCode, 100, noteLength);
 				activeNoteCode_ = noteCode;
 			}

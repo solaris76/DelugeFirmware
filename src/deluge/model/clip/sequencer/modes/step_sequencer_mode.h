@@ -61,8 +61,11 @@ public:
 	// Pad input
 	bool handlePadPress(int32_t x, int32_t y, int32_t velocity) override;
 
-	// Vertical encoder - scroll note selection
-	bool handleVerticalEncoder(int32_t offset) override;
+protected:
+	// Vertical encoder - scroll note selection (mode-specific)
+	bool handleModeSpecificVerticalEncoder(int32_t offset) override;
+
+public:
 
 	// Playback - plays the sequence at 16th note intervals
 	int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) override;
@@ -107,7 +110,7 @@ private:
 	void cycleGateType(int32_t step);
 	void adjustOctave(int32_t step, int32_t delta);
 	void setNoteIndex(int32_t step, int32_t noteIndex);
-	int32_t calculateNoteCode(const Step& step) const;
+	int32_t calculateNoteCode(const Step& step, const CombinedEffects& effects) const;
 	RGB getNoteGradientColor(int32_t yPos) const; // y3=blue, y7=magenta
 	void displayOctaveValue(int32_t octave);
 };

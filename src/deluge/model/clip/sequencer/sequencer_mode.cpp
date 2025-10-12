@@ -34,8 +34,8 @@ bool SequencerMode::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth 
 		return false;
 	}
 
-	// Render control columns on sidebar (x14-x15, split into 4 groups)
-	controlColumnState_.render(image);
+	// Render control columns on sidebar (x16-x17, split into 4 groups)
+	controlColumnState_.render(image, occupancyMask);
 
 	return true; // We handled the sidebar
 }
@@ -75,8 +75,8 @@ bool SequencerMode::handleVerticalEncoder(int32_t offset) {
 		return controlColumnState_.handleVerticalEncoder(heldControlColumnX_, heldControlColumnY_, offset);
 	}
 
-	// Otherwise, allow default behavior (scrolling, etc.)
-	return false;
+	// Otherwise, delegate to mode-specific implementation
+	return handleModeSpecificVerticalEncoder(offset);
 }
 
 bool SequencerMode::handleVerticalEncoderButton() {

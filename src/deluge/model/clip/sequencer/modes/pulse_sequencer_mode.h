@@ -60,8 +60,11 @@ public:
 	// Override pad input to handle user interaction
 	bool handlePadPress(int32_t x, int32_t y, int32_t velocity) override;
 
-	// Override vertical encoder for view scrolling
-	bool handleVerticalEncoder(int32_t offset) override;
+protected:
+	// Override vertical encoder for view scrolling (mode-specific)
+	bool handleModeSpecificVerticalEncoder(int32_t offset) override;
+
+public:
 
 	// Override playback to generate pulsed notes
 	int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) override;

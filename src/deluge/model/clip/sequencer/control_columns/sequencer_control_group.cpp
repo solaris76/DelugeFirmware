@@ -17,14 +17,19 @@
 
 #include "model/clip/sequencer/control_columns/sequencer_control_group.h"
 #include "hid/display/display.h"
+#include "hid/led/pad_leds.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
 
 namespace deluge::model::clip::sequencer {
 
-// Available values for each control type
+// Constants
 namespace {
-	// Clock divider: *2, /1, /2, /3, ... /64
+	constexpr int32_t kNumPadsPerGroup = 4;
+	constexpr uint8_t kFullBrightness = 255;
+	constexpr uint8_t kDimBrightness = 32; // 12.5% brightness (255 / 8)
+
+	// Available values for each control type
 	constexpr int32_t kClockDivValues[] = {
 		-2, // *2 (negative = multiply)
 		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
@@ -33,134 +38,22 @@ namespace {
 		49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64
 	};
 
-	// Octave: -5 to +5
 	constexpr int32_t kOctaveValues[] = {
 		-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5
 	};
 
-	// Transpose: -12 to +12
 	constexpr int32_t kTransposeValues[] = {
 		-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1,
 		0,
 		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 	};
 
-	// Scene: placeholder
 	constexpr int32_t kSceneValues[] = {0, 1, 2, 3};
-}
 
-void SequencerControlGroup::initialize(ControlType type) {
-	type_ = type;
-	activePad_ = -1;
-	heldPad_ = -1;
+	constexpr int32_t kGateLengthValues[] = {10, 25, 50, 75, 90, 100};
 
-	// Initialize pad data with default value indices
-	for (int32_t i = 0; i < 4; i++) {
-		pads_[i].valueIndex = 0; // Start at first value
-		pads_[i].mode = PadMode::TOGGLE;
-	}
-}
-
-void SequencerControlGroup::setType(ControlType newType) {
-	if (newType != type_) {
-		type_ = newType;
-		activePad_ = -1; // Reset active pad when changing type
-		heldPad_ = -1;
-		initialize(type_); // Reload values
-	}
-}
-
-const int32_t* SequencerControlGroup::getAvailableValues() const {
-	switch (type_) {
-	case ControlType::CLOCK_DIV:  return kClockDivValues;
-	case ControlType::OCTAVE:     return kOctaveValues;
-	case ControlType::TRANSPOSE:  return kTransposeValues;
-	case ControlType::SCENE:      return kSceneValues;
-	default:                      return nullptr;
-	}
-}
-
-int32_t SequencerControlGroup::getNumAvailableValues() const {
-	switch (type_) {
-	case ControlType::CLOCK_DIV:  return sizeof(kClockDivValues) / sizeof(kClockDivValues[0]);
-	case ControlType::OCTAVE:     return sizeof(kOctaveValues) / sizeof(kOctaveValues[0]);
-	case ControlType::TRANSPOSE:  return sizeof(kTransposeValues) / sizeof(kTransposeValues[0]);
-	case ControlType::SCENE:      return sizeof(kSceneValues) / sizeof(kSceneValues[0]);
-	default:                      return 0;
-	}
-}
-
-int32_t SequencerControlGroup::getValue(int32_t padIndex) const {
-	if (padIndex < 0 || padIndex >= 4) {
-		return 0;
-	}
-
-	const int32_t* values = getAvailableValues();
-	int32_t numValues = getNumAvailableValues();
-
-	if (!values || numValues == 0) {
-		return 0;
-	}
-
-	int32_t valueIndex = pads_[padIndex].valueIndex;
-	if (valueIndex < 0 || valueIndex >= numValues) {
-		return values[0]; // Default to first value
-	}
-
-	return values[valueIndex];
-}
-
-const char* SequencerControlGroup::getTypeName() const {
-	switch (type_) {
-	case ControlType::CLOCK_DIV:  return "CLOCK DIV";
-	case ControlType::OCTAVE:     return "OCTAVE";
-	case ControlType::TRANSPOSE:  return "TRANSPOSE";
-	case ControlType::SCENE:      return "SCENE";
-	default:                      return "UNKNOWN";
-	}
-}
-
-RGB SequencerControlGroup::getColorForType() const {
-	switch (type_) {
-	case ControlType::CLOCK_DIV:  return RGB{255, 0, 0};    // Red
-	case ControlType::OCTAVE:     return RGB{255, 128, 0};  // Orange
-	case ControlType::TRANSPOSE:  return RGB{255, 255, 0};  // Yellow
-	case ControlType::SCENE:      return RGB{255, 0, 255};  // Magenta
-	default:                      return RGB{128, 128, 128}; // Gray
-	}
-}
-
-const char* SequencerControlGroup::formatValue(int32_t value) const {
-	static char buffer[16];
-
-	switch (type_) {
-	case ControlType::CLOCK_DIV:
-		if (value < 0) {
-			// Multiply (negative values)
-			buffer[0] = '*';
-			int32_t absValue = -value;
-			buffer[1] = '0' + absValue;
-			buffer[2] = '\0';
-			return buffer;
-		}
-		else if (value == 1) {
-			return "/1";
-		}
-		else {
-			buffer[0] = '/';
-			if (value < 10) {
-				buffer[1] = '0' + value;
-				buffer[2] = '\0';
-			}
-			else {
-				buffer[1] = '0' + (value / 10);
-				buffer[2] = '0' + (value % 10);
-				buffer[3] = '\0';
-			}
-			return buffer;
-		}
-	case ControlType::OCTAVE:
-	case ControlType::TRANSPOSE:
+	// Helper: Format signed integer with + or - prefix
+	void formatSignedInt(char* buffer, int32_t value) {
 		if (value > 0) {
 			buffer[0] = '+';
 			if (value < 10) {
@@ -190,12 +83,204 @@ const char* SequencerControlGroup::formatValue(int32_t value) const {
 			buffer[0] = '0';
 			buffer[1] = '\0';
 		}
+	}
+
+	// Helper: Request UI refresh for sidebar
+	void refreshSidebar() {
+		uiNeedsRendering(&instrumentClipView, 0, 0xFFFFFFFF);
+		PadLEDs::sendOutSidebarColoursSoon();
+	}
+}
+
+void SequencerControlGroup::initialize(ControlType type) {
+	type_ = type;
+	activePad_ = -1;
+	heldPad_ = -1;
+
+	// Set default value indices for each pad based on control type
+	int32_t defaultIndices[kNumPadsPerGroup] = {0, 0, 0, 0};
+
+	switch (type) {
+	case ControlType::CLOCK_DIV:
+		// /1, /2, /4, /16
+		// kClockDivValues: [-2, 1, 2, 3, 4, ...]
+		defaultIndices[0] = 1;  // /1 (value: 1)
+		defaultIndices[1] = 2;  // /2 (value: 2)
+		defaultIndices[2] = 4;  // /4 (value: 4)
+		defaultIndices[3] = 16; // /16 (value: 16)
+		break;
+
+	case ControlType::OCTAVE:
+		// -1, 0, +1, +2
+		// kOctaveValues: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]
+		defaultIndices[0] = 4;  // -1 (value: -1)
+		defaultIndices[1] = 5;  // 0 (value: 0)
+		defaultIndices[2] = 6;  // +1 (value: 1)
+		defaultIndices[3] = 7;  // +2 (value: 2)
+		break;
+
+	case ControlType::TRANSPOSE:
+		// -7, -3, +3, +5
+		// kTransposeValues: [-12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, ...]
+		defaultIndices[0] = 5;  // -7 (value: -7)
+		defaultIndices[1] = 9;  // -3 (value: -3)
+		defaultIndices[2] = 15; // +3 (value: 3)
+		defaultIndices[3] = 17; // +5 (value: 5)
+		break;
+
+	case ControlType::GATE_LENGTH:
+		// 25%, 50%, 75%, 100%
+		// kGateLengthValues: [10, 25, 50, 75, 90, 100]
+		defaultIndices[0] = 1;  // 25%
+		defaultIndices[1] = 2;  // 50%
+		defaultIndices[2] = 3;  // 75%
+		defaultIndices[3] = 5;  // 100%
+		break;
+
+	case ControlType::SCENE:
+	default:
+		// Default: first 4 values (0, 1, 2, 3)
+		for (int32_t i = 0; i < kNumPadsPerGroup; i++) {
+			defaultIndices[i] = i;
+		}
+		break;
+	}
+
+	// Initialize pads with default values
+	for (int32_t i = 0; i < kNumPadsPerGroup; i++) {
+		pads_[i].valueIndex = defaultIndices[i];
+		pads_[i].mode = PadMode::TOGGLE;
+	}
+}
+
+void SequencerControlGroup::setType(ControlType newType) {
+	if (newType != type_) {
+		type_ = newType;
+		activePad_ = -1; // Reset active pad when changing type
+		heldPad_ = -1;
+		initialize(type_); // Reload values
+	}
+}
+
+const int32_t* SequencerControlGroup::getAvailableValues() const {
+	switch (type_) {
+	case ControlType::CLOCK_DIV:   return kClockDivValues;
+	case ControlType::OCTAVE:      return kOctaveValues;
+	case ControlType::TRANSPOSE:   return kTransposeValues;
+	case ControlType::SCENE:       return kSceneValues;
+	case ControlType::GATE_LENGTH: return kGateLengthValues;
+	default:                       return nullptr;
+	}
+}
+
+int32_t SequencerControlGroup::getNumAvailableValues() const {
+	switch (type_) {
+	case ControlType::CLOCK_DIV:   return sizeof(kClockDivValues) / sizeof(kClockDivValues[0]);
+	case ControlType::OCTAVE:      return sizeof(kOctaveValues) / sizeof(kOctaveValues[0]);
+	case ControlType::TRANSPOSE:   return sizeof(kTransposeValues) / sizeof(kTransposeValues[0]);
+	case ControlType::SCENE:       return sizeof(kSceneValues) / sizeof(kSceneValues[0]);
+	case ControlType::GATE_LENGTH: return sizeof(kGateLengthValues) / sizeof(kGateLengthValues[0]);
+	default:                       return 0;
+	}
+}
+
+int32_t SequencerControlGroup::getValue(int32_t padIndex) const {
+	if (padIndex < 0 || padIndex >= kNumPadsPerGroup) {
+		return 0;
+	}
+
+	const int32_t* values = getAvailableValues();
+	int32_t numValues = getNumAvailableValues();
+
+	if (!values || numValues == 0) {
+		return 0;
+	}
+
+	int32_t valueIndex = pads_[padIndex].valueIndex;
+	if (valueIndex < 0 || valueIndex >= numValues) {
+		return values[0]; // Default to first value
+	}
+
+	return values[valueIndex];
+}
+
+const char* SequencerControlGroup::getTypeName() const {
+	switch (type_) {
+	case ControlType::CLOCK_DIV:   return "CLOCK DIV";
+	case ControlType::OCTAVE:      return "OCTAVE";
+	case ControlType::TRANSPOSE:   return "TRANSPOSE";
+	case ControlType::SCENE:       return "SCENE";
+	case ControlType::GATE_LENGTH: return "GATE LEN";
+	default:                       return "UNKNOWN";
+	}
+}
+
+RGB SequencerControlGroup::getColorForType() const {
+	switch (type_) {
+	case ControlType::CLOCK_DIV:   return RGB{255, 0, 0};    // Red
+	case ControlType::OCTAVE:      return RGB{255, 128, 0};  // Orange
+	case ControlType::TRANSPOSE:   return RGB{255, 255, 0};  // Yellow
+	case ControlType::SCENE:       return RGB{255, 0, 255};  // Magenta
+	case ControlType::GATE_LENGTH: return RGB{0, 255, 128};  // Cyan/Green
+	default:                       return RGB{128, 128, 128}; // Gray
+	}
+}
+
+const char* SequencerControlGroup::formatValue(int32_t value) const {
+	static char buffer[16];
+
+	switch (type_) {
+	case ControlType::CLOCK_DIV:
+		if (value < 0) {
+			buffer[0] = '*';
+			buffer[1] = '0' + (-value);
+			buffer[2] = '\0';
+		}
+		else if (value == 1) {
+			return "/1";
+		}
+		else {
+			buffer[0] = '/';
+			if (value < 10) {
+				buffer[1] = '0' + value;
+				buffer[2] = '\0';
+			}
+			else {
+				buffer[1] = '0' + (value / 10);
+				buffer[2] = '0' + (value % 10);
+				buffer[3] = '\0';
+			}
+		}
 		return buffer;
+
+	case ControlType::OCTAVE:
+	case ControlType::TRANSPOSE:
+		formatSignedInt(buffer, value);
+		return buffer;
+
 	case ControlType::SCENE:
 		buffer[0] = 'S';
-		buffer[1] = '0' + (value + 1); // 1-indexed for display
+		buffer[1] = '0' + (value + 1); // 1-indexed
 		buffer[2] = '\0';
 		return buffer;
+
+	case ControlType::GATE_LENGTH:
+		if (value >= 100) {
+			return "100%";
+		}
+		else if (value >= 10) {
+			buffer[0] = '0' + (value / 10);
+			buffer[1] = '0' + (value % 10);
+			buffer[2] = '%';
+			buffer[3] = '\0';
+		}
+		else {
+			buffer[0] = '0' + value;
+			buffer[1] = '%';
+			buffer[2] = '\0';
+		}
+		return buffer;
+
 	default:
 		return "?";
 	}
@@ -204,22 +289,26 @@ const char* SequencerControlGroup::formatValue(int32_t value) const {
 void SequencerControlGroup::render(RGB image[][kDisplayWidth + kSideBarWidth], int32_t x, int32_t yStart) {
 	RGB baseColor = getColorForType();
 
-	for (int32_t i = 0; i < 4; i++) {
+	for (int32_t i = 0; i < kNumPadsPerGroup; i++) {
 		int32_t y = yStart + i;
-		bool isActive = (activePad_ == i);
+		bool isBright = (activePad_ == i) || (heldPad_ == i);
 
-		// Active pad is bright, inactive is dim
-		uint8_t brightness = isActive ? 255 : 64;
-		image[y][x] = RGB{
-			static_cast<uint8_t>((baseColor.r * brightness) >> 8),
-			static_cast<uint8_t>((baseColor.g * brightness) >> 8),
-			static_cast<uint8_t>((baseColor.b * brightness) >> 8)
-		};
+		if (isBright) {
+			image[y][x] = baseColor;
+		}
+		else {
+			// Dim: divide by 8 for 12.5% brightness
+			image[y][x] = RGB{
+				static_cast<uint8_t>(baseColor.r / 8),
+				static_cast<uint8_t>(baseColor.g / 8),
+				static_cast<uint8_t>(baseColor.b / 8)
+			};
+		}
 	}
 }
 
 bool SequencerControlGroup::handlePad(int32_t yLocal, int32_t velocity) {
-	if (yLocal < 0 || yLocal >= 4) {
+	if (yLocal < 0 || yLocal >= kNumPadsPerGroup) {
 		return false;
 	}
 
@@ -227,26 +316,20 @@ bool SequencerControlGroup::handlePad(int32_t yLocal, int32_t velocity) {
 	PadMode mode = pads_[yLocal].mode;
 
 	if (pressed) {
-		// Pad pressed
 		heldPad_ = yLocal;
 
 		if (mode == PadMode::TOGGLE) {
-			// Toggle: flip state
-			if (activePad_ == yLocal) {
-				activePad_ = -1;
-				if (display) {
-					display->displayPopup("OFF");
-				}
-			}
-			else {
-				activePad_ = yLocal;
-				if (display) {
-					display->displayPopup(formatValue(getValue(yLocal)));
-				}
+			// Toggle mode: flip state
+			bool wasActive = (activePad_ == yLocal);
+			activePad_ = wasActive ? -1 : yLocal;
+
+			if (display) {
+				const char* message = wasActive ? "OFF" : formatValue(getValue(yLocal));
+				display->displayPopup(message);
 			}
 		}
-		else { // MOMENTARY
-			// Momentary: activate on press
+		else {
+			// Momentary mode: activate on press
 			activePad_ = yLocal;
 			if (display) {
 				display->displayPopup(formatValue(getValue(yLocal)));
@@ -258,39 +341,32 @@ bool SequencerControlGroup::handlePad(int32_t yLocal, int32_t velocity) {
 		if (heldPad_ == yLocal) {
 			heldPad_ = -1;
 
-			// If momentary mode, deactivate on release
+			// Momentary mode: deactivate on release
 			if (mode == PadMode::MOMENTARY && activePad_ == yLocal) {
 				activePad_ = -1;
 			}
 		}
 	}
 
-	// Trigger UI refresh to update pad brightness
-	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
-
+	refreshSidebar();
 	return true;
 }
 
 bool SequencerControlGroup::handleVerticalEncoder(int32_t yLocal, int32_t offset) {
-	if (yLocal < 0 || yLocal >= 4) {
+	if (yLocal < 0 || yLocal >= kNumPadsPerGroup) {
 		return false;
 	}
 
-	// Cycle through available values
 	int32_t numValues = getNumAvailableValues();
 	if (numValues == 0) {
 		return false;
 	}
 
+	// Cycle through available values with wrapping
 	int32_t& valueIndex = pads_[yLocal].valueIndex;
-	valueIndex += offset;
-
-	// Wrap around
-	while (valueIndex < 0) {
+	valueIndex = (valueIndex + offset) % numValues;
+	if (valueIndex < 0) {
 		valueIndex += numValues;
-	}
-	while (valueIndex >= numValues) {
-		valueIndex -= numValues;
 	}
 
 	// Show current value
@@ -298,14 +374,12 @@ bool SequencerControlGroup::handleVerticalEncoder(int32_t yLocal, int32_t offset
 		display->displayPopup(formatValue(getValue(yLocal)));
 	}
 
-	// Trigger UI refresh
-	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
-
+	refreshSidebar();
 	return true;
 }
 
 bool SequencerControlGroup::handleVerticalEncoderButton(int32_t yLocal) {
-	if (yLocal < 0 || yLocal >= 4) {
+	if (yLocal < 0 || yLocal >= kNumPadsPerGroup) {
 		return false;
 	}
 
@@ -313,7 +387,6 @@ bool SequencerControlGroup::handleVerticalEncoderButton(int32_t yLocal) {
 	PadMode& mode = pads_[yLocal].mode;
 	mode = (mode == PadMode::TOGGLE) ? PadMode::MOMENTARY : PadMode::TOGGLE;
 
-	// Show current mode
 	if (display) {
 		display->displayPopup(mode == PadMode::TOGGLE ? "TOGGLE" : "MOMENTARY");
 	}
@@ -322,10 +395,10 @@ bool SequencerControlGroup::handleVerticalEncoderButton(int32_t yLocal) {
 }
 
 int32_t SequencerControlGroup::getActiveValue() const {
-	if (activePad_ >= 0 && activePad_ < 4) {
+	if (activePad_ >= 0 && activePad_ < kNumPadsPerGroup) {
 		return getValue(activePad_);
 	}
-	return 0; // Default neutral value
+	return 0;
 }
 
 bool SequencerControlGroup::isActive() const {
@@ -363,6 +436,13 @@ int32_t SequencerControlGroup::getTranspose() const {
 		return getValue(activePad_);
 	}
 	return 0; // Default: no transpose
+}
+
+int32_t SequencerControlGroup::getGateLength() const {
+	if (type_ == ControlType::GATE_LENGTH && isActive()) {
+		return getValue(activePad_);
+	}
+	return 75; // Default: 75%
 }
 
 } // namespace deluge::model::clip::sequencer

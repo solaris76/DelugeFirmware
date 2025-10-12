@@ -17,10 +17,19 @@
 
 #include "model/clip/sequencer/control_columns/sequencer_control_state.h"
 #include "hid/display/display.h"
+#include "hid/led/pad_leds.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
 
 namespace deluge::model::clip::sequencer {
+
+namespace {
+	// Helper: Request UI refresh for sidebar
+	void refreshSidebar() {
+		uiNeedsRendering(&instrumentClipView, 0, 0xFFFFFFFF);
+		PadLEDs::sendOutSidebarColoursSoon();
+	}
+}
 
 SequencerControlState::SequencerControlState() {
 	initialize();
@@ -38,7 +47,8 @@ void SequencerControlState::initialize() {
 	groups_[3].initialize(ControlType::CLOCK_DIV);
 }
 
-void SequencerControlState::render(RGB image[][kDisplayWidth + kSideBarWidth]) {
+void SequencerControlState::render(RGB image[][kDisplayWidth + kSideBarWidth],
+                                    uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
 	// x16 column (kDisplayWidth = 16)
 	groups_[0].render(image, kDisplayWidth, 4);     // Top group (y4-y7)
 	groups_[1].render(image, kDisplayWidth, 0);     // Bottom group (y0-y3)
@@ -46,6 +56,14 @@ void SequencerControlState::render(RGB image[][kDisplayWidth + kSideBarWidth]) {
 	// x17 column
 	groups_[2].render(image, kDisplayWidth + 1, 4); // Top group (y4-y7)
 	groups_[3].render(image, kDisplayWidth + 1, 0); // Bottom group (y0-y3)
+
+	// Set occupancy mask for all control column pads
+	if (occupancyMask) {
+		for (int32_t y = 0; y < kDisplayHeight; y++) {
+			occupancyMask[y][kDisplayWidth] = 64;     // x16
+			occupancyMask[y][kDisplayWidth + 1] = 64; // x17
+		}
+	}
 }
 
 bool SequencerControlState::mapToGroup(int32_t x, int32_t y, int32_t& groupIndex, int32_t& yLocal) const {
@@ -88,7 +106,11 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity) {
 		return false;
 	}
 
-	return groups_[groupIndex].handlePad(yLocal, velocity);
+	bool handled = groups_[groupIndex].handlePad(yLocal, velocity);
+	if (handled) {
+		refreshSidebar();
+	}
+	return handled;
 }
 
 bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY, int32_t offset) {
@@ -114,26 +136,42 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 	// Cycle control type
 	auto& group = groups_[groupIndex];
 	int32_t currentType = static_cast<int32_t>(group.getType());
-	int32_t maxType = static_cast<int32_t>(ControlType::TRANSPOSE) + 1; // Skip SCENE for now
 
-	int32_t newType = currentType + (offset > 0 ? 1 : -1);
-	if (newType < 0) {
-		newType = maxType - 1;
+	// Skip SCENE in cycling (for now)
+	// Available types: CLOCK_DIV (0), OCTAVE (1), TRANSPOSE (2), GATE_LENGTH (4)
+	constexpr int32_t availableTypes[] = {
+		static_cast<int32_t>(ControlType::CLOCK_DIV),
+		static_cast<int32_t>(ControlType::OCTAVE),
+		static_cast<int32_t>(ControlType::TRANSPOSE),
+		static_cast<int32_t>(ControlType::GATE_LENGTH)
+	};
+	constexpr int32_t numTypes = sizeof(availableTypes) / sizeof(availableTypes[0]);
+
+	// Find current type index
+	int32_t currentIndex = 0;
+	for (int32_t i = 0; i < numTypes; i++) {
+		if (availableTypes[i] == currentType) {
+			currentIndex = i;
+			break;
+		}
 	}
-	else if (newType >= maxType) {
-		newType = 0;
+
+	// Cycle to next/prev type
+	int32_t newIndex = currentIndex + (offset > 0 ? 1 : -1);
+	if (newIndex < 0) {
+		newIndex = numTypes - 1;
+	}
+	else if (newIndex >= numTypes) {
+		newIndex = 0;
 	}
 
-	group.setType(static_cast<ControlType>(newType));
+	group.setType(static_cast<ControlType>(availableTypes[newIndex]));
 
-	// Show popup
 	if (display) {
 		display->displayPopup(group.getTypeName());
 	}
 
-	// Trigger UI refresh to update pad colors
-	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0);
-
+	refreshSidebar();
 	return true;
 }
 
@@ -182,6 +220,9 @@ CombinedEffects SequencerControlState::getCombinedEffects() const {
 				break;
 			case ControlType::SCENE:
 				effects.sceneIndex = group.getActiveValue();
+				break;
+			case ControlType::GATE_LENGTH:
+				effects.gateLength = group.getGateLength();
 				break;
 			default:
 				break;

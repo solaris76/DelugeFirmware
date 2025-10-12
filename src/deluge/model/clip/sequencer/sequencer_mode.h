@@ -75,8 +75,9 @@ public:
 	// Vertical encoder - handle vertical scrolling or control column value adjustment
 	// Returns true if the mode handled the encoder, false to use default behavior
 	// offset: encoder rotation amount (positive = clockwise, negative = counter-clockwise)
-	// Default implementation routes to control columns if pad is held, otherwise allows scrolling
-	virtual bool handleVerticalEncoder(int32_t offset);
+	// This method is FINAL - it handles control columns automatically then delegates to handleModeSpecificVerticalEncoder
+	// Derived classes should NOT override this - override handleModeSpecificVerticalEncoder instead
+	virtual bool handleVerticalEncoder(int32_t offset) final;
 
 	// Vertical encoder button - toggle momentary/toggle mode for control columns
 	// Returns true if the mode handled the button, false to use default behavior
@@ -94,6 +95,14 @@ public:
 	virtual void onMusicalDivision(void* modelStack) {}
 
 protected:
+	// ========== MODE-SPECIFIC ENCODER HANDLING ==========
+
+	// Mode-specific vertical encoder handling
+	// Override this in derived classes to implement custom scrolling/adjustment behavior
+	// This is called ONLY when control columns are NOT handling the encoder
+	// Return true if you handled it, false to use default clip view behavior
+	virtual bool handleModeSpecificVerticalEncoder(int32_t offset) { return false; }
+
 	// ========== SIMPLE HELPERS FOR SEQUENCER MODES ==========
 
 	// TIMING HELPERS - Musical divisions

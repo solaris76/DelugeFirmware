@@ -29,6 +29,7 @@ enum class ControlType {
 	OCTAVE,
 	TRANSPOSE,
 	SCENE, // Future
+	GATE_LENGTH, // Step sequencer specific
 	MAX
 };
 
@@ -69,6 +70,7 @@ public:
 	int32_t getClockDivider() const;  // Returns divider if CLOCK_DIV, else 1
 	int32_t getOctaveShift() const;   // Returns octave if OCTAVE, else 0
 	int32_t getTranspose() const;     // Returns semitones if TRANSPOSE, else 0
+	int32_t getGateLength() const;    // Returns percentage if GATE_LENGTH, else 75
 
 private:
 	struct PadData {
