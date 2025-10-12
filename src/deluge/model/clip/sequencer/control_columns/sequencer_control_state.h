@@ -37,11 +37,8 @@ struct ControlPad {
 	PadMode mode = PadMode::TOGGLE;
 	bool active = false;
 	bool held = false;
-
-	// Scene data (only used when type == SCENE)
-	static constexpr size_t kMaxSceneDataSize = 512;
-	uint8_t sceneData[kMaxSceneDataSize];
-	size_t sceneSize = 0;
+	
+	// Scene validity (scene data stored in shared buffer)
 	bool sceneValid = false;
 };
 
@@ -77,6 +74,12 @@ private:
 	// [0-7] = x16 (y0-y7)
 	// [8-15] = x17 (y0-y7)
 	std::array<ControlPad, 16> pads_;
+
+	// Shared scene buffers (8 scenes max, one buffer per scene)
+	static constexpr size_t kMaxSceneDataSize = 512;
+	static constexpr size_t kMaxScenes = 8;
+	uint8_t sceneBuffers_[kMaxScenes][kMaxSceneDataSize];
+	size_t sceneSizes_[kMaxScenes];
 
 	// Helper to map x,y to pad index
 	int32_t getPadIndex(int32_t x, int32_t y) const;

@@ -45,6 +45,10 @@ namespace {
 }
 
 SequencerControlState::SequencerControlState() {
+	// Initialize scene buffers
+	for (size_t i = 0; i < kMaxScenes; ++i) {
+		sceneSizes_[i] = 0;
+	}
 	initialize();
 }
 
@@ -197,19 +201,22 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 		if (pressed) {
 			// SAVE button = capture scene
 			if (Buttons::isButtonPressed(deluge::hid::button::SAVE)) {
-				// Simplified: Only capture mode-specific pattern data, no control state
-				size_t modeDataSize = mode->captureScene(pad.sceneData, ControlPad::kMaxSceneDataSize);
-				
-				if (modeDataSize > 0 && modeDataSize <= ControlPad::kMaxSceneDataSize) {
-					pad.sceneSize = modeDataSize;
-					pad.sceneValid = true;
+				int32_t sceneNum = pad.valueIndex;
+				if (sceneNum >= 0 && sceneNum < kMaxScenes) {
+					// Simplified: Only capture mode-specific pattern data to shared buffer
+					size_t modeDataSize = mode->captureScene(sceneBuffers_[sceneNum], kMaxSceneDataSize);
+					
+					if (modeDataSize > 0 && modeDataSize <= kMaxSceneDataSize) {
+						sceneSizes_[sceneNum] = modeDataSize;
+						pad.sceneValid = true;
 
-					if (display) {
-						display->displayPopup("CAPTURED");
-					}
-				} else {
-					if (display) {
-						display->displayPopup(modeDataSize > ControlPad::kMaxSceneDataSize ? "SCENE TOO BIG" : "CAPTURE FAILED");
+						if (display) {
+							display->displayPopup("CAPTURED");
+						}
+					} else {
+						if (display) {
+							display->displayPopup(modeDataSize > kMaxSceneDataSize ? "SCENE TOO BIG" : "CAPTURE FAILED");
+						}
 					}
 				}
 				pad.held = true;
@@ -219,10 +226,13 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 
 			// SHIFT button = clear scene
 			if (Buttons::isShiftButtonPressed()) {
-				pad.sceneValid = false;
-				pad.sceneSize = 0;
-				if (display) {
-					display->displayPopup("CLEARED");
+				int32_t sceneNum = pad.valueIndex;
+				if (sceneNum >= 0 && sceneNum < kMaxScenes) {
+					sceneSizes_[sceneNum] = 0;
+					pad.sceneValid = false;
+					if (display) {
+						display->displayPopup("CLEARED");
+					}
 				}
 				pad.held = true;
 				refreshSidebar();
@@ -231,15 +241,18 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 
 			// Otherwise = recall scene
 			if (pad.sceneValid) {
-				// Simplified: Only restore mode-specific pattern data
-				bool success = mode->recallScene(pad.sceneData, pad.sceneSize);
-				if (success) {
-					pad.active = true;
-					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				int32_t sceneNum = pad.valueIndex;
+				if (sceneNum >= 0 && sceneNum < kMaxScenes && sceneSizes_[sceneNum] > 0) {
+					// Simplified: Only restore mode-specific pattern data from shared buffer
+					bool success = mode->recallScene(sceneBuffers_[sceneNum], sceneSizes_[sceneNum]);
+					if (success) {
+						pad.active = true;
+						uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
 
-					if (display) {
-						int32_t val = helpers::getValue(pad.type, pad.valueIndex);
-						display->displayPopup(helpers::formatValue(pad.type, val));
+						if (display) {
+							int32_t val = helpers::getValue(pad.type, pad.valueIndex);
+							display->displayPopup(helpers::formatValue(pad.type, val));
+						}
 					}
 				}
 			}
