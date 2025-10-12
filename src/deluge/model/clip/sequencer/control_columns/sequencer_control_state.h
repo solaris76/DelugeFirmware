@@ -37,7 +37,7 @@ struct ControlPad {
 	PadMode mode = PadMode::TOGGLE;
 	bool active = false;
 	bool held = false;
-	
+
 	// Scene validity (scene data stored in shared buffer)
 	bool sceneValid = false;
 };

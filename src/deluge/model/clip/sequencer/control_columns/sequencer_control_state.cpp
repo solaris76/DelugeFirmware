@@ -205,7 +205,7 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 				if (sceneNum >= 0 && sceneNum < kMaxScenes) {
 					// Simplified: Only capture mode-specific pattern data to shared buffer
 					size_t modeDataSize = mode->captureScene(sceneBuffers_[sceneNum], kMaxSceneDataSize);
-					
+
 					if (modeDataSize > 0 && modeDataSize <= kMaxSceneDataSize) {
 						sceneSizes_[sceneNum] = modeDataSize;
 						pad.sceneValid = true;
