@@ -27,6 +27,39 @@ namespace deluge::model::clip::sequencer {
 
 // ========== CONTROL COLUMN DEFAULT IMPLEMENTATIONS ==========
 
+CombinedEffects SequencerMode::getCombinedEffects() const {
+	// Start with base control values
+	CombinedEffects effects;
+	effects.clockDivider = baseClockDivider_;
+	effects.octaveShift = baseOctaveShift_;
+	effects.transpose = baseTranspose_;
+	effects.direction = baseDirection_;
+	effects.sceneIndex = -1; // Scene is always from pads only
+
+	// Get pad effects (this may override base values)
+	CombinedEffects padEffects = controlColumnState_.getCombinedEffects();
+
+	// Merge: pad effects override base values if they're active
+	// For clock/octave/transpose/direction, if any pad is active, it overrides the base
+	// We check if pad effects differ from defaults to know if they're active
+	if (padEffects.clockDivider != 1) {
+		effects.clockDivider = padEffects.clockDivider;
+	}
+	if (padEffects.octaveShift != 0) {
+		effects.octaveShift = padEffects.octaveShift;
+	}
+	if (padEffects.transpose != 0) {
+		effects.transpose = padEffects.transpose;
+	}
+	if (padEffects.direction != 0) {
+		effects.direction = padEffects.direction;
+	}
+	// Scene is always from pads
+	effects.sceneIndex = padEffects.sceneIndex;
+
+	return effects;
+}
+
 bool SequencerMode::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
                                   uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
 	// Safety check

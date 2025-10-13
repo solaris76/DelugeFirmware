@@ -1475,13 +1475,14 @@ size_t PulseSequencerMode::captureScene(void* buffer, size_t maxSize) {
 	uint8_t* ptr = static_cast<uint8_t*>(buffer);
 	size_t offset = 0;
 
-	// Calculate required size for pattern data
+	// Calculate required size for pattern data + control values
 	size_t stagesSize = sizeof(stages_);
 	size_t perfControlsSize = sizeof(performanceControls_);
 	size_t displayStateSize = sizeof(displayState_.gateLineOffset);
-	size_t patternDataSize = stagesSize + perfControlsSize + displayStateSize;
+	size_t controlValuesSize = sizeof(int32_t) * 4; // clock, octave, transpose, direction
+	size_t totalSize = stagesSize + perfControlsSize + displayStateSize + controlValuesSize;
 
-	if (offset + patternDataSize > maxSize) {
+	if (offset + totalSize > maxSize) {
 		return 0; // Not enough space
 	}
 
@@ -1497,12 +1498,16 @@ size_t PulseSequencerMode::captureScene(void* buffer, size_t maxSize) {
 	memcpy(&ptr[offset], &displayState_.gateLineOffset, displayStateSize);
 	offset += displayStateSize;
 
-	// Save control column state
-	size_t controlStateSize = controlColumnState_.captureState(&ptr[offset], maxSize - offset);
-	if (controlStateSize == 0) {
-		return 0; // Failed to capture control state
-	}
-	offset += controlStateSize;
+	// Save active control values
+	CombinedEffects effects = getCombinedEffects();
+	memcpy(&ptr[offset], &effects.clockDivider, sizeof(int32_t));
+	offset += sizeof(int32_t);
+	memcpy(&ptr[offset], &effects.octaveShift, sizeof(int32_t));
+	offset += sizeof(int32_t);
+	memcpy(&ptr[offset], &effects.transpose, sizeof(int32_t));
+	offset += sizeof(int32_t);
+	memcpy(&ptr[offset], &effects.direction, sizeof(int32_t));
+	offset += sizeof(int32_t);
 
 	return offset;
 }
@@ -1518,9 +1523,10 @@ bool PulseSequencerMode::recallScene(const void* buffer, size_t size) {
 	size_t stagesSize = sizeof(stages_);
 	size_t perfControlsSize = sizeof(performanceControls_);
 	size_t displayStateSize = sizeof(displayState_.gateLineOffset);
-	size_t patternDataSize = stagesSize + perfControlsSize + displayStateSize;
+	size_t controlValuesSize = sizeof(int32_t) * 4;
+	size_t totalSize = stagesSize + perfControlsSize + displayStateSize + controlValuesSize;
 
-	if (size < patternDataSize) {
+	if (size < totalSize) {
 		return false; // Not enough data
 	}
 
@@ -1536,13 +1542,29 @@ bool PulseSequencerMode::recallScene(const void* buffer, size_t size) {
 	memcpy(&displayState_.gateLineOffset, &ptr[offset], displayStateSize);
 	offset += displayStateSize;
 
-	// Restore control column state (if present)
-	if (offset < size) {
-		if (!controlColumnState_.restoreState(&ptr[offset], size - offset)) {
-			// Control state restoration failed, but pattern data is valid
-			// This is not a fatal error (for backward compatibility)
-		}
-	}
+	// Restore control values
+	int32_t clockDivider, octaveShift, transpose, direction;
+	memcpy(&clockDivider, &ptr[offset], sizeof(int32_t));
+	offset += sizeof(int32_t);
+	memcpy(&octaveShift, &ptr[offset], sizeof(int32_t));
+	offset += sizeof(int32_t);
+	memcpy(&transpose, &ptr[offset], sizeof(int32_t));
+	offset += sizeof(int32_t);
+	memcpy(&direction, &ptr[offset], sizeof(int32_t));
+	offset += sizeof(int32_t);
+
+	// Apply control values by activating matching pads
+	int32_t unmatchedClock, unmatchedOctave, unmatchedTranspose, unmatchedDirection;
+	controlColumnState_.applyControlValues(
+		clockDivider, octaveShift, transpose, direction,
+		&unmatchedClock, &unmatchedOctave, &unmatchedTranspose, &unmatchedDirection
+	);
+
+	// Apply unmatched values to base controls (invisible effects)
+	setBaseClockDivider(unmatchedClock);
+	setBaseOctaveShift(unmatchedOctave);
+	setBaseTranspose(unmatchedTranspose);
+	setBaseDirection(unmatchedDirection);
 
 	// Update scale notes to current scale
 	updateScaleNotes();

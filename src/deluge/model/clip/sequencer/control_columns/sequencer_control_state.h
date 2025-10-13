@@ -69,6 +69,13 @@ public:
 	size_t captureState(void* buffer, size_t maxSize) const;
 	bool restoreState(const void* buffer, size_t size);
 
+	// Apply control values to matching pads (or return unmatched values)
+	// Deactivates all pads, then activates matching ones if found
+	// Returns true if all values were applied to pads, false if some need base controls
+	void applyControlValues(int32_t clockDivider, int32_t octaveShift, int32_t transpose, int32_t direction,
+	                        int32_t* unmatchedClock, int32_t* unmatchedOctave, 
+	                        int32_t* unmatchedTranspose, int32_t* unmatchedDirection);
+
 private:
 	// 16 individual control pads:
 	// [0-7] = x16 (y0-y7)

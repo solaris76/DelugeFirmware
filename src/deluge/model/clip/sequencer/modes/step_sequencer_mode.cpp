@@ -458,57 +458,59 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 // ================================================================================================
 
 size_t StepSequencerMode::captureScene(void* buffer, size_t maxSize) {
-	// Scene structure: all 16 steps + scroll offset + control column state
+	// Scene structure: all 16 steps + scroll offset + control values
 	struct Scene {
 		Step steps[kNumSteps];
 		int32_t noteScrollOffset;
+		int32_t clockDivider;
+		int32_t octaveShift;
+		int32_t transpose;
+		int32_t direction;
 	};
 
-	uint8_t* ptr = static_cast<uint8_t*>(buffer);
-	size_t offset = 0;
-
-	// Save pattern data
-	if (offset + sizeof(Scene) > maxSize) {
+	if (maxSize < sizeof(Scene)) {
 		return 0; // Buffer too small
 	}
 
-	Scene* scene = reinterpret_cast<Scene*>(&ptr[offset]);
+	Scene* scene = static_cast<Scene*>(buffer);
+
+	// Save pattern data
 	for (int32_t i = 0; i < kNumSteps; i++) {
 		scene->steps[i] = steps_[i];
 	}
 	scene->noteScrollOffset = noteScrollOffset_;
-	offset += sizeof(Scene);
 
-	// Save control column state
-	size_t controlStateSize = controlColumnState_.captureState(&ptr[offset], maxSize - offset);
-	if (controlStateSize == 0) {
-		return 0; // Failed to capture control state
-	}
-	offset += controlStateSize;
+	// Save active control values (not pad layout)
+	CombinedEffects effects = getCombinedEffects();
+	scene->clockDivider = effects.clockDivider;
+	scene->octaveShift = effects.octaveShift;
+	scene->transpose = effects.transpose;
+	scene->direction = effects.direction;
 
-	return offset;
+	return sizeof(Scene);
 }
 
 bool StepSequencerMode::recallScene(const void* buffer, size_t size) {
 	struct Scene {
 		Step steps[kNumSteps];
 		int32_t noteScrollOffset;
+		int32_t clockDivider;
+		int32_t octaveShift;
+		int32_t transpose;
+		int32_t direction;
 	};
 
-	const uint8_t* ptr = static_cast<const uint8_t*>(buffer);
-	size_t offset = 0;
-
-	// Restore pattern data
 	if (size < sizeof(Scene)) {
 		return false; // Invalid data
 	}
 
-	const Scene* scene = reinterpret_cast<const Scene*>(&ptr[offset]);
+	const Scene* scene = static_cast<const Scene*>(buffer);
+
+	// Restore pattern data
 	for (int32_t i = 0; i < kNumSteps; i++) {
 		steps_[i] = scene->steps[i];
 	}
 	noteScrollOffset_ = scene->noteScrollOffset;
-	offset += sizeof(Scene);
 
 	// Clamp scroll offset to valid range
 	int32_t maxScroll = (numScaleNotes_ > 5) ? (numScaleNotes_ - 5) : 0;
@@ -519,13 +521,18 @@ bool StepSequencerMode::recallScene(const void* buffer, size_t size) {
 		noteScrollOffset_ = 0;
 	}
 
-	// Restore control column state (if present)
-	if (offset < size) {
-		if (!controlColumnState_.restoreState(&ptr[offset], size - offset)) {
-			// Control state restoration failed, but pattern data is valid
-			// This is not a fatal error (for backward compatibility)
-		}
-	}
+	// Restore control values by activating matching pads
+	int32_t unmatchedClock, unmatchedOctave, unmatchedTranspose, unmatchedDirection;
+	controlColumnState_.applyControlValues(
+		scene->clockDivider, scene->octaveShift, scene->transpose, scene->direction,
+		&unmatchedClock, &unmatchedOctave, &unmatchedTranspose, &unmatchedDirection
+	);
+
+	// Apply unmatched values to base controls (invisible effects)
+	setBaseClockDivider(unmatchedClock);
+	setBaseOctaveShift(unmatchedOctave);
+	setBaseTranspose(unmatchedTranspose);
+	setBaseDirection(unmatchedDirection);
 
 	return true;
 }

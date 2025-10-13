@@ -705,4 +705,93 @@ bool SequencerControlState::restoreState(const void* buffer, size_t size) {
 	return true;
 }
 
+void SequencerControlState::applyControlValues(int32_t clockDivider, int32_t octaveShift, int32_t transpose, int32_t direction,
+                                                int32_t* unmatchedClock, int32_t* unmatchedOctave, 
+                                                int32_t* unmatchedTranspose, int32_t* unmatchedDirection) {
+	// Initialize unmatched outputs (assume all are unmatched initially)
+	*unmatchedClock = clockDivider;
+	*unmatchedOctave = octaveShift;
+	*unmatchedTranspose = transpose;
+	*unmatchedDirection = direction;
+
+	// Deactivate all non-scene pads
+	for (auto& pad : pads_) {
+		if (pad.type != ControlType::SCENE) {
+			pad.active = false;
+		}
+	}
+
+	// Try to activate matching pads for each control type
+	// Clock
+	if (clockDivider != 1) {
+		int32_t targetValue = clockDivider;
+		for (auto& pad : pads_) {
+			if (pad.type == ControlType::CLOCK_DIV) {
+				int32_t padValue = helpers::getValue(ControlType::CLOCK_DIV, pad.valueIndex);
+				if (padValue == targetValue) {
+					pad.active = true;
+					*unmatchedClock = 1; // Mark as matched (use default)
+					break;
+				}
+			}
+		}
+	} else {
+		*unmatchedClock = 1; // Default value, no need to apply
+	}
+
+	// Octave
+	if (octaveShift != 0) {
+		int32_t targetValue = octaveShift;
+		for (auto& pad : pads_) {
+			if (pad.type == ControlType::OCTAVE) {
+				int32_t padValue = helpers::getValue(ControlType::OCTAVE, pad.valueIndex);
+				if (padValue == targetValue) {
+					pad.active = true;
+					*unmatchedOctave = 0; // Mark as matched (use default)
+					break;
+				}
+			}
+		}
+	} else {
+		*unmatchedOctave = 0; // Default value, no need to apply
+	}
+
+	// Transpose
+	if (transpose != 0) {
+		int32_t targetValue = transpose;
+		for (auto& pad : pads_) {
+			if (pad.type == ControlType::TRANSPOSE) {
+				int32_t padValue = helpers::getValue(ControlType::TRANSPOSE, pad.valueIndex);
+				if (padValue == targetValue) {
+					pad.active = true;
+					*unmatchedTranspose = 0; // Mark as matched (use default)
+					break;
+				}
+			}
+		}
+	} else {
+		*unmatchedTranspose = 0; // Default value, no need to apply
+	}
+
+	// Direction
+	if (direction != 0) {
+		int32_t targetValue = direction;
+		for (auto& pad : pads_) {
+			if (pad.type == ControlType::DIRECTION) {
+				int32_t padValue = helpers::getValue(ControlType::DIRECTION, pad.valueIndex);
+				if (padValue == targetValue) {
+					pad.active = true;
+					*unmatchedDirection = 0; // Mark as matched (use default)
+					break;
+				}
+			}
+		}
+	} else {
+		*unmatchedDirection = 0; // Default value, no need to apply
+	}
+
+	// Request UI refresh
+	refreshSidebar();
+}
+
 } // namespace deluge::model::clip::sequencer

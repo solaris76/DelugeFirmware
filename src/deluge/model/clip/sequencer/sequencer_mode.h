@@ -194,14 +194,38 @@ protected:
 	/**
 	 * Get the combined active control values from all groups.
 	 * Use this during playback to apply clock div, transpose, octave, etc.
+	 * Merges base control values with active pad effects.
 	 */
-	CombinedEffects getCombinedEffects() const {
-		return controlColumnState_.getCombinedEffects();
+	CombinedEffects getCombinedEffects() const;
+
+	/**
+	 * Set base control values (used when no matching pad exists for a scene value)
+	 */
+	void setBaseClockDivider(int32_t divider) { baseClockDivider_ = divider; }
+	void setBaseOctaveShift(int32_t shift) { baseOctaveShift_ = shift; }
+	void setBaseTranspose(int32_t transpose) { baseTranspose_ = transpose; }
+	void setBaseDirection(int32_t direction) { baseDirection_ = direction; }
+
+	/**
+	 * Clear all base control values
+	 */
+	void clearBaseControls() {
+		baseClockDivider_ = 1;
+		baseOctaveShift_ = 0;
+		baseTranspose_ = 0;
+		baseDirection_ = 0;
 	}
 
 protected:
 	// Protected constructor - only concrete implementations can be instantiated
 	SequencerMode() = default;
+
+	// Base control values - apply when no matching pad exists
+	// These are "invisible" effects that work without visible pads
+	int32_t baseClockDivider_ = 1;
+	int32_t baseOctaveShift_ = 0;
+	int32_t baseTranspose_ = 0;
+	int32_t baseDirection_ = 0;
 
 	// Control column state (per-mode instance)
 	SequencerControlState controlColumnState_;
