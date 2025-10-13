@@ -76,6 +76,9 @@ public:
 	                        int32_t* unmatchedClock, int32_t* unmatchedOctave, 
 	                        int32_t* unmatchedTranspose, int32_t* unmatchedDirection);
 
+	// Clear base controls for a specific control type (called when user manually activates a pad)
+	void clearBaseControlForType(ControlType type, class SequencerMode* mode);
+
 private:
 	// 16 individual control pads:
 	// [0-7] = x16 (y0-y7)

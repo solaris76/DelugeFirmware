@@ -189,6 +189,7 @@ protected:
 	                                   int32_t imageWidth, int32_t absolutePlaybackPos, int32_t totalLength,
 	                                   RGB color = RGB{255, 255, 255}, bool enabled = true);
 
+public:
 	// ========== CONTROL COLUMNS ==========
 
 	/**
@@ -200,6 +201,7 @@ protected:
 
 	/**
 	 * Set base control values (used when no matching pad exists for a scene value)
+	 * These are public so SequencerControlState can clear them when user activates pads
 	 */
 	void setBaseClockDivider(int32_t divider) { baseClockDivider_ = divider; }
 	void setBaseOctaveShift(int32_t shift) { baseOctaveShift_ = shift; }

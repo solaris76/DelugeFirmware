@@ -375,6 +375,11 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 			// Toggle mode: flip state
 			pad.active = !pad.active;
 
+			// Clear base control for this type (user manually activating pad)
+			if (pad.active && mode) {
+				clearBaseControlForType(pad.type, mode);
+			}
+
 			if (display && pad.type != ControlType::NONE) {
 				if (pad.active) {
 					int32_t val = helpers::getValue(pad.type, pad.valueIndex);
@@ -391,6 +396,12 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 		else {
 			// Momentary mode: activate on press
 			pad.active = true;
+
+			// Clear base control for this type (user manually activating pad)
+			if (mode) {
+				clearBaseControlForType(pad.type, mode);
+			}
+
 			if (display && pad.type != ControlType::NONE) {
 				int32_t val = helpers::getValue(pad.type, pad.valueIndex);
 				static char popup[40];
@@ -706,7 +717,7 @@ bool SequencerControlState::restoreState(const void* buffer, size_t size) {
 }
 
 void SequencerControlState::applyControlValues(int32_t clockDivider, int32_t octaveShift, int32_t transpose, int32_t direction,
-                                                int32_t* unmatchedClock, int32_t* unmatchedOctave, 
+                                                int32_t* unmatchedClock, int32_t* unmatchedOctave,
                                                 int32_t* unmatchedTranspose, int32_t* unmatchedDirection) {
 	// Initialize unmatched outputs (assume all are unmatched initially)
 	*unmatchedClock = clockDivider;
@@ -792,6 +803,27 @@ void SequencerControlState::applyControlValues(int32_t clockDivider, int32_t oct
 
 	// Request UI refresh
 	refreshSidebar();
+}
+
+void SequencerControlState::clearBaseControlForType(ControlType type, SequencerMode* mode) {
+	if (!mode) return;
+
+	switch (type) {
+	case ControlType::CLOCK_DIV:
+		mode->setBaseClockDivider(1);
+		break;
+	case ControlType::OCTAVE:
+		mode->setBaseOctaveShift(0);
+		break;
+	case ControlType::TRANSPOSE:
+		mode->setBaseTranspose(0);
+		break;
+	case ControlType::DIRECTION:
+		mode->setBaseDirection(0);
+		break;
+	default:
+		break;
+	}
 }
 
 } // namespace deluge::model::clip::sequencer
