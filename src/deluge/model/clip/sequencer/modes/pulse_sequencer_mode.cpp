@@ -1643,7 +1643,87 @@ void PulseSequencerMode::writeToFile(Serializer& writer, bool includeScenes) {
 }
 
 Error PulseSequencerMode::readFromFile(Deserializer& reader) {
-	// TODO: Implement pattern loading
+	char const* tagName;
+
+	// Read pulseSequencer tag
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "numStages")) {
+			performanceControls_.numStages = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "currentPulse")) {
+			sequencerState_.currentPulse = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "gateLineOffset")) {
+			displayState_.gateLineOffset = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "playOrder")) {
+			performanceControls_.playOrder = static_cast<PlayOrder>(reader.readTagOrAttributeValueInt());
+		}
+		else if (!strcmp(tagName, "clockDivider")) {
+			performanceControls_.clockDivider = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "currentStage")) {
+			performanceControls_.currentStage = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "pingPongDirection")) {
+			performanceControls_.pingPongDirection = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "stageData")) {
+			// Parse hex string: 7 bytes per stage
+			char const* hexData = reader.readTagOrAttributeValue();
+
+			// Skip "0x" prefix if present
+			if (hexData[0] == '0' && hexData[1] == 'x') {
+				hexData += 2;
+			}
+
+			// Parse 8 stages
+			for (int32_t i = 0; i < kMaxStages; ++i) {
+				int32_t offset = i * 14; // 7 bytes = 14 hex chars
+
+				// Byte 0: gate type
+				stages_[i].gateType = static_cast<GateType>(hexToIntFixedLength(&hexData[offset], 2));
+
+				// Byte 1: noteIndex
+				stages_[i].noteIndex = hexToIntFixedLength(&hexData[offset + 2], 2);
+
+				// Byte 2: octave (stored as +3)
+				stages_[i].octave = hexToIntFixedLength(&hexData[offset + 4], 2) - 3;
+
+				// Byte 3: pulse count
+				stages_[i].pulseCount = hexToIntFixedLength(&hexData[offset + 6], 2);
+
+				// Byte 4: velocity spread
+				stages_[i].velocitySpread = hexToIntFixedLength(&hexData[offset + 8], 2);
+
+				// Byte 5: probability
+				stages_[i].probability = hexToIntFixedLength(&hexData[offset + 10], 2);
+
+				// Byte 6: gate length
+				stages_[i].gateLength = hexToIntFixedLength(&hexData[offset + 12], 2);
+			}
+		}
+		else if (!strcmp(tagName, "stageEnabled")) {
+			// Parse hex byte with 8 bits
+			char const* hexData = reader.readTagOrAttributeValue();
+
+			if (hexData[0] == '0' && hexData[1] == 'x') {
+				hexData += 2;
+			}
+
+			uint8_t enabledBits = hexToIntFixedLength(hexData, 2);
+			for (int32_t i = 0; i < kMaxStages; ++i) {
+				performanceControls_.stageEnabled[i] = (enabledBits & (1 << i)) != 0;
+			}
+		}
+		else {
+			reader.exitTag(tagName);
+		}
+	}
+
+	// After loading, update scale notes cache for current clip/song
+	updateScaleNotes();
+
 	return Error::NONE;
 }
 

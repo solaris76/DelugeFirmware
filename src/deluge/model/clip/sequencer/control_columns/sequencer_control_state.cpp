@@ -884,9 +884,11 @@ void SequencerControlState::writeToFile(Serializer& writer, bool includeScenes) 
 	}
 
 	writer.write("\"");
-	writer.closeTag();
 
-	// Write scene data if requested
+	// Close controlColumns opening tag
+	writer.writeOpeningTagEnd();
+
+	// Write scene data if requested (as child tags)
 	if (includeScenes) {
 		writer.writeArrayStart("scenes");
 
@@ -911,10 +913,124 @@ void SequencerControlState::writeToFile(Serializer& writer, bool includeScenes) 
 
 		writer.writeArrayEnding("scenes");
 	}
+
+	// Close controlColumns tag
+	writer.writeClosingTag("controlColumns");
 }
 
 Error SequencerControlState::readFromFile(Deserializer& reader) {
-	// TODO: Implement pattern loading
+	char const* tagName;
+
+	// Read controlColumns tag
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "padData")) {
+			// Parse hex string for pad configurations
+			char const* hexData = reader.readTagOrAttributeValue();
+
+			// Skip "0x" prefix if present
+			if (hexData[0] == '0' && hexData[1] == 'x') {
+				hexData += 2;
+			}
+
+			// Parse pads (variable size: 9 bytes for non-scene, 10 bytes for scene)
+			int32_t hexOffset = 0;
+			int32_t padCount = 0;
+
+			while (hexData[hexOffset] != '\0' && padCount < static_cast<int32_t>(pads_.size())) {
+				// Byte 0: y coordinate
+				int32_t y = hexToIntFixedLength(&hexData[hexOffset], 2);
+				hexOffset += 2;
+
+				// Byte 1: x coordinate
+				int32_t x = hexToIntFixedLength(&hexData[hexOffset], 2);
+				hexOffset += 2;
+
+				// Byte 2: control type
+				ControlType type = static_cast<ControlType>(hexToIntFixedLength(&hexData[hexOffset], 2));
+				hexOffset += 2;
+
+				// Bytes 3-6: valueIndex (4 bytes)
+				int32_t valueIndex = hexToIntFixedLength(&hexData[hexOffset], 8);
+				hexOffset += 8;
+
+				// Byte 7: mode
+				PadMode mode = static_cast<PadMode>(hexToIntFixedLength(&hexData[hexOffset], 2));
+				hexOffset += 2;
+
+				// Byte 8: active
+				bool active = hexToIntFixedLength(&hexData[hexOffset], 2) != 0;
+				hexOffset += 2;
+
+				// Byte 9: sceneValid (only for scene pads)
+				bool sceneValid = false;
+				if (type == ControlType::SCENE) {
+					sceneValid = hexToIntFixedLength(&hexData[hexOffset], 2) != 0;
+					hexOffset += 2;
+				}
+
+				// Find the pad index for this x, y
+				int32_t padIndex = getPadIndex(x, y);
+				if (padIndex >= 0 && padIndex < static_cast<int32_t>(pads_.size())) {
+					pads_[padIndex].type = type;
+					pads_[padIndex].valueIndex = valueIndex;
+					pads_[padIndex].mode = mode;
+					pads_[padIndex].active = active;
+					pads_[padIndex].sceneValid = sceneValid;
+				}
+
+				padCount++;
+			}
+		}
+		else if (!strcmp(tagName, "scenes")) {
+			// Read scenes array
+			reader.match('{');
+			while (*(tagName = reader.readNextTagOrAttributeName())) {
+				if (!strcmp(tagName, "scene")) {
+					int32_t sceneIndex = -1;
+					int32_t sceneSize = 0;
+
+					// Read scene attributes
+					char const* innerTag;
+					while (*(innerTag = reader.readNextTagOrAttributeName())) {
+						if (!strcmp(innerTag, "index")) {
+							sceneIndex = reader.readTagOrAttributeValueInt();
+						}
+						else if (!strcmp(innerTag, "size")) {
+							sceneSize = reader.readTagOrAttributeValueInt();
+						}
+						else {
+							// Hex data inside the tag
+							char const* hexData = reader.readTagOrAttributeValue();
+
+							if (sceneIndex >= 0 && sceneIndex < kMaxScenes && sceneSize > 0 && sceneSize <= static_cast<int32_t>(kMaxSceneDataSize)) {
+								// Skip "0x" prefix
+								if (hexData[0] == '0' && hexData[1] == 'x') {
+									hexData += 2;
+								}
+
+								// Parse hex data into scene buffer
+								for (int32_t i = 0; i < sceneSize; ++i) {
+									sceneBuffers_[sceneIndex][i] = hexToIntFixedLength(&hexData[i * 2], 2);
+								}
+								sceneSizes_[sceneIndex] = sceneSize;
+							}
+
+							reader.exitTag(innerTag);
+						}
+					}
+					reader.exitTag("scene");
+				}
+				else {
+					reader.exitTag(tagName);
+				}
+			}
+			reader.match('}');
+		}
+		else {
+			reader.exitTag(tagName);
+		}
+	}
+
 	return Error::NONE;
 }
 

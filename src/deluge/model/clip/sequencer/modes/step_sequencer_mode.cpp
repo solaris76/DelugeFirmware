@@ -575,7 +575,56 @@ void StepSequencerMode::writeToFile(Serializer& writer, bool includeScenes) {
 }
 
 Error StepSequencerMode::readFromFile(Deserializer& reader) {
-	// TODO: Implement pattern loading
+	char const* tagName;
+
+	// Read stepSequencer tag contents
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "numSteps")) {
+			int32_t numSteps = reader.readTagOrAttributeValueInt();
+			if (numSteps != kNumSteps) {
+				return Error::FILE_CORRUPTED; // Wrong number of steps
+			}
+		}
+		else if (!strcmp(tagName, "currentStep")) {
+			currentStep_ = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "noteScrollOffset")) {
+			noteScrollOffset_ = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "stepData")) {
+			// Parse hex string: 3 bytes per step (noteIndex, octave+3, gate)
+			char const* hexData = reader.readTagOrAttributeValue();
+
+			// Skip "0x" prefix if present
+			if (hexData[0] == '0' && hexData[1] == 'x') {
+				hexData += 2;
+			}
+
+			// Parse 16 steps
+			for (int32_t i = 0; i < kNumSteps; ++i) {
+				int32_t offset = i * 6; // 3 bytes = 6 hex chars
+
+				// Byte 0: noteIndex
+				steps_[i].noteIndex = hexToIntFixedLength(&hexData[offset], 2);
+
+				// Byte 1: octave (stored as +3, so subtract 3)
+				steps_[i].octave = hexToIntFixedLength(&hexData[offset + 2], 2) - 3;
+
+				// Byte 2: gate type
+				steps_[i].gateType = static_cast<GateType>(hexToIntFixedLength(&hexData[offset + 4], 2));
+			}
+		}
+		else {
+			reader.exitTag(tagName);
+		}
+	}
+
+	// After loading, update scale notes cache for current clip/song
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStack* modelStack = setupModelStackWithSong(modelStackMemory, currentSong);
+	ModelStackWithTimelineCounter* modelStackWithTimelineCounter = modelStack->addTimelineCounter(getCurrentClip());
+	updateScaleNotes(modelStackWithTimelineCounter);
+
 	return Error::NONE;
 }
 

@@ -1154,14 +1154,13 @@ void InstrumentClipView::copyNotes(Serializer* writer, bool selectedDrumOnly) {
 	bool hasSequencerMode = clip->hasSequencerMode();
 
 	if (copyToFile) {
-		// Use <sequencerPattern> for sequencer modes, <pattern> for piano roll
-		const char* rootTag = hasSequencerMode ? "sequencerPattern" : "pattern";
-		writer->writeOpeningTag(rootTag);
+		// Always use <pattern> root tag (Deluge convention)
+		writer->writeOpeningTag("pattern");
 		writer->writeOpeningTagBeginning("attributes");
 
 		writer->writeAttribute("patternVersion", PATTERN_FILE_VERSION);
 
-		// Add sequencer mode name if present
+		// Add sequencer mode name if present (distinguishes sequencer patterns from piano roll)
 		if (hasSequencerMode) {
 			writer->writeAttribute("sequencerMode", clip->getSequencerModeName().c_str());
 		}
@@ -1319,9 +1318,8 @@ ramError:
 	if (copyToFile) {
 		writer->writeArrayEnding("noteRows");
 
-		// Close with matching tag (sequencerPattern or pattern)
-		const char* rootTag = hasSequencerMode ? "sequencerPattern" : "pattern";
-		writer->writeClosingTag(rootTag);
+		// Always close with <pattern>
+		writer->writeClosingTag("pattern");
 	}
 
 	if (copyToFile) {
@@ -1598,6 +1596,7 @@ ramError:
 	int32_t pastedScreenWidth = endPos - startPos;
 	float scaleFactor = 0;
 	String patternVersion;
+	String sequencerModeName; // NEW: Detect if this is a sequencer pattern
 
 	if (pastedScreenWidth == 0) {
 		return Error::NONE;
@@ -1614,6 +1613,10 @@ ramError:
 						return Error::INVALID_PATTERN_VERSION;
 					}
 				}
+				else if (!strcmp(tagName, "sequencerMode")) {
+					// NEW: Sequencer pattern detected!
+					reader.readTagOrAttributeValueString(&sequencerModeName);
+				}
 				else if (!strcmp(tagName, "scaleType")) {
 					copiedScaleType = static_cast<ScaleType>(reader.readTagOrAttributeValueInt());
 				}
@@ -1623,6 +1626,74 @@ ramError:
 				else if (!strcmp(tagName, "screenWidth")) {
 					copiedScreenWidth = reader.readTagOrAttributeValueInt();
 				}
+			}
+		}
+		// NEW: Load sequencer mode data
+		else if (!strcmp(tagName, "stepSequencer")) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (!sequencerModeName.isEmpty() && sequencerModeName.equals("step_sequencer")) {
+				// Ensure sequencer mode is active
+				if (!clip->hasSequencerMode() || clip->getSequencerModeName() != "step_sequencer") {
+					clip->setSequencerMode("step_sequencer");
+				}
+
+				// Load step data
+				auto* mode = clip->getSequencerMode();
+				if (mode) {
+					Error error = mode->readFromFile(reader);
+					if (error != Error::NONE) {
+						return error;
+					}
+
+					// Refresh UI to show loaded pattern
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
+			}
+		}
+		else if (!strcmp(tagName, "pulseSequencer")) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (!sequencerModeName.isEmpty() && sequencerModeName.equals("pulse_seq")) {
+				// Ensure sequencer mode is active
+				if (!clip->hasSequencerMode() || clip->getSequencerModeName() != "pulse_seq") {
+					clip->setSequencerMode("pulse_seq");
+				}
+
+				// Load pulse data
+				auto* mode = clip->getSequencerMode();
+				if (mode) {
+					Error error = mode->readFromFile(reader);
+					if (error != Error::NONE) {
+						return error;
+					}
+
+					// Refresh UI to show loaded pattern
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
+			}
+		}
+		else if (!strcmp(tagName, "controlColumns")) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (!sequencerModeName.isEmpty() && clip->hasSequencerMode()) {
+				// Load control column configuration
+				auto* mode = clip->getSequencerMode();
+				if (mode) {
+					Error error = mode->getControlColumnState().readFromFile(reader);
+					if (error != Error::NONE) {
+						return error;
+					}
+
+					// Refresh UI to show loaded control columns
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
 			}
 		}
 		else if (!strcmp(tagName, "noteRows")) {
