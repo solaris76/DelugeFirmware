@@ -1448,18 +1448,15 @@ void PulseSequencerMode::randomizeAll(int32_t mutationRate) {
 void PulseSequencerMode::evolveNotes(int32_t mutationRate) {
 	// Use existing evolve implementation
 	// Run evolve multiple times based on mutation rate
-	int32_t numEvolves = (mutationRate / 30) + 1; // 30% = 2, 60% = 3, 90% = 4, etc.
-	for (int32_t i = 0; i < numEvolves; i++) {
-		evolveSequence();
+	// Low %: 1-2 evolves (gentle)
+	// High % (>70%): 4+ evolves (chaotic)
+	int32_t numEvolves;
+	if (mutationRate > 70) {
+		numEvolves = (mutationRate / 20) + 1; // 80% = 5, 100% = 6 evolves
+	} else {
+		numEvolves = (mutationRate / 40) + 1; // 30% = 1, 60% = 2 evolves
 	}
-
-	// Full UI refresh
-	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
-}
-
-void PulseSequencerMode::mutateAll(int32_t mutationRate) {
-	// For Pulse Sequencer, mutate = more aggressive evolve
-	int32_t numEvolves = (mutationRate / 20) + 1; // More evolves for higher rate
+	
 	for (int32_t i = 0; i < numEvolves; i++) {
 		evolveSequence();
 	}

@@ -29,10 +29,9 @@ enum class ControlType {
 	// Alphabetically sorted from here:
 	CLOCK_DIV,   // Clock divider/multiplier
 	DIRECTION,   // Playback direction
-	EVOLVE,      // Generative: evolve notes (with % mutation rate)
-	MUTATE,      // Generative: mutate notes (with % mutation rate)
+	EVOLVE,      // Generative: evolve pattern (gentle at low %, chaotic at high %)
 	OCTAVE,      // Octave shift
-	RANDOM,      // Generative: randomize (with % intensity)
+	RANDOM,      // Generative: complete randomization (with % intensity)
 	RESET,       // Generative: reset to init (no value)
 	SCENE,       // Scene capture/recall
 	TRANSPOSE,   // Semitone transpose

@@ -317,8 +317,8 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 		}
 	}
 
-	// RANDOM/EVOLVE/MUTATE: Instant trigger with % value
-	if ((pad.type == ControlType::RANDOM || pad.type == ControlType::EVOLVE || pad.type == ControlType::MUTATE) && mode) {
+	// RANDOM/EVOLVE: Instant trigger with % value
+	if ((pad.type == ControlType::RANDOM || pad.type == ControlType::EVOLVE) && mode) {
 		if (pressed) {
 			int32_t mutationRate = helpers::getValue(pad.type, pad.valueIndex);
 
@@ -327,9 +327,6 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 			}
 			else if (pad.type == ControlType::EVOLVE) {
 				mode->evolveNotes(mutationRate);
-			}
-			else if (pad.type == ControlType::MUTATE) {
-				mode->mutateAll(mutationRate);
 			}
 
 			if (display) {
@@ -429,7 +426,6 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 		ControlType::CLOCK_DIV,
 		ControlType::DIRECTION,
 		ControlType::EVOLVE,
-		ControlType::MUTATE,
 		ControlType::OCTAVE,
 		ControlType::RANDOM,
 		ControlType::RESET,
@@ -488,7 +484,6 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 		break;
 	case ControlType::RANDOM:
 	case ControlType::EVOLVE:
-	case ControlType::MUTATE:
 		pad.valueIndex = 4; // 50%
 		break;
 	default:
@@ -596,7 +591,7 @@ bool SequencerControlState::handleVerticalEncoderButton(int32_t heldX, int32_t h
 	// Toggle mode for pads that support it
 	if (pad.type != ControlType::NONE && pad.type != ControlType::SCENE
 	    && pad.type != ControlType::RESET && pad.type != ControlType::RANDOM
-	    && pad.type != ControlType::EVOLVE && pad.type != ControlType::MUTATE) {
+	    && pad.type != ControlType::EVOLVE) {
 
 		pad.mode = (pad.mode == PadMode::TOGGLE) ? PadMode::MOMENTARY : PadMode::TOGGLE;
 

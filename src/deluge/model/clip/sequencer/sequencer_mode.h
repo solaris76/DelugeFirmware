@@ -116,20 +116,20 @@ public:
 	virtual void resetToInit() {}
 	// Randomize all parameters (mutationRate 0-100%)
 	virtual void randomizeAll(int32_t mutationRate = 100) {}
-	// Evolve notes (mutationRate 0-100%)
+	// Evolve pattern (mutationRate 0-100%)
+	// Low %: gentle melodic drift (notes only)
+	// High % (>70%): more chaotic (notes, octaves, gates)
 	virtual void evolveNotes(int32_t mutationRate = 30) {}
-	// Mutate all aspects (mutationRate 0-100%)
-	virtual void mutateAll(int32_t mutationRate = 50) {}
 
 	// ========== MODE COMPATIBILITY ==========
-	
+
 	// Track type compatibility (default: support all)
 	virtual bool supportsInstrument() { return true; }
 	virtual bool supportsKit() { return true; }
 	virtual bool supportsMIDI() { return true; }
 	virtual bool supportsCV() { return true; }
 	virtual bool supportsAudio() { return false; } // Audio modes need special handling
-	
+
 	// Control column compatibility (override in specific modes)
 	virtual bool supportsControlType(ControlType type) {
 		// By default, all modes support all control types

@@ -586,12 +586,25 @@ void StepSequencerMode::randomizeAll(int32_t mutationRate) {
 }
 
 void StepSequencerMode::evolveNotes(int32_t mutationRate) {
-	// Evolve notes only - smooth melodic evolution
+	// Evolve pattern with adaptive behavior based on mutation rate
+	// Low %: Gentle melodic drift (notes only)
+	// High % (>70%): More chaotic (notes, octaves, gates)
+	
+	bool isHighRate = mutationRate > 70;
+	
 	for (int32_t i = 0; i < kNumSteps; ++i) {
 		if ((rand() % 100) < mutationRate) {
-			// Mutate note by small amount for smooth evolution
+			// Always mutate notes
 			if (numScaleNotes_ > 0) {
-				int32_t change = (rand() % 3) - 1; // -1, 0, +1
+				int32_t change;
+				if (isHighRate) {
+					// High rate: larger jumps
+					change = (rand() % 5) - 2; // -2 to +2
+				} else {
+					// Low rate: gentle steps
+					change = (rand() % 3) - 1; // -1, 0, +1
+				}
+				
 				steps_[i].noteIndex += change;
 
 				// Wrap around
@@ -601,44 +614,23 @@ void StepSequencerMode::evolveNotes(int32_t mutationRate) {
 				while (steps_[i].noteIndex >= numScaleNotes_) {
 					steps_[i].noteIndex -= numScaleNotes_;
 				}
-			}
-		}
-	}
-
-	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
-}
-
-void StepSequencerMode::mutateAll(int32_t mutationRate) {
-	// Mutate everything - notes, octaves, gates (chaotic)
-	for (int32_t i = 0; i < kNumSteps; ++i) {
-		if ((rand() % 100) < mutationRate) {
-			// Mutate note (larger jumps than evolve)
-			if (numScaleNotes_ > 0) {
-				int32_t change = (rand() % 5) - 2; // -2 to +2
-				steps_[i].noteIndex += change;
-
-				// Wrap around
-				while (steps_[i].noteIndex < 0) {
-					steps_[i].noteIndex += numScaleNotes_;
-				}
-				while (steps_[i].noteIndex >= numScaleNotes_) {
-					steps_[i].noteIndex -= numScaleNotes_;
-				}
-			}
-
-			// Also mutate octave (30% of mutations)
-			if ((rand() % 100) < 30) {
-				int32_t octaveChange = (rand() % 3) - 1; // -1, 0, or +1
-				steps_[i].octave += octaveChange;
-				// Clamp octave to reasonable range
-				if (steps_[i].octave < -3) steps_[i].octave = -3;
-				if (steps_[i].octave > 3) steps_[i].octave = 3;
 			}
 			
-			// Also mutate gates (20% of mutations)
-			if ((rand() % 100) < 20) {
-				int32_t gateRand = rand() % 3;
-				steps_[i].gateType = static_cast<GateType>(gateRand);
+			// High rate: also mutate octaves and gates
+			if (isHighRate) {
+				// Mutate octave (40% chance)
+				if ((rand() % 100) < 40) {
+					int32_t octaveChange = (rand() % 3) - 1; // -1, 0, or +1
+					steps_[i].octave += octaveChange;
+					if (steps_[i].octave < -3) steps_[i].octave = -3;
+					if (steps_[i].octave > 3) steps_[i].octave = 3;
+				}
+				
+				// Mutate gates (25% chance)
+				if ((rand() % 100) < 25) {
+					int32_t gateRand = rand() % 3;
+					steps_[i].gateType = static_cast<GateType>(gateRand);
+				}
 			}
 		}
 	}

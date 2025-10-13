@@ -87,7 +87,6 @@ const char* getTypeName(ControlType type) {
 	case ControlType::RESET:      return "RESET";
 	case ControlType::RANDOM:     return "RANDOM";
 	case ControlType::EVOLVE:     return "EVOLVE";
-	case ControlType::MUTATE:     return "MUTATE";
 	default:                      return "UNKNOWN";
 	}
 }
@@ -101,9 +100,8 @@ RGB getColorForType(ControlType type) {
 	case ControlType::SCENE:      return RGB{0, 128, 255};      // Blue
 	case ControlType::DIRECTION:  return RGB{0, 200, 255};      // Cyan
 	case ControlType::RESET:      return RGB{100, 150, 255};    // Light blue
-	case ControlType::RANDOM:     return RGB{255, 100, 255};    // Light magenta
-	case ControlType::EVOLVE:     return RGB{255, 150, 200};    // Light pink
-	case ControlType::MUTATE:     return RGB{255, 180, 230};    // Lighter pink
+	case ControlType::RANDOM:     return RGB{255, 100, 255};    // Magenta
+	case ControlType::EVOLVE:     return RGB{255, 150, 200};    // Pink
 	default:                      return RGB{128, 128, 128};    // Gray
 	}
 }
@@ -116,8 +114,7 @@ const int32_t* getAvailableValues(ControlType type) {
 	case ControlType::SCENE:      return kSceneValues;
 	case ControlType::DIRECTION:  return kDirectionValues;
 	case ControlType::RANDOM:
-	case ControlType::EVOLVE:
-	case ControlType::MUTATE:     return kMutationValues;
+	case ControlType::EVOLVE:     return kMutationValues;
 	default:                      return nullptr;
 	}
 }
@@ -130,8 +127,7 @@ int32_t getNumAvailableValues(ControlType type) {
 	case ControlType::SCENE:      return sizeof(kSceneValues) / sizeof(kSceneValues[0]);
 	case ControlType::DIRECTION:  return sizeof(kDirectionValues) / sizeof(kDirectionValues[0]);
 	case ControlType::RANDOM:
-	case ControlType::EVOLVE:
-	case ControlType::MUTATE:     return sizeof(kMutationValues) / sizeof(kMutationValues[0]);
+	case ControlType::EVOLVE:     return sizeof(kMutationValues) / sizeof(kMutationValues[0]);
 	default:                      return 0;
 	}
 }
@@ -181,7 +177,6 @@ const char* formatValue(ControlType type, int32_t value) {
 
 	case ControlType::RANDOM:
 	case ControlType::EVOLVE:
-	case ControlType::MUTATE:
 		snprintf(buffer, sizeof(buffer), "%d%%", value);
 		return buffer;
 
