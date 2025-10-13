@@ -9,7 +9,7 @@ Alternative sequencing modes for the Synthstrom Deluge that transform how you cr
 ### Accessing Sequencer Modes
 
 1. Create or open a **Synth, MIDI, or CV clip**
-2. Press **SHIFT + CLIP** to open the Clip menu
+2. Press **Select endcoder** to open the menu
 3. Select **"CLIP TYPE"**
 4. Choose your sequencer mode:
    - **PIANO ROLL** - Traditional note view (default)
@@ -18,19 +18,15 @@ Alternative sequencing modes for the Synthstrom Deluge that transform how you cr
 
 The pads will immediately change to show your selected sequencer!
 
-### Switching Back to Piano Roll
+Sequencer patterns are preserved - you can switch back anytime!
 
-1. Press **SHIFT + CLIP**
-2. Select **"CLIP TYPE"**
-3. Choose **"PIANO ROLL"**
-
-Your sequencer pattern is preserved - you can switch back anytime!
+NOTE: Main clip notes will play over the top of sequncers so ensure you have teh clip blank if you dont want this. 
 
 ---
 
 ## Step Sequencer
 
-Classic 16-step sequencer inspired by analog hardware like the SH-101.
+Classic 16-step sequencer inspired by analog hardware.
 
 ### Layout (Main Grid)
 
@@ -72,7 +68,7 @@ Each **column (x0-x15)** is one step (1-16):
 
 ## Pulse Sequencer
 
-Euclidean/polyrhythmic sequencer with 8 stages - perfect for complex rhythms and generative patterns.
+Euclidean/polyrhythmic sequencer with 8 stages - perfect for complex rhythms and generative patterns. Inspired byt hr Intellijel Metropolix. 
 
 ### Layout (Main Grid)
 
@@ -181,7 +177,7 @@ You can reconfigure any pad to any control type!
 
 ## Saving & Loading Patterns
 
-Patterns save the **active view** - think of them like scene snapshots.
+Patterns save the **active view** like aptterns do in normal clip mode. 
 
 ### Saving a Pattern
 
@@ -192,7 +188,7 @@ Patterns save the **active view** - think of them like scene snapshots.
 5. Press **SAVE** or **select encoder** to confirm
 
 **Where Patterns Are Saved:**
-- Piano Roll → `PATTERNS/MELODIC/`
+- Piano Roll (as per current) → `PATTERNS/MELODIC/`
 - Step Sequencer → `PATTERNS/MELODIC/SEQUENCER/STEP/`
 - Pulse Sequencer → `PATTERNS/MELODIC/SEQUENCER/PULSE/`
 
@@ -253,12 +249,6 @@ When you load a song, your sequencer mode is automatically activated with all se
 
 ### Pulse Sequencer
 
-**Euclidean Rhythms:**
-1. Set stage to MULTIPLE gate
-2. Set pulse count (e.g., 3, 5, 7)
-3. Adjust number of stages (e.g., 8, 16)
-4. Result: automatic euclidean distribution
-
 **Polyrhythms:**
 1. Stage 1: 3 pulses
 2. Stage 2: 5 pulses
@@ -284,6 +274,7 @@ When you load a song, your sequencer mode is automatically activated with all se
 3. Tweak pattern (change notes, add OCTAVE control, etc.)
 4. SAVE + scene pad 2 = capture variation
 5. Tap scene pads during performance to switch
+6. Shift + Scene pad to clear
 
 **Generative Sessions:**
 1. Start with simple pattern
@@ -329,9 +320,6 @@ When you load a song, your sequencer mode is automatically activated with all se
 - **SAVE + horizontal encoder** - Save pattern
 - **LOAD + horizontal encoder** - Load pattern
 
-**Mode Switching:**
-- **SHIFT + CLIP** → CLIP TYPE → choose mode
-
 **Control Pads:**
 - **Hold pad + horizontal encoder** - change control type
 - **Hold pad + vertical encoder** - adjust value
@@ -349,28 +337,6 @@ When you load a song, your sequencer mode is automatically activated with all se
 
 ---
 
-## Troubleshooting
-
-**Pattern won't load:**
-- Check you're in the correct sequencer mode
-- Step patterns only load in Step Sequencer
-- Pulse patterns only load in Pulse Sequencer
-
-**Can't find saved patterns:**
-- Load UI automatically shows correct folder
-- Step patterns: `PATTERNS/MELODIC/SEQUENCER/STEP/`
-- Pulse patterns: `PATTERNS/MELODIC/SEQUENCER/PULSE/`
-
-**Pads not responding:**
-- Step Sequencer: x0-x15 are steps, x16-x17 are controls
-- Pulse Sequencer: x0-x7 are stages, x8-x15 are performance controls, x16-x17 are control pads
-
-**Scale notes don't match:**
-- Sequencers respect clip's scale mode
-- Change scale: SHIFT + SCALE button
-- Vertical encoder scrolls through scale notes
-
----
 
 ## Credits
 
