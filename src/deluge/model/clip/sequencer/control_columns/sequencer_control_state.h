@@ -19,6 +19,9 @@
 
 #include "model/clip/sequencer/control_columns/sequencer_control_group.h"
 
+class Serializer;
+class Deserializer;
+
 namespace deluge::model::clip::sequencer {
 
 // Combined effects from all active control groups
@@ -69,11 +72,19 @@ public:
 	size_t captureState(void* buffer, size_t maxSize) const;
 	bool restoreState(const void* buffer, size_t size);
 
+	// ========== PATTERN PERSISTENCE ==========
+
+	// Write control column configuration and scenes to file
+	void writeToFile(Serializer& writer, bool includeScenes = true);
+
+	// Read control column configuration and scenes from file
+	Error readFromFile(Deserializer& reader);
+
 	// Apply control values to matching pads (or return unmatched values)
 	// Deactivates all pads, then activates matching ones if found
 	// Returns true if all values were applied to pads, false if some need base controls
 	void applyControlValues(int32_t clockDivider, int32_t octaveShift, int32_t transpose, int32_t direction,
-	                        int32_t* unmatchedClock, int32_t* unmatchedOctave, 
+	                        int32_t* unmatchedClock, int32_t* unmatchedOctave,
 	                        int32_t* unmatchedTranspose, int32_t* unmatchedDirection);
 
 	// Clear base controls for a specific control type (called when user manually activates a pad)

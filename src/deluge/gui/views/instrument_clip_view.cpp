@@ -1150,16 +1150,35 @@ void InstrumentClipView::copyNotes(Serializer* writer, bool selectedDrumOnly) {
 	// getCurrentClip()->yScroll;
 	copiedYNoteOfBottomRow = getCurrentInstrumentClip()->getYNoteFromYDisplay(0, currentSong);
 
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	bool hasSequencerMode = clip->hasSequencerMode();
+
 	if (copyToFile) {
-		writer->writeOpeningTag("pattern");
+		// Use <sequencerPattern> for sequencer modes, <pattern> for piano roll
+		const char* rootTag = hasSequencerMode ? "sequencerPattern" : "pattern";
+		writer->writeOpeningTag(rootTag);
 		writer->writeOpeningTagBeginning("attributes");
 
 		writer->writeAttribute("patternVersion", PATTERN_FILE_VERSION);
+
+		// Add sequencer mode name if present
+		if (hasSequencerMode) {
+			writer->writeAttribute("sequencerMode", clip->getSequencerModeName().c_str());
+		}
+
 		writer->writeAttribute("screenWidth", copiedScreenWidth);
 		writer->writeAttribute("scaleType", static_cast<int32_t>(copiedScaleType));
 		writer->writeAttribute("yNoteOfBottomRow", getCurrentInstrumentClip()->getYNoteFromYDisplay(0, currentSong));
 
 		writer->closeTag();
+
+		// Write sequencer mode data first (if present)
+		if (hasSequencerMode) {
+			auto* mode = clip->getSequencerMode();
+			if (mode) {
+				mode->writeToFile(*writer, true); // Include scenes
+			}
+		}
 
 		writer->writeArrayStart("noteRows");
 	}
@@ -1299,7 +1318,10 @@ ramError:
 
 	if (copyToFile) {
 		writer->writeArrayEnding("noteRows");
-		writer->writeClosingTag("pattern");
+
+		// Close with matching tag (sequencerPattern or pattern)
+		const char* rootTag = hasSequencerMode ? "sequencerPattern" : "pattern";
+		writer->writeClosingTag(rootTag);
 	}
 
 	if (copyToFile) {

@@ -29,7 +29,6 @@ class Song;
 
 class NoteRow;
 class InstrumentClip;
-
 namespace deluge::model::clip::sequencer {
 class SequencerMode;
 }

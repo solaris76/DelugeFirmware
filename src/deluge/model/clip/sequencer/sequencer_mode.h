@@ -105,6 +105,18 @@ public:
 	// Returns true if scene was successfully recalled
 	virtual bool recallScene(const void* buffer, size_t size) { return false; }
 
+	// ========== PATTERN PERSISTENCE ==========
+
+	// Write sequencer mode data to file (for pattern saving)
+	// includeScenes: whether to include scene data in the output
+	virtual void writeToFile(Serializer& writer, bool includeScenes = true) {}
+
+	// Read sequencer mode data from file (for pattern loading)
+	virtual Error readFromFile(Deserializer& reader) { return Error::NONE; }
+
+	// Check if this mode can be saved as a standalone pattern
+	virtual bool canSaveAsPattern() const { return true; }
+
 	// Access to control columns (for scene capture/recall)
 	SequencerControlState& getControlColumnState() { return controlColumnState_; }
 	const SequencerControlState& getControlColumnState() const { return controlColumnState_; }

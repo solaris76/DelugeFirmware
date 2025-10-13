@@ -82,6 +82,10 @@ public:
 	void randomizeAll(int32_t mutationRate = 100) override;
 	void evolveNotes(int32_t mutationRate = 30) override;
 
+	// Pattern persistence
+	void writeToFile(Serializer& writer, bool includeScenes = true) override;
+	Error readFromFile(Deserializer& reader) override;
+
 private:
 	static constexpr int32_t kNumSteps = 16; // x0-x15
 	static constexpr int32_t kMaxScaleNotes = 32;

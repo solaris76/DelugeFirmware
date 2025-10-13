@@ -27,6 +27,7 @@
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
 #include "hid/display/display.h"
+#include "storage/storage_manager.h"
 
 namespace deluge::model::clip::sequencer::modes {
 
@@ -535,6 +536,47 @@ bool StepSequencerMode::recallScene(const void* buffer, size_t size) {
 	setBaseDirection(unmatchedDirection);
 
 	return true;
+}
+
+// ========== PATTERN PERSISTENCE ==========
+
+void StepSequencerMode::writeToFile(Serializer& writer, bool includeScenes) {
+	// Write step sequencer with hex-encoded data (Deluge convention)
+	writer.writeOpeningTagBeginning("stepSequencer");
+	writer.writeAttribute("numSteps", kNumSteps);
+	writer.writeAttribute("currentStep", currentStep_);
+	writer.writeAttribute("noteScrollOffset", noteScrollOffset_);
+
+	// Write step data as single hex string (3 bytes per step: noteIndex, octave+3, gate)
+	writer.insertCommaIfNeeded();
+	writer.write("\n\t\t");
+	writer.write("stepData=\"0x");
+
+	char buffer[3];
+	for (int32_t i = 0; i < kNumSteps; ++i) {
+		// Byte 0: noteIndex (0-31)
+		byteToHex(static_cast<uint8_t>(steps_[i].noteIndex), buffer);
+		writer.write(buffer);
+
+		// Byte 1: octave + 3 (to make it unsigned 0-6 for -3 to +3)
+		byteToHex(static_cast<uint8_t>(steps_[i].octave + 3), buffer);
+		writer.write(buffer);
+
+		// Byte 2: gate type (0=OFF, 1=ON, 2=SKIP)
+		byteToHex(static_cast<uint8_t>(steps_[i].gateType), buffer);
+		writer.write(buffer);
+	}
+
+	writer.write("\"");
+	writer.closeTag();
+
+	// Write control columns and scenes
+	controlColumnState_.writeToFile(writer, includeScenes);
+}
+
+Error StepSequencerMode::readFromFile(Deserializer& reader) {
+	// TODO: Implement pattern loading
+	return Error::NONE;
 }
 
 void StepSequencerMode::advanceStep(int32_t direction) {

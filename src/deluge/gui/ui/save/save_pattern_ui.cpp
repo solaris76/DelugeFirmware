@@ -33,6 +33,7 @@
 #include "storage/storage_manager.h"
 #include "util/functions.h"
 #include "util/lookuptables/lookuptables.h"
+#include <string>
 #include <string.h>
 
 using namespace deluge;
@@ -40,6 +41,8 @@ using namespace deluge;
 static constexpr const char* PATTERN_RHYTHMIC_KIT_DEFAULT_FOLDER = "PATTERNS/RHYTHMIC/KIT";
 static constexpr const char* PATTERN_RHYTHMIC_DRUM_DEFAULT_FOLDER = "PATTERNS/RHYTHMIC/DRUM";
 static constexpr const char* PATTERN_MELODIC_DEFAULT_FOLDER = "PATTERNS/MELODIC";
+static constexpr const char* PATTERN_MELODIC_SEQUENCER_STEP_FOLDER = "PATTERNS/MELODIC/SEQUENCER/STEP";
+static constexpr const char* PATTERN_MELODIC_SEQUENCER_PULSE_FOLDER = "PATTERNS/MELODIC/SEQUENCER/PULSE";
 
 SavePatternUI savePatternUI{};
 
@@ -64,6 +67,18 @@ bool SavePatternUI::opened() {
 		return false;
 	}
 	error = createFoldersRecursiveIfNotExists(PATTERN_MELODIC_DEFAULT_FOLDER);
+	if (error != Error::NONE) {
+		display->displayError(error);
+		return false;
+	}
+
+	// Create sequencer mode pattern folders
+	error = createFoldersRecursiveIfNotExists(PATTERN_MELODIC_SEQUENCER_STEP_FOLDER);
+	if (error != Error::NONE) {
+		display->displayError(error);
+		return false;
+	}
+	error = createFoldersRecursiveIfNotExists(PATTERN_MELODIC_SEQUENCER_PULSE_FOLDER);
 	if (error != Error::NONE) {
 		display->displayError(error);
 		return false;
@@ -97,8 +112,29 @@ doReturnFalse:
 		}
 	}
 	else {
-		defaultDir = std::string(PATTERN_MELODIC_DEFAULT_FOLDER);
-		title = "Save Pattern";
+		// Melodic instruments - check if sequencer mode is active
+		InstrumentClip* clip = (InstrumentClip*)getCurrentClip();
+		if (clip->hasSequencerMode()) {
+			const std::string& modeName = clip->getSequencerModeName();
+			if (modeName == "step_sequencer") {
+				defaultDir = PATTERN_MELODIC_SEQUENCER_STEP_FOLDER;
+				title = "Save Step Pattern";
+			}
+			else if (modeName == "pulse_seq") {
+				defaultDir = PATTERN_MELODIC_SEQUENCER_PULSE_FOLDER;
+				title = "Save Pulse Pattern";
+			}
+			else {
+				// Unknown sequencer mode, use default
+				defaultDir = std::string(PATTERN_MELODIC_DEFAULT_FOLDER);
+				title = "Save Pattern";
+			}
+		}
+		else {
+			// Piano roll (no sequencer mode) - stays at root MELODIC for backward compatibility
+			defaultDir = std::string(PATTERN_MELODIC_DEFAULT_FOLDER);
+			title = "Save Pattern";
+		}
 		selectedDrumOnly = false;
 	}
 

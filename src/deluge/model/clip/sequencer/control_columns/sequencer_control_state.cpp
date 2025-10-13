@@ -22,6 +22,8 @@
 #include "hid/buttons.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
+#include "storage/storage_manager.h"
+#include "util/functions.h"
 #include <cstring>
 
 namespace deluge::model::clip::sequencer {
@@ -824,6 +826,96 @@ void SequencerControlState::clearBaseControlForType(ControlType type, SequencerM
 	default:
 		break;
 	}
+}
+
+// ========== PATTERN PERSISTENCE ==========
+
+void SequencerControlState::writeToFile(Serializer& writer, bool includeScenes) {
+	// Write control column pads as single hex string (Deluge convention)
+	writer.writeOpeningTagBeginning("controlColumns");
+
+	// Write pad data as hex string (7 bytes per pad: y, x, type, valueIndex[4 bytes], mode, active)
+	writer.write("\n\t\t");
+	writer.write("padData=\"0x");
+
+	char buffer[3];
+	for (size_t i = 0; i < pads_.size(); ++i) {
+		const auto& pad = pads_[i];
+
+		// Skip NONE type pads
+		if (pad.type == ControlType::NONE) {
+			continue;
+		}
+
+		// Determine x, y coordinates from index
+		int32_t x = (i < 8) ? kDisplayWidth : (kDisplayWidth + 1);
+		int32_t y = (i < 8) ? i : (i - 8);
+
+		// Byte 0: y coordinate
+		byteToHex(static_cast<uint8_t>(y), buffer);
+		writer.write(buffer);
+
+		// Byte 1: x coordinate
+		byteToHex(static_cast<uint8_t>(x), buffer);
+		writer.write(buffer);
+
+		// Byte 2: control type
+		byteToHex(static_cast<uint8_t>(pad.type), buffer);
+		writer.write(buffer);
+
+		// Bytes 3-6: valueIndex (int32_t, 4 bytes, big-endian)
+		char hexBuffer[9];
+		intToHex(pad.valueIndex, hexBuffer);
+		writer.write(hexBuffer);
+
+		// Byte 7: mode
+		byteToHex(static_cast<uint8_t>(pad.mode), buffer);
+		writer.write(buffer);
+
+		// Byte 8: active flag
+		byteToHex(pad.active ? 1 : 0, buffer);
+		writer.write(buffer);
+
+		// Byte 9: sceneValid flag (for scene pads)
+		if (pad.type == ControlType::SCENE) {
+			byteToHex(pad.sceneValid ? 1 : 0, buffer);
+			writer.write(buffer);
+		}
+	}
+
+	writer.write("\"");
+	writer.closeTag();
+
+	// Write scene data if requested
+	if (includeScenes) {
+		writer.writeArrayStart("scenes");
+
+		for (int32_t i = 0; i < kMaxScenes; ++i) {
+			if (sceneSizes_[i] > 0) {
+				writer.writeOpeningTagBeginning("scene");
+				writer.writeAttribute("index", i);
+				writer.writeAttribute("size", static_cast<int32_t>(sceneSizes_[i]));
+
+				// Write scene data as hex string
+				writer.write("\n\t\t\t");
+				writer.write("0x");
+				char buffer[3];
+				for (size_t j = 0; j < sceneSizes_[i]; ++j) {
+					byteToHex(sceneBuffers_[i][j], buffer);
+					writer.write(buffer);
+				}
+
+				writer.closeTag();
+			}
+		}
+
+		writer.writeArrayEnding("scenes");
+	}
+}
+
+Error SequencerControlState::readFromFile(Deserializer& reader) {
+	// TODO: Implement pattern loading
+	return Error::NONE;
 }
 
 } // namespace deluge::model::clip::sequencer
