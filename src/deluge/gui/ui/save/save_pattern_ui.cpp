@@ -55,6 +55,15 @@ bool SavePatternUI::opened() {
 	if (!getRootUI()->toClipMinder() || (getCurrentOutputType() == OutputType::AUDIO)) {
 		return false;
 	}
+	
+	// Cache sequencer mode name BEFORE any SD card operations to avoid pausing playback
+	cachedSequencerModeName.clear();
+	if (getCurrentOutputType() != OutputType::KIT) {
+		InstrumentClip* clip = (InstrumentClip*)getCurrentClip();
+		if (clip->hasSequencerMode()) {
+			cachedSequencerModeName = clip->getSequencerModeName();
+		}
+	}
 
 	Error error = createFoldersRecursiveIfNotExists(PATTERN_RHYTHMIC_KIT_DEFAULT_FOLDER);
 	if (error != Error::NONE) {
@@ -112,15 +121,13 @@ doReturnFalse:
 		}
 	}
 	else {
-		// Melodic instruments - check if sequencer mode is active
-		InstrumentClip* clip = (InstrumentClip*)getCurrentClip();
-		if (clip->hasSequencerMode()) {
-			const std::string& modeName = clip->getSequencerModeName();
-			if (modeName == "step_sequencer") {
+		// Melodic instruments - use cached sequencer mode name
+		if (!cachedSequencerModeName.empty()) {
+			if (cachedSequencerModeName == "step_sequencer") {
 				defaultDir = PATTERN_MELODIC_SEQUENCER_STEP_FOLDER;
 				title = "Save Step Pattern";
 			}
-			else if (modeName == "pulse_seq") {
+			else if (cachedSequencerModeName == "pulse_seq") {
 				defaultDir = PATTERN_MELODIC_SEQUENCER_PULSE_FOLDER;
 				title = "Save Pulse Pattern";
 			}

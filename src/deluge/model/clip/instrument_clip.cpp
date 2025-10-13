@@ -2436,16 +2436,16 @@ void InstrumentClip::writeDataToFile(Serializer& writer, Song* song) {
 
 		writer.writeArrayEnding("noteRows");
 	}
-	
+
 	// Write sequencer mode data if active (for song save)
 	if (hasSequencerMode()) {
 		writer.writeOpeningTagBeginning("sequencerMode");
 		writer.writeAttribute("mode", sequencerModeName_.c_str());
 		writer.writeOpeningTagEnd();
-		
+
 		// Write the active sequencer mode's data
 		sequencerMode_->writeToFile(writer, true); // Include scenes
-		
+
 		writer.writeClosingTag("sequencerMode");
 	}
 }
@@ -2844,11 +2844,11 @@ createNewParamManager:
 		}
 		reader.match(']');
 	}
-	
+
 	// Sequencer mode data (for song loading)
 	else if (!strcmp(tagName, "sequencerMode")) {
 		char const* modeName = nullptr;
-		
+
 		// Read sequencer mode attributes
 		while (*(tagName = reader.readNextTagOrAttributeName())) {
 			if (!strcmp(tagName, "mode")) {
@@ -2860,7 +2860,7 @@ createNewParamManager:
 					if (!hasSequencerMode() || getSequencerModeName() != "step_sequencer") {
 						setSequencerMode("step_sequencer");
 					}
-					
+
 					// Load step data
 					if (sequencerMode_) {
 						error = sequencerMode_->readFromFile(reader);
@@ -2879,7 +2879,7 @@ createNewParamManager:
 					if (!hasSequencerMode() || getSequencerModeName() != "pulse_seq") {
 						setSequencerMode("pulse_seq");
 					}
-					
+
 					// Load pulse data
 					if (sequencerMode_) {
 						error = sequencerMode_->readFromFile(reader);
