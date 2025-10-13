@@ -2436,6 +2436,18 @@ void InstrumentClip::writeDataToFile(Serializer& writer, Song* song) {
 
 		writer.writeArrayEnding("noteRows");
 	}
+	
+	// Write sequencer mode data if active (for song save)
+	if (hasSequencerMode()) {
+		writer.writeOpeningTagBeginning("sequencerMode");
+		writer.writeAttribute("mode", sequencerModeName_.c_str());
+		writer.writeOpeningTagEnd();
+		
+		// Write the active sequencer mode's data
+		sequencerMode_->writeToFile(writer, true); // Include scenes
+		
+		writer.writeClosingTag("sequencerMode");
+	}
 }
 
 Error InstrumentClip::readFromFile(Deserializer& reader, Song* song) {
@@ -2829,12 +2841,77 @@ createNewParamManager:
 				}
 				reader.match('}');             // leave value object.
 				reader.exitTag(nullptr, true); // leave box.
-			}
-			reader.match(']');
 		}
+		reader.match(']');
+	}
+	
+	// Sequencer mode data (for song loading)
+	else if (!strcmp(tagName, "sequencerMode")) {
+		char const* modeName = nullptr;
+		
+		// Read sequencer mode attributes
+		while (*(tagName = reader.readNextTagOrAttributeName())) {
+			if (!strcmp(tagName, "mode")) {
+				modeName = reader.readTagOrAttributeValue();
+			}
+			else if (!strcmp(tagName, "stepSequencer")) {
+				// Ensure step sequencer mode is active
+				if (modeName && !strcmp(modeName, "step_sequencer")) {
+					if (!hasSequencerMode() || getSequencerModeName() != "step_sequencer") {
+						setSequencerMode("step_sequencer");
+					}
+					
+					// Load step data
+					if (sequencerMode_) {
+						error = sequencerMode_->readFromFile(reader);
+						if (error != Error::NONE) {
+							goto someError;
+						}
+					}
+				}
+				else {
+					reader.exitTag(tagName);
+				}
+			}
+			else if (!strcmp(tagName, "pulseSequencer")) {
+				// Ensure pulse sequencer mode is active
+				if (modeName && !strcmp(modeName, "pulse_seq")) {
+					if (!hasSequencerMode() || getSequencerModeName() != "pulse_seq") {
+						setSequencerMode("pulse_seq");
+					}
+					
+					// Load pulse data
+					if (sequencerMode_) {
+						error = sequencerMode_->readFromFile(reader);
+						if (error != Error::NONE) {
+							goto someError;
+						}
+					}
+				}
+				else {
+					reader.exitTag(tagName);
+				}
+			}
+			else if (!strcmp(tagName, "controlColumns")) {
+				// Load control columns if sequencer mode is active
+				if (hasSequencerMode() && sequencerMode_) {
+					error = sequencerMode_->getControlColumnState().readFromFile(reader);
+					if (error != Error::NONE) {
+						goto someError;
+					}
+				}
+				else {
+					reader.exitTag(tagName);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
+			}
+		}
+	}
 
-		// These are the expression params for MPE
-		else if (!strcmp(tagName, "pitchBend")) {
+	// These are the expression params for MPE
+	else if (!strcmp(tagName, "pitchBend")) {
 			temp = 0;
 doReadExpressionParam:
 			paramManager.ensureExpressionParamSetExists();
