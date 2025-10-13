@@ -65,8 +65,8 @@ bool SequencerMode::handleHorizontalEncoder(int32_t offset, bool encoderPressed)
 		return false; // No control column pad held
 	}
 
-	// Delegate to control column state
-	return controlColumnState_.handleHorizontalEncoder(heldControlColumnX_, heldControlColumnY_, offset);
+	// Delegate to control column state, passing mode for compatibility checking
+	return controlColumnState_.handleHorizontalEncoder(heldControlColumnX_, heldControlColumnY_, offset, this);
 }
 
 bool SequencerMode::handleVerticalEncoder(int32_t offset) {

@@ -203,8 +203,15 @@ int32_t PulseSequencerMode::getTicksPerPeriod(int32_t baseTicks) const {
 	}
 
 	// Apply control column clock divider on top
+	// Apply control column clock divider
+	// Positive = slower (/2, /4), Negative = faster (*2, *4)
 	CombinedEffects effects = getCombinedEffects();
-	ticks = ticks / effects.clockDivider;
+	if (effects.clockDivider > 1) {
+		ticks = ticks * effects.clockDivider; // Divide: slower
+	}
+	else if (effects.clockDivider < -1) {
+		ticks = ticks / (-effects.clockDivider); // Multiply: faster
+	}
 
 	return ticks;
 }

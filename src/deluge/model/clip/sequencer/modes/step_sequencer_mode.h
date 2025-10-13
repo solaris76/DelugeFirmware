@@ -46,6 +46,9 @@ public:
 	bool supportsMIDI() override { return true; }
 	bool supportsCV() override { return true; }
 	bool supportsAudio() override { return false; }
+	
+	// Step Sequencer supports all control types (including DIRECTION)
+	bool supportsControlType(ControlType type) override { return true; }
 
 	// Lifecycle
 	void initialize() override;

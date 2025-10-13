@@ -55,7 +55,7 @@ public:
 
 	// Input handling
 	bool handlePad(int32_t x, int32_t y, int32_t velocity, class SequencerMode* mode = nullptr);
-	bool handleHorizontalEncoder(int32_t heldX, int32_t heldY, int32_t offset);
+	bool handleHorizontalEncoder(int32_t heldX, int32_t heldY, int32_t offset, class SequencerMode* mode = nullptr);
 	bool handleVerticalEncoder(int32_t heldX, int32_t heldY, int32_t offset);
 	bool handleVerticalEncoderButton(int32_t heldX, int32_t heldY);
 

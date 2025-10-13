@@ -45,6 +45,11 @@ public:
 	bool supportsMIDI() override { return true; }
 	bool supportsCV() override { return true; }
 	bool supportsAudio() override { return false; }
+	
+	// Pulse Sequencer doesn't support DIRECTION (no step-based playback)
+	bool supportsControlType(ControlType type) override {
+		return type != ControlType::DIRECTION;
+	}
 
 	void initialize() override;
 	void cleanup() override;

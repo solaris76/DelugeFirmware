@@ -121,6 +121,21 @@ public:
 	// Evolve notes with high mutation rate (~50%)
 	virtual void evolveNotesHigh() {}
 
+	// ========== MODE COMPATIBILITY ==========
+	
+	// Track type compatibility (default: support all)
+	virtual bool supportsInstrument() { return true; }
+	virtual bool supportsKit() { return true; }
+	virtual bool supportsMIDI() { return true; }
+	virtual bool supportsCV() { return true; }
+	virtual bool supportsAudio() { return false; } // Audio modes need special handling
+	
+	// Control column compatibility (override in specific modes)
+	virtual bool supportsControlType(ControlType type) {
+		// By default, all modes support all control types
+		return true;
+	}
+
 protected:
 	// ========== MODE-SPECIFIC ENCODER HANDLING ==========
 
@@ -173,13 +188,6 @@ protected:
 	static void renderPlaybackPosition(RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	                                   int32_t imageWidth, int32_t absolutePlaybackPos, int32_t totalLength,
 	                                   RGB color = RGB{255, 255, 255}, bool enabled = true);
-
-	// Track type compatibility (default: support all)
-	virtual bool supportsInstrument() { return true; }
-	virtual bool supportsKit() { return true; }
-	virtual bool supportsMIDI() { return true; }
-	virtual bool supportsCV() { return true; }
-	virtual bool supportsAudio() { return false; } // Audio modes need special handling
 
 	// ========== CONTROL COLUMNS ==========
 
