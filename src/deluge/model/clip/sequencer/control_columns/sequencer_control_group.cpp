@@ -58,37 +58,18 @@ namespace {
 
 	// Helper: Format signed integer with + or - prefix
 	void formatSignedInt(char* buffer, int32_t value) {
-		if (value > 0) {
-			buffer[0] = '+';
-			if (value < 10) {
-				buffer[1] = '0' + value;
-				buffer[2] = '\0';
-			}
-			else {
-				buffer[1] = '0' + (value / 10);
-				buffer[2] = '0' + (value % 10);
-				buffer[3] = '\0';
-			}
-		}
-		else if (value == 0) {
-			buffer[0] = '0';
-			buffer[1] = '\0';
+		if (value >= 0) {
+			snprintf(buffer, 16, "+%d", value);
 		}
 		else {
-			// Negative
-			int32_t absValue = -value;
-			buffer[0] = '-';
-			if (absValue < 10) {
-				buffer[1] = '0' + absValue;
-				buffer[2] = '\0';
-			}
-			else {
-				buffer[1] = '0' + (absValue / 10);
-				buffer[2] = '0' + (absValue % 10);
-				buffer[3] = '\0';
-			}
+			snprintf(buffer, 16, "%d", value);
 		}
 	}
+
+	// Direction mode names lookup table
+	constexpr const char* kDirectionNames[] = {
+		"FWD", "BACK", "PING", "RAND"
+	};
 }
 
 // ========== HELPER FUNCTIONS FOR INDIVIDUAL PAD CONTROL ==========
@@ -176,24 +157,10 @@ const char* formatValue(ControlType type, int32_t value) {
 	switch (type) {
 	case ControlType::CLOCK_DIV:
 		if (value < 0) {
-			buffer[0] = '*';
-			buffer[1] = '0' + (-value);
-			buffer[2] = '\0';
-		}
-		else if (value == 1) {
-			return "/1";
+			snprintf(buffer, sizeof(buffer), "*%d", -value);
 		}
 		else {
-			buffer[0] = '/';
-			if (value < 10) {
-				buffer[1] = '0' + value;
-				buffer[2] = '\0';
-			}
-			else {
-				buffer[1] = '0' + (value / 10);
-				buffer[2] = '0' + (value % 10);
-				buffer[3] = '\0';
-			}
+			snprintf(buffer, sizeof(buffer), "/%d", value);
 		}
 		return buffer;
 
@@ -203,37 +170,19 @@ const char* formatValue(ControlType type, int32_t value) {
 		return buffer;
 
 	case ControlType::SCENE:
-		buffer[0] = '0' + (value + 1);
-		buffer[1] = '\0';
+		snprintf(buffer, sizeof(buffer), "%d", value + 1);
 		return buffer;
 
 	case ControlType::DIRECTION:
-		switch (value) {
-		case 0: return "FWD";
-		case 1: return "BACK";
-		case 2: return "PING";
-		case 3: return "RAND";
-		default: return "?";
+		if (value >= 0 && value < 4) {
+			return kDirectionNames[value];
 		}
+		return "?";
 
 	case ControlType::RANDOM:
 	case ControlType::EVOLVE:
 	case ControlType::MUTATE:
-		// Show as percentage
-		if (value < 10) {
-			buffer[0] = '0' + value;
-			buffer[1] = '%';
-			buffer[2] = '\0';
-		}
-		else if (value < 100) {
-			buffer[0] = '0' + (value / 10);
-			buffer[1] = '0' + (value % 10);
-			buffer[2] = '%';
-			buffer[3] = '\0';
-		}
-		else {
-			return "100%";
-		}
+		snprintf(buffer, sizeof(buffer), "%d%%", value);
 		return buffer;
 
 	case ControlType::RESET:

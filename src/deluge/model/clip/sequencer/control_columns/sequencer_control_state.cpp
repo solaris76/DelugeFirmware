@@ -168,11 +168,11 @@ bool SequencerControlState::handleSceneCapture(ControlPad& pad, SequencerMode* m
 	}
 
 	size_t modeDataSize = mode->captureScene(sceneBuffers_[sceneNum], kMaxSceneDataSize);
-	
+
 	if (modeDataSize > 0 && modeDataSize <= kMaxSceneDataSize) {
 		sceneSizes_[sceneNum] = modeDataSize;
 		pad.sceneValid = true;
-		
+
 		deactivateAllScenePads();
 		pad.active = true;
 
@@ -181,7 +181,7 @@ bool SequencerControlState::handleSceneCapture(ControlPad& pad, SequencerMode* m
 		}
 		return true;
 	}
-	
+
 	if (display) {
 		display->displayPopup(modeDataSize > kMaxSceneDataSize ? "SCENE TOO BIG" : "CAPTURE FAILED");
 	}
@@ -197,7 +197,7 @@ bool SequencerControlState::handleSceneClear(ControlPad& pad) {
 	sceneSizes_[sceneNum] = 0;
 	pad.sceneValid = false;
 	pad.active = false;
-	
+
 	if (display) {
 		display->displayPopup("CLEARED");
 	}
