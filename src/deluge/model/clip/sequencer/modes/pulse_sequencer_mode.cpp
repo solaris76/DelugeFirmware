@@ -1456,7 +1456,7 @@ void PulseSequencerMode::evolveNotes(int32_t mutationRate) {
 	} else {
 		numEvolves = (mutationRate / 40) + 1; // 30% = 1, 60% = 2 evolves
 	}
-	
+
 	for (int32_t i = 0; i < numEvolves; i++) {
 		evolveSequence();
 	}
