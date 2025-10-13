@@ -119,71 +119,130 @@ int32_t SequencerControlState::getPadIndex(int32_t x, int32_t y) const {
 	return -1; // Invalid
 }
 
+// ========== HELPER FUNCTIONS ==========
+
+void SequencerControlState::deactivateAllScenePads() {
+	for (auto& p : pads_) {
+		if (p.type == ControlType::SCENE) {
+			p.active = false;
+		}
+	}
+}
+
+void SequencerControlState::renderPadAtPosition(int32_t y, int32_t x, const ControlPad& pad,
+                                                 RGB image[][kDisplayWidth + kSideBarWidth],
+                                                 uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
+	RGB color = helpers::getColorForType(pad.type);
+	bool isBright = pad.active || pad.held;
+	bool isEmpty = (pad.type == ControlType::SCENE && !pad.sceneValid) || (pad.type == ControlType::NONE);
+
+	if (isBright) {
+		image[y][x] = color;
+	}
+	else if (isEmpty) {
+		// Very dim for empty scenes or unused pads
+		image[y][x] = RGB{
+			static_cast<uint8_t>(color.r / 16),
+			static_cast<uint8_t>(color.g / 16),
+			static_cast<uint8_t>(color.b / 16)
+		};
+	}
+	else {
+		// Normal dim
+		image[y][x] = RGB{
+			static_cast<uint8_t>(color.r / 8),
+			static_cast<uint8_t>(color.g / 8),
+			static_cast<uint8_t>(color.b / 8)
+		};
+	}
+
+	if (occupancyMask) {
+		occupancyMask[y][x] = 64;
+	}
+}
+
+bool SequencerControlState::handleSceneCapture(ControlPad& pad, SequencerMode* mode) {
+	int32_t sceneNum = pad.valueIndex;
+	if (sceneNum < 0 || sceneNum >= kMaxScenes) {
+		return false;
+	}
+
+	size_t modeDataSize = mode->captureScene(sceneBuffers_[sceneNum], kMaxSceneDataSize);
+	
+	if (modeDataSize > 0 && modeDataSize <= kMaxSceneDataSize) {
+		sceneSizes_[sceneNum] = modeDataSize;
+		pad.sceneValid = true;
+		
+		deactivateAllScenePads();
+		pad.active = true;
+
+		if (display) {
+			display->displayPopup("CAPTURED");
+		}
+		return true;
+	}
+	
+	if (display) {
+		display->displayPopup(modeDataSize > kMaxSceneDataSize ? "SCENE TOO BIG" : "CAPTURE FAILED");
+	}
+	return false;
+}
+
+bool SequencerControlState::handleSceneClear(ControlPad& pad) {
+	int32_t sceneNum = pad.valueIndex;
+	if (sceneNum < 0 || sceneNum >= kMaxScenes) {
+		return false;
+	}
+
+	sceneSizes_[sceneNum] = 0;
+	pad.sceneValid = false;
+	pad.active = false;
+	
+	if (display) {
+		display->displayPopup("CLEARED");
+	}
+	return true;
+}
+
+bool SequencerControlState::handleSceneRecall(ControlPad& pad, SequencerMode* mode) {
+	int32_t sceneNum = pad.valueIndex;
+	if (sceneNum < 0 || sceneNum >= kMaxScenes || sceneSizes_[sceneNum] == 0) {
+		if (display) {
+			display->displayPopup("EMPTY");
+		}
+		return false;
+	}
+
+	bool success = mode->recallScene(sceneBuffers_[sceneNum], sceneSizes_[sceneNum]);
+	if (success) {
+		deactivateAllScenePads();
+		pad.active = true;
+		uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+
+		if (display) {
+			int32_t val = helpers::getValue(pad.type, pad.valueIndex);
+			static char popup[40];
+			snprintf(popup, sizeof(popup), "%s: %s", helpers::getTypeName(pad.type),
+			         helpers::formatValue(pad.type, val));
+			display->displayPopup(popup);
+		}
+		return true;
+	}
+	return false;
+}
+
+// ========== RENDERING ==========
+
 void SequencerControlState::render(RGB image[][kDisplayWidth + kSideBarWidth],
                                     uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
 	// Render x16 column (pads 0-7)
 	for (int32_t y = 0; y < 8; y++) {
-		ControlPad& pad = pads_[y];
-		RGB color = helpers::getColorForType(pad.type);
-
-		// Adjust brightness
-		bool isBright = pad.active || pad.held;
-		bool isEmpty = (pad.type == ControlType::SCENE && !pad.sceneValid) || (pad.type == ControlType::NONE);
-
-		if (isBright) {
-			image[y][kDisplayWidth] = color;
-		}
-		else if (isEmpty) {
-			// Very dim for empty scenes or unused pads
-			image[y][kDisplayWidth] = RGB{
-				static_cast<uint8_t>(color.r / 16),
-				static_cast<uint8_t>(color.g / 16),
-				static_cast<uint8_t>(color.b / 16)
-			};
-		}
-		else {
-			// Normal dim
-			image[y][kDisplayWidth] = RGB{
-				static_cast<uint8_t>(color.r / 8),
-				static_cast<uint8_t>(color.g / 8),
-				static_cast<uint8_t>(color.b / 8)
-			};
-		}
-
-		if (occupancyMask) {
-			occupancyMask[y][kDisplayWidth] = 64;
-		}
+		renderPadAtPosition(y, kDisplayWidth, pads_[y], image, occupancyMask);
 	}
 
 	// Render x17 column (pads 8-15)
 	for (int32_t y = 0; y < 8; y++) {
-		ControlPad& pad = pads_[8 + y];
-		RGB color = helpers::getColorForType(pad.type);
-
-		bool isBright = pad.active || pad.held;
-		bool isEmpty = (pad.type == ControlType::SCENE && !pad.sceneValid) || (pad.type == ControlType::NONE);
-
-		if (isBright) {
-			image[y][kDisplayWidth + 1] = color;
-		}
-		else if (isEmpty) {
-			image[y][kDisplayWidth + 1] = RGB{
-				static_cast<uint8_t>(color.r / 16),
-				static_cast<uint8_t>(color.g / 16),
-				static_cast<uint8_t>(color.b / 16)
-			};
-		}
-		else {
-			image[y][kDisplayWidth + 1] = RGB{
-				static_cast<uint8_t>(color.r / 8),
-				static_cast<uint8_t>(color.g / 8),
-				static_cast<uint8_t>(color.b / 8)
-			};
-		}
-
-		if (occupancyMask) {
-			occupancyMask[y][kDisplayWidth + 1] = 64;
-		}
+		renderPadAtPosition(y, kDisplayWidth + 1, pads_[8 + y], image, occupancyMask);
 	}
 }
 
@@ -201,32 +260,7 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 		if (pressed) {
 			// SAVE button = capture scene
 			if (Buttons::isButtonPressed(deluge::hid::button::SAVE)) {
-				int32_t sceneNum = pad.valueIndex;
-				if (sceneNum >= 0 && sceneNum < kMaxScenes) {
-					// Simplified: Only capture mode-specific pattern data to shared buffer
-					size_t modeDataSize = mode->captureScene(sceneBuffers_[sceneNum], kMaxSceneDataSize);
-
-					if (modeDataSize > 0 && modeDataSize <= kMaxSceneDataSize) {
-						sceneSizes_[sceneNum] = modeDataSize;
-						pad.sceneValid = true;
-
-						// Deactivate all other scene pads and activate this one
-						for (auto& p : pads_) {
-							if (p.type == ControlType::SCENE) {
-								p.active = false;
-							}
-						}
-						pad.active = true;
-
-						if (display) {
-							display->displayPopup("CAPTURED");
-						}
-					} else {
-						if (display) {
-							display->displayPopup(modeDataSize > kMaxSceneDataSize ? "SCENE TOO BIG" : "CAPTURE FAILED");
-						}
-					}
-				}
+				handleSceneCapture(pad, mode);
 				pad.held = true;
 				refreshSidebar();
 				return true;
@@ -234,15 +268,7 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 
 			// SHIFT button = clear scene
 			if (Buttons::isShiftButtonPressed()) {
-				int32_t sceneNum = pad.valueIndex;
-				if (sceneNum >= 0 && sceneNum < kMaxScenes) {
-					sceneSizes_[sceneNum] = 0;
-					pad.sceneValid = false;
-					pad.active = false;  // Deactivate pad (back to dim)
-					if (display) {
-						display->displayPopup("CLEARED");
-					}
-				}
+				handleSceneClear(pad);
 				pad.held = true;
 				refreshSidebar();
 				return true;
@@ -250,31 +276,7 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 
 			// Otherwise = recall scene
 			if (pad.sceneValid) {
-				int32_t sceneNum = pad.valueIndex;
-				if (sceneNum >= 0 && sceneNum < kMaxScenes && sceneSizes_[sceneNum] > 0) {
-					// Simplified: Only restore mode-specific pattern data from shared buffer
-					bool success = mode->recallScene(sceneBuffers_[sceneNum], sceneSizes_[sceneNum]);
-					if (success) {
-						// Deactivate all other scene pads (only one scene active at a time)
-						for (auto& p : pads_) {
-							if (p.type == ControlType::SCENE) {
-								p.active = false;
-							}
-						}
-
-						// Activate only this scene pad
-						pad.active = true;
-						uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
-
-						if (display) {
-							int32_t val = helpers::getValue(pad.type, pad.valueIndex);
-							static char popup[40];
-							snprintf(popup, sizeof(popup), "%s: %s", helpers::getTypeName(pad.type),
-							         helpers::formatValue(pad.type, val));
-							display->displayPopup(popup);
-						}
-					}
-				}
+				handleSceneRecall(pad, mode);
 			}
 			else {
 				if (display) {

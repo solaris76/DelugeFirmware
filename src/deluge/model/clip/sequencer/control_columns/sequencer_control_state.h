@@ -83,6 +83,17 @@ private:
 
 	// Helper to map x,y to pad index
 	int32_t getPadIndex(int32_t x, int32_t y) const;
+	
+	// Scene management helpers
+	void deactivateAllScenePads();
+	bool handleSceneCapture(ControlPad& pad, class SequencerMode* mode);
+	bool handleSceneClear(ControlPad& pad);
+	bool handleSceneRecall(ControlPad& pad, class SequencerMode* mode);
+	
+	// Rendering helpers
+	void renderPadAtPosition(int32_t y, int32_t x, const ControlPad& pad,
+	                         RGB image[][kDisplayWidth + kSideBarWidth],
+	                         uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]);
 };
 
 } // namespace deluge::model::clip::sequencer
