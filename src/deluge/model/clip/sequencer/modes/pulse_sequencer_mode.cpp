@@ -1475,13 +1475,13 @@ size_t PulseSequencerMode::captureScene(void* buffer, size_t maxSize) {
 	uint8_t* ptr = static_cast<uint8_t*>(buffer);
 	size_t offset = 0;
 
-	// Calculate required size
+	// Calculate required size for pattern data
 	size_t stagesSize = sizeof(stages_);
 	size_t perfControlsSize = sizeof(performanceControls_);
 	size_t displayStateSize = sizeof(displayState_.gateLineOffset);
-	size_t totalSize = stagesSize + perfControlsSize + displayStateSize;
+	size_t patternDataSize = stagesSize + perfControlsSize + displayStateSize;
 
-	if (offset + totalSize > maxSize) {
+	if (offset + patternDataSize > maxSize) {
 		return 0; // Not enough space
 	}
 
@@ -1497,6 +1497,13 @@ size_t PulseSequencerMode::captureScene(void* buffer, size_t maxSize) {
 	memcpy(&ptr[offset], &displayState_.gateLineOffset, displayStateSize);
 	offset += displayStateSize;
 
+	// Save control column state
+	size_t controlStateSize = controlColumnState_.captureState(&ptr[offset], maxSize - offset);
+	if (controlStateSize == 0) {
+		return 0; // Failed to capture control state
+	}
+	offset += controlStateSize;
+
 	return offset;
 }
 
@@ -1511,9 +1518,9 @@ bool PulseSequencerMode::recallScene(const void* buffer, size_t size) {
 	size_t stagesSize = sizeof(stages_);
 	size_t perfControlsSize = sizeof(performanceControls_);
 	size_t displayStateSize = sizeof(displayState_.gateLineOffset);
-	size_t totalSize = stagesSize + perfControlsSize + displayStateSize;
+	size_t patternDataSize = stagesSize + perfControlsSize + displayStateSize;
 
-	if (size < totalSize) {
+	if (size < patternDataSize) {
 		return false; // Not enough data
 	}
 
@@ -1528,6 +1535,14 @@ bool PulseSequencerMode::recallScene(const void* buffer, size_t size) {
 	// Restore display state offset
 	memcpy(&displayState_.gateLineOffset, &ptr[offset], displayStateSize);
 	offset += displayStateSize;
+
+	// Restore control column state (if present)
+	if (offset < size) {
+		if (!controlColumnState_.restoreState(&ptr[offset], size - offset)) {
+			// Control state restoration failed, but pattern data is valid
+			// This is not a fatal error (for backward compatibility)
+		}
+	}
 
 	// Update scale notes to current scale
 	updateScaleNotes();
