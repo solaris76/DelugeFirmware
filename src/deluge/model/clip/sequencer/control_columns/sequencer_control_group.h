@@ -25,16 +25,17 @@ namespace deluge::model::clip::sequencer {
 
 // Control types available for sequencer columns
 enum class ControlType {
-	NONE,        // Empty/unused pad
-	CLOCK_DIV,
-	OCTAVE,
-	TRANSPOSE,
-	SCENE,
-	DIRECTION,
-	RESET,       // Generative: reset to init (no value)
-	RANDOM,      // Generative: randomize (with % intensity)
+	NONE,        // Empty/unused pad (always first)
+	// Alphabetically sorted from here:
+	CLOCK_DIV,   // Clock divider/multiplier
+	DIRECTION,   // Playback direction
 	EVOLVE,      // Generative: evolve notes (with % mutation rate)
 	MUTATE,      // Generative: mutate notes (with % mutation rate)
+	OCTAVE,      // Octave shift
+	RANDOM,      // Generative: randomize (with % intensity)
+	RESET,       // Generative: reset to init (no value)
+	SCENE,       // Scene capture/recall
+	TRANSPOSE,   // Semitone transpose
 	MAX
 };
 

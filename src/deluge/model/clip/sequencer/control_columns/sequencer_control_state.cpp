@@ -423,18 +423,18 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 
 	ControlPad& pad = pads_[padIndex];
 
-	// All available control types
+	// All available control types (alphabetically sorted, NONE always first)
 	constexpr ControlType availableTypes[] = {
 		ControlType::NONE,
 		ControlType::CLOCK_DIV,
-		ControlType::OCTAVE,
-		ControlType::TRANSPOSE,
-		ControlType::SCENE,
 		ControlType::DIRECTION,
-		ControlType::RESET,
-		ControlType::RANDOM,
 		ControlType::EVOLVE,
-		ControlType::MUTATE
+		ControlType::MUTATE,
+		ControlType::OCTAVE,
+		ControlType::RANDOM,
+		ControlType::RESET,
+		ControlType::SCENE,
+		ControlType::TRANSPOSE
 	};
 	constexpr int32_t numTypes = sizeof(availableTypes) / sizeof(availableTypes[0]);
 
@@ -451,7 +451,7 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 	int32_t direction = (offset > 0) ? 1 : -1;
 	int32_t newIndex = currentIndex;
 	int32_t attempts = 0;
-	
+
 	do {
 		newIndex += direction;
 		if (newIndex < 0) {
@@ -460,13 +460,13 @@ bool SequencerControlState::handleHorizontalEncoder(int32_t heldX, int32_t heldY
 		else if (newIndex >= numTypes) {
 			newIndex = 0;
 		}
-		
+
 		// Check if this type is supported by the mode
 		ControlType candidate = availableTypes[newIndex];
 		if (!mode || mode->supportsControlType(candidate)) {
 			break; // Found a supported type
 		}
-		
+
 		attempts++;
 	} while (attempts < numTypes); // Prevent infinite loop
 
