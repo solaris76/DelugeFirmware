@@ -323,13 +323,13 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 			int32_t mutationRate = helpers::getValue(pad.type, pad.valueIndex);
 
 			if (pad.type == ControlType::RANDOM) {
-				mode->randomizeAll();
+				mode->randomizeAll(mutationRate);
 			}
 			else if (pad.type == ControlType::EVOLVE) {
-				mode->evolveNotesLow(); // Uses mutation rate from pad value
+				mode->evolveNotes(mutationRate);
 			}
 			else if (pad.type == ControlType::MUTATE) {
-				mode->evolveNotesHigh(); // Uses mutation rate from pad value
+				mode->mutateAll(mutationRate);
 			}
 
 			if (display) {

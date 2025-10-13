@@ -1436,26 +1436,33 @@ void PulseSequencerMode::resetToInit() {
 	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
 }
 
-void PulseSequencerMode::randomizeAll() {
+void PulseSequencerMode::randomizeAll(int32_t mutationRate) {
 	// Use existing randomize implementation
+	// TODO: Could apply mutationRate to partially randomize
 	randomizeSequence();
 
 	// Full UI refresh
 	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
 }
 
-void PulseSequencerMode::evolveNotesLow() {
-	// Use existing evolve implementation (already does gentle mutation)
-	evolveSequence();
+void PulseSequencerMode::evolveNotes(int32_t mutationRate) {
+	// Use existing evolve implementation
+	// Run evolve multiple times based on mutation rate
+	int32_t numEvolves = (mutationRate / 30) + 1; // 30% = 2, 60% = 3, 90% = 4, etc.
+	for (int32_t i = 0; i < numEvolves; i++) {
+		evolveSequence();
+	}
 
 	// Full UI refresh
 	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
 }
 
-void PulseSequencerMode::evolveNotesHigh() {
-	// For high mutation, run evolve multiple times
-	evolveSequence();
-	evolveSequence();
+void PulseSequencerMode::mutateAll(int32_t mutationRate) {
+	// For Pulse Sequencer, mutate = more aggressive evolve
+	int32_t numEvolves = (mutationRate / 20) + 1; // More evolves for higher rate
+	for (int32_t i = 0; i < numEvolves; i++) {
+		evolveSequence();
+	}
 
 	// Full UI refresh
 	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);

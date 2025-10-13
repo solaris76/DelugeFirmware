@@ -556,38 +556,63 @@ void StepSequencerMode::resetToInit() {
 	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
 }
 
-void StepSequencerMode::randomizeAll() {
-	// Randomize all step parameters
+void StepSequencerMode::randomizeAll(int32_t mutationRate) {
+	// Randomize all step parameters based on mutation rate
 	for (int32_t i = 0; i < kNumSteps; ++i) {
-		// Random gate type (70% ON, 20% OFF, 10% SKIP)
-		int32_t gateRand = rand() % 100;
-		if (gateRand < 70) {
-			steps_[i].gateType = GateType::ON;
-		}
-		else if (gateRand < 90) {
-			steps_[i].gateType = GateType::OFF;
-		}
-		else {
-			steps_[i].gateType = GateType::SKIP;
-		}
+		if (rand() % 100 < mutationRate) {
+			// Random gate type (70% ON, 20% OFF, 10% SKIP)
+			int32_t gateRand = rand() % 100;
+			if (gateRand < 70) {
+				steps_[i].gateType = GateType::ON;
+			}
+			else if (gateRand < 90) {
+				steps_[i].gateType = GateType::OFF;
+			}
+			else {
+				steps_[i].gateType = GateType::SKIP;
+			}
 
-		// Random note from scale
-		if (numScaleNotes_ > 0) {
-			steps_[i].noteIndex = rand() % numScaleNotes_;
-		}
+			// Random note from scale
+			if (numScaleNotes_ > 0) {
+				steps_[i].noteIndex = rand() % numScaleNotes_;
+			}
 
-		// Random octave (-2 to +2)
-		steps_[i].octave = (rand() % 5) - 2;
+			// Random octave (-2 to +2)
+			steps_[i].octave = (rand() % 5) - 2;
+		}
 	}
 
 	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
 }
 
-void StepSequencerMode::evolveNotesLow() {
-	// Evolve notes with ~20% mutation rate
+void StepSequencerMode::evolveNotes(int32_t mutationRate) {
+	// Evolve notes only - smooth melodic evolution
 	for (int32_t i = 0; i < kNumSteps; ++i) {
-		if ((rand() % 100) < 20) { // 20% chance
-			// Mutate note (move up or down by 1-2 steps)
+		if ((rand() % 100) < mutationRate) {
+			// Mutate note by small amount for smooth evolution
+			if (numScaleNotes_ > 0) {
+				int32_t change = (rand() % 3) - 1; // -1, 0, +1
+				steps_[i].noteIndex += change;
+
+				// Wrap around
+				while (steps_[i].noteIndex < 0) {
+					steps_[i].noteIndex += numScaleNotes_;
+				}
+				while (steps_[i].noteIndex >= numScaleNotes_) {
+					steps_[i].noteIndex -= numScaleNotes_;
+				}
+			}
+		}
+	}
+
+	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+}
+
+void StepSequencerMode::mutateAll(int32_t mutationRate) {
+	// Mutate everything - notes, octaves, gates (chaotic)
+	for (int32_t i = 0; i < kNumSteps; ++i) {
+		if ((rand() % 100) < mutationRate) {
+			// Mutate note (larger jumps than evolve)
 			if (numScaleNotes_ > 0) {
 				int32_t change = (rand() % 5) - 2; // -2 to +2
 				steps_[i].noteIndex += change;
@@ -600,37 +625,20 @@ void StepSequencerMode::evolveNotesLow() {
 					steps_[i].noteIndex -= numScaleNotes_;
 				}
 			}
-		}
-	}
 
-	uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
-}
-
-void StepSequencerMode::evolveNotesHigh() {
-	// Evolve notes with ~50% mutation rate
-	for (int32_t i = 0; i < kNumSteps; ++i) {
-		if ((rand() % 100) < 50) { // 50% chance
-			// Mutate note (move up or down by 1-3 steps)
-			if (numScaleNotes_ > 0) {
-				int32_t change = (rand() % 7) - 3; // -3 to +3
-				steps_[i].noteIndex += change;
-
-				// Wrap around
-				while (steps_[i].noteIndex < 0) {
-					steps_[i].noteIndex += numScaleNotes_;
-				}
-				while (steps_[i].noteIndex >= numScaleNotes_) {
-					steps_[i].noteIndex -= numScaleNotes_;
-				}
-			}
-
-			// Occasionally mutate octave too (10% of mutations)
-			if ((rand() % 100) < 10) {
+			// Also mutate octave (30% of mutations)
+			if ((rand() % 100) < 30) {
 				int32_t octaveChange = (rand() % 3) - 1; // -1, 0, or +1
 				steps_[i].octave += octaveChange;
 				// Clamp octave to reasonable range
 				if (steps_[i].octave < -3) steps_[i].octave = -3;
 				if (steps_[i].octave > 3) steps_[i].octave = 3;
+			}
+			
+			// Also mutate gates (20% of mutations)
+			if ((rand() % 100) < 20) {
+				int32_t gateRand = rand() % 3;
+				steps_[i].gateType = static_cast<GateType>(gateRand);
 			}
 		}
 	}

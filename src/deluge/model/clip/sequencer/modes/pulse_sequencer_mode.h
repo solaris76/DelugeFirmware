@@ -80,9 +80,9 @@ public:
 
 	// Generative mutations (wired to existing functionality)
 	void resetToInit() override;
-	void randomizeAll() override;
-	void evolveNotesLow() override;
-	void evolveNotesHigh() override;
+	void randomizeAll(int32_t mutationRate = 100) override;
+	void evolveNotes(int32_t mutationRate = 30) override;
+	void mutateAll(int32_t mutationRate = 50) override;
 
 	// Gate types enum
 	enum class GateType : int32_t { OFF = 0, SINGLE = 1, MULTIPLE = 2, HELD = 3 };

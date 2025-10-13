@@ -114,12 +114,12 @@ public:
 	// Generative mutation actions - implement these in derived classes to support generative control group
 	// Reset to initial state
 	virtual void resetToInit() {}
-	// Randomize all parameters
-	virtual void randomizeAll() {}
-	// Evolve notes with low mutation rate (~20%)
-	virtual void evolveNotesLow() {}
-	// Evolve notes with high mutation rate (~50%)
-	virtual void evolveNotesHigh() {}
+	// Randomize all parameters (mutationRate 0-100%)
+	virtual void randomizeAll(int32_t mutationRate = 100) {}
+	// Evolve notes (mutationRate 0-100%)
+	virtual void evolveNotes(int32_t mutationRate = 30) {}
+	// Mutate all aspects (mutationRate 0-100%)
+	virtual void mutateAll(int32_t mutationRate = 50) {}
 
 	// ========== MODE COMPATIBILITY ==========
 	
