@@ -205,10 +205,18 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 				if (sceneNum >= 0 && sceneNum < kMaxScenes) {
 					// Simplified: Only capture mode-specific pattern data to shared buffer
 					size_t modeDataSize = mode->captureScene(sceneBuffers_[sceneNum], kMaxSceneDataSize);
-
+					
 					if (modeDataSize > 0 && modeDataSize <= kMaxSceneDataSize) {
 						sceneSizes_[sceneNum] = modeDataSize;
 						pad.sceneValid = true;
+						
+						// Deactivate all other scene pads and activate this one
+						for (auto& p : pads_) {
+							if (p.type == ControlType::SCENE) {
+								p.active = false;
+							}
+						}
+						pad.active = true;
 
 						if (display) {
 							display->displayPopup("CAPTURED");
@@ -252,7 +260,7 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 								p.active = false;
 							}
 						}
-						
+
 						// Activate only this scene pad
 						pad.active = true;
 						uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
