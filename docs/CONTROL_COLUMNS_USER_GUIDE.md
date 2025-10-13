@@ -40,11 +40,11 @@ Out of the box, the pads are configured as follows:
 - **Pads 4-7** (top): CLOCK controls (/1, /2, /4, /16)
 
 ### Column x17 (Pads 8-15)
-- **Pads 8-11** (bottom): SCENE slots (1-4)
-- **Pad 12**: EVOLVE (50% mutation)
-- **Pad 13**: MUTATE (50% mutation)
-- **Pad 14**: RANDOM (50% mutation)
-- **Pad 15**: RESET
+- **Pad 8** (y0): SCENE 1
+- **Pad 9** (y1): SCENE 2
+- **Pads 10-14** (y2-y6): NONE (empty - configure as needed)
+- **Pad 15** (y7): RESET
+- **Pad 7** (y7 x16): RANDOM
 
 ---
 
@@ -175,27 +175,22 @@ Out of the box, the pads are configured as follows:
 - **Mode**: Always MOMENTARY (instant trigger)
 
 ### 🩷 EVOLVE (Light Evolution)
-**Color**: Light Pink  
+**Color**: Pink  
 **Values**: 10% to 100% mutation rate  
-**Purpose**: Gradually evolves the pattern
+**Purpose**: Evolves the pattern with adaptive behavior
 
-- Changes notes with chance based on mutation rate
-- Lower percentages = subtle evolution
-- Higher percentages = more dramatic changes
-- Great for creating variations
+- **Low % (10-70%)**: Gentle melodic drift
+  - Small note changes only (-1, 0, +1 steps in scale)
+  - Octaves and gates remain unchanged
+  - Perfect for subtle variations
+  
+- **High % (>70%)**: Chaotic evolution
+  - Larger note jumps (-2 to +2 steps)
+  - 40% chance to also shift octaves
+  - 25% chance to flip gate types
+  - Creates dramatic variations
+
 - Instant action (press = evolve immediately)
-- **Mode**: Always MOMENTARY (instant trigger)
-
-### 💗 MUTATE (Heavy Mutation)
-**Color**: Lighter Pink  
-**Values**: 10% to 100% mutation rate  
-**Purpose**: Heavily mutates the pattern
-
-- More aggressive than EVOLVE
-- Changes notes AND occasionally shifts octaves
-- Creates more dramatic variations
-- Higher mutation rates = more chaos
-- Instant action (press = mutate immediately)
 - **Mode**: Always MOMENTARY (instant trigger)
 
 ### ⚫ NONE (Disabled)
@@ -268,8 +263,8 @@ Configure pads for live performance:
 x16:                    x17:
 Pad 7: CLOCK /1        Pad 15: RESET
 Pad 6: CLOCK /2        Pad 14: RANDOM 50%
-Pad 5: CLOCK /4        Pad 13: EVOLVE 30%
-Pad 4: CLOCK /8        Pad 12: MUTATE 70%
+Pad 5: CLOCK /4        Pad 13: EVOLVE 70%
+Pad 4: CLOCK /8        Pad 12: EVOLVE 30%
 Pad 3: OCTAVE +2       Pad 11: SCENE 4
 Pad 2: OCTAVE +1       Pad 10: SCENE 3
 Pad 1: OCTAVE 0        Pad 9:  SCENE 2
@@ -288,9 +283,9 @@ Set up multiple evolution intensities:
 ```
 x16:                    x17:
 Pad 7: EVOLVE 10%      Pad 15: RESET
-Pad 6: EVOLVE 30%      Pad 14: MUTATE 100%
-Pad 5: EVOLVE 50%      Pad 13: MUTATE 50%
-Pad 4: EVOLVE 80%      Pad 12: MUTATE 20%
+Pad 6: EVOLVE 30%      Pad 14: EVOLVE 90%
+Pad 5: EVOLVE 50%      Pad 13: EVOLVE 100%
+Pad 4: EVOLVE 80%      Pad 12: RANDOM 30%
 Pad 3: RANDOM 20%      Pad 11: SCENE 4
 Pad 2: RANDOM 50%      Pad 10: SCENE 3
 Pad 1: RANDOM 80%      Pad 9:  SCENE 2
@@ -298,9 +293,9 @@ Pad 0: CLOCK /4        Pad 8:  SCENE 1
 ```
 
 **Workflow**:
-- Tap EVOLVE pads for subtle to dramatic evolution
-- RANDOM pads for different randomization intensities
-- MUTATE pads for heavy variations
+- Tap EVOLVE 10-50% for gentle melodic drift
+- Tap EVOLVE 80-100% for chaotic evolution (notes + octaves + gates)
+- RANDOM pads for complete randomization at different intensities
 - RESET to return to start
 
 ### Example 3: Transpose/Octave Control
@@ -424,9 +419,9 @@ Switch between scenes during playback for instant song structure.
    - Creates evolving macro-patterns
 
 3. **Generative Cascade**:
-   - RESET → RANDOM 20% → EVOLVE 30% → MUTATE 50%
+   - RESET → EVOLVE 20% → EVOLVE 40% → EVOLVE 80% → RANDOM 30%
    - Each step adds more variation
-   - Creates organic-sounding progressions
+   - Creates organic-sounding progressions from subtle to chaotic
 
 4. **Tempo Games**:
    - Switch rapidly between /1, /2, /4, /8
@@ -445,9 +440,8 @@ Switch between scenes during playback for instant song structure.
 | SCENE | 🔵 Blue | Scene 1 |
 | DIRECTION | 🩵 Cyan | FWD |
 | RESET | 🟦 Light Blue | (trigger) |
-| RANDOM | 🟣 Light Magenta | 50% |
-| EVOLVE | 🩷 Light Pink | 30% |
-| MUTATE | 💗 Lighter Pink | 70% |
+| RANDOM | 🟣 Magenta | 50% |
+| EVOLVE | 🩷 Pink | 30% |
 | NONE | ⚫ Off/Black | (disabled) |
 
 **Brightness Indicators**:
@@ -500,10 +494,10 @@ Switch between scenes during playback for instant song structure.
 - SHIFT + pad = Clear scene
 
 **Default Layout**:
-- x16 bottom: OCTAVE (0, -1, +1, +2)
-- x16 top: CLOCK (/1, /2, /4, /16)
-- x17 bottom: SCENE (1-4)
-- x17 top: EVOLVE, MUTATE, RANDOM, RESET
+- x16 bottom: OCTAVE (+1), TRANSPOSE (+5)
+- x16 top: (empty pads for configuration)
+- x17 bottom: SCENE 1, SCENE 2
+- x17 top: RESET, RANDOM
 
 ---
 
