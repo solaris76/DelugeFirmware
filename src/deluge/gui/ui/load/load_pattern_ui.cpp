@@ -53,7 +53,7 @@ bool LoadPatternUI::opened() {
 	if (!getRootUI()->toClipMinder() || (getCurrentOutputType() == OutputType::AUDIO)) {
 		return false;
 	}
-	
+
 	// Cache sequencer mode name BEFORE any SD card operations to avoid pausing playback
 	cachedSequencerModeName.clear();
 	if (getCurrentOutputType() != OutputType::KIT) {

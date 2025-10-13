@@ -2,6 +2,8 @@
 
 Alternative sequencing modes for the Synthstrom Deluge that transform how you create patterns.
 
+Note: pad y7 is actually top row 8 and x15 is 16th column. (Deluge starts at 0 so add 1 to below)
+
 ---
 
 ## Quick Start
@@ -36,7 +38,8 @@ Each **column (x0-x15)** is one step (1-16):
 - **y0** - Gate (OFF/ON/SKIP)
 - **y1** - Octave Down (blue)
 - **y2** - Octave Up (blue)
-- **y3-y7** - Note selection (5 visible notes from current scale)
+- **y3-y7** - Note selection (5 visible notes from current scale) Use vertical encoder to scroll notes
+- Notes are in the scale set. 
 
 ### How to Use
 
@@ -150,7 +153,7 @@ The **right two columns (x16-x17)** provide performance controls and scene manag
 **Generative:**
 - **RESET** - Reset pattern to init state
 - **RANDOM** - Randomize pattern (value = chaos %)
-- **EVOLVE** - Gentle pattern mutation (value = mutation %)
+- **EVOLVE** - Gentle pattern mutation (value = mutation %) - great for evolving a pattern at 10-30%
 
 ### Default Layout
 
