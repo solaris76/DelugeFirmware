@@ -246,12 +246,23 @@ bool SequencerControlState::handlePad(int32_t x, int32_t y, int32_t velocity, Se
 					// Simplified: Only restore mode-specific pattern data from shared buffer
 					bool success = mode->recallScene(sceneBuffers_[sceneNum], sceneSizes_[sceneNum]);
 					if (success) {
+						// Deactivate all other scene pads (only one scene active at a time)
+						for (auto& p : pads_) {
+							if (p.type == ControlType::SCENE) {
+								p.active = false;
+							}
+						}
+						
+						// Activate only this scene pad
 						pad.active = true;
 						uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
 
 						if (display) {
 							int32_t val = helpers::getValue(pad.type, pad.valueIndex);
-							display->displayPopup(helpers::formatValue(pad.type, val));
+							static char popup[40];
+							snprintf(popup, sizeof(popup), "%s: %s", helpers::getTypeName(pad.type),
+							         helpers::formatValue(pad.type, val));
+							display->displayPopup(popup);
 						}
 					}
 				}
