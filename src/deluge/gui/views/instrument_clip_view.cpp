@@ -4716,7 +4716,15 @@ void InstrumentClipView::sendAuditionNote(bool on, uint8_t yDisplay, uint8_t vel
 					    && !modelStackWithNoteRow->getNoteRow()->paramManager.containsAnyMainParamCollections()) {
 						FREEZE_WITH_ERROR("E325"); // Trying to catch an E313 that Vinz got
 					}
-					((Kit*)instrument)->beginAuditioningforDrum(modelStackWithNoteRow, drum, velocity, zeroMPEValues);
+
+					// For MIDI drums, use the drum's defaultVelocity instead of pad pressure
+					uint8_t velocityToUse = velocity;
+					if (drum->type == DrumType::MIDI) {
+						velocityToUse = ((MIDIDrum*)drum)->defaultVelocity;
+					}
+
+					((Kit*)instrument)
+					    ->beginAuditioningforDrum(modelStackWithNoteRow, drum, velocityToUse, zeroMPEValues);
 				}
 				else {
 					((Kit*)instrument)->endAuditioningForDrum(modelStackWithNoteRow, drum);
