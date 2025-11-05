@@ -71,6 +71,9 @@ public:
 	void sendNote(MIDISource source, bool on, int32_t note, uint8_t velocity, uint8_t channel, int32_t filter,
 	              uint8_t deviceFilter);
 	void sendCC(MIDISource source, int32_t channel, int32_t cc, int32_t value, int32_t filter);
+	/// Send a MIDI CC to specific output device(s)
+	/// @param deviceFilter Device selection: 0=ALL devices, 1=DIN only, 2+=USB device (index = deviceFilter-2)
+	void sendCC(MIDISource source, int32_t channel, int32_t cc, int32_t value, int32_t filter, uint8_t deviceFilter);
 
 	void sendMidi(MIDISource source, MIDIMessage message, int32_t filter = kMIDIOutputFilterNoMPE, bool sendUSB = true);
 	/// Send a MIDI message to specific output device(s)

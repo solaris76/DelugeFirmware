@@ -18,6 +18,8 @@
 #pragma once
 
 #include "gui/menu_item/submenu.h"
+#include "model/drum/midi_drum.h"
+#include "model/instrument/kit.h"
 #include "model/output.h"
 #include "model/song/song.h"
 
@@ -29,7 +31,15 @@ public:
 
 	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) override {
 		Output* output = getCurrentOutput();
-		return (output && output->type == OutputType::MIDI_OUT);
+		// Device definition menu is relevant for both MIDI instruments and MIDI drum kit rows
+		if (output && output->type == OutputType::MIDI_OUT) {
+			return true;
+		}
+		if (output && output->type == OutputType::KIT) {
+			Kit* kit = (Kit*)output;
+			return (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI);
+		}
+		return false;
 	}
 };
 

@@ -2041,7 +2041,8 @@ ModelStackWithAutoParam* Kit::getModelStackWithParamForKitRow(ModelStackWithTime
                                                               bool useMenuStack) {
 	ModelStackWithAutoParam* modelStackWithParam = nullptr;
 
-	if (selectedDrum && selectedDrum->type == DrumType::SOUND) { // no automation for MIDI or CV kit drum types
+	// Support automation for both SOUND and MIDI drums
+	if (selectedDrum && (selectedDrum->type == DrumType::SOUND || selectedDrum->type == DrumType::MIDI)) {
 
 		ModelStackWithNoteRow* modelStackWithNoteRow = ((InstrumentClip*)clip)->getNoteRowForSelectedDrum(modelStack);
 
@@ -2057,19 +2058,39 @@ ModelStackWithAutoParam* Kit::getModelStackWithParamForKitRow(ModelStackWithTime
 			}
 
 			if (modelStackWithThreeMainThings) {
-				if (paramKind == deluge::modulation::params::Kind::PATCHED) {
-					modelStackWithParam = modelStackWithThreeMainThings->getPatchedAutoParamFromId(paramID);
+				// MIDI drums use MIDI CC parameters (stored in MIDIParamCollection)
+				if (selectedDrum->type == DrumType::MIDI && paramKind == params::Kind::MIDI) {
+					// For MIDI drums, get MIDI CC automation params from the noteRow's param manager
+					MIDIDrum* midiDrum = (MIDIDrum*)selectedDrum;
+					// Use similar logic to MIDIInstrument::getParamToControlFromInputMIDIChannel
+					if (modelStackWithThreeMainThings->paramManager) {
+						ParamCollectionSummary* summary =
+						    modelStackWithThreeMainThings->paramManager->getMIDIParamCollectionSummary();
+						if (summary->paramCollection) {
+							ModelStackWithParamId* modelStackWithParamId =
+							    modelStackWithThreeMainThings->addParamCollectionAndId(summary->paramCollection,
+							                                                           summary, paramID);
+							modelStackWithParam =
+							    summary->paramCollection->getAutoParamFromId(modelStackWithParamId, true);
+						}
+					}
 				}
+				// SOUND drums use synth/sample parameters
+				else if (selectedDrum->type == DrumType::SOUND) {
+					if (paramKind == deluge::modulation::params::Kind::PATCHED) {
+						modelStackWithParam = modelStackWithThreeMainThings->getPatchedAutoParamFromId(paramID);
+					}
 
-				else if (paramKind == deluge::modulation::params::Kind::UNPATCHED_SOUND) {
-					modelStackWithParam = modelStackWithThreeMainThings->getUnpatchedAutoParamFromId(paramID);
-				}
+					else if (paramKind == deluge::modulation::params::Kind::UNPATCHED_SOUND) {
+						modelStackWithParam = modelStackWithThreeMainThings->getUnpatchedAutoParamFromId(paramID);
+					}
 
-				else if (paramKind == deluge::modulation::params::Kind::PATCH_CABLE) {
-					modelStackWithParam = modelStackWithThreeMainThings->getPatchCableAutoParamFromId(paramID);
-				}
-				else if (paramKind == params::Kind::EXPRESSION) {
-					modelStackWithParam = modelStackWithThreeMainThings->getExpressionAutoParamFromID(paramID);
+					else if (paramKind == deluge::modulation::params::Kind::PATCH_CABLE) {
+						modelStackWithParam = modelStackWithThreeMainThings->getPatchCableAutoParamFromId(paramID);
+					}
+					else if (paramKind == params::Kind::EXPRESSION) {
+						modelStackWithParam = modelStackWithThreeMainThings->getExpressionAutoParamFromID(paramID);
+					}
 				}
 			}
 		}
