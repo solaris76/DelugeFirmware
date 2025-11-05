@@ -47,6 +47,7 @@ class ParamManager;
 class SoundDrum;
 class FileItem;
 class MIDIInstrument;
+class MIDIDrum;
 
 class SMSharedData {};
 
@@ -386,6 +387,8 @@ Instrument* createNewNonAudioInstrument(OutputType outputType, int32_t slot, int
 Error openMidiDeviceDefinitionFile(FilePointer* filePointer);
 Error loadMidiDeviceDefinitionFile(MIDIInstrument* midiInstrument, FilePointer* filePointer, String* fileName,
                                    bool updateFileName = true);
+Error loadMidiDeviceDefinitionFileForDrum(MIDIDrum* midiDrum, FilePointer* filePointer, String* fileName,
+                                          bool updateFileName = true);
 
 Error openPatternFile(FilePointer* filePointer);
 Error loadPatternFile(FilePointer* filePointer, String* fileName, bool overwriteExisting, bool noScaling,

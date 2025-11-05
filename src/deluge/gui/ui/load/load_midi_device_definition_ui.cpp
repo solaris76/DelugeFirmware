@@ -25,6 +25,8 @@
 #include "hid/display/oled.h"
 #include "io/debug/log.h"
 #include "model/action/action_logger.h"
+#include "model/drum/midi_drum.h"
+#include "model/instrument/kit.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/song/song.h"
 #include "storage/file_item.h"
@@ -43,8 +45,18 @@ bool LoadMidiDeviceDefinitionUI::getGreyoutColsAndRows(uint32_t* cols, uint32_t*
 }
 
 bool LoadMidiDeviceDefinitionUI::opened() {
-	if (!getRootUI()->toClipMinder() || getCurrentOutputType() != OutputType::MIDI_OUT) {
+	OutputType outputType = getCurrentOutputType();
+	// Support both MIDI instruments and MIDI drum kit rows
+	if (!getRootUI()->toClipMinder() || (outputType != OutputType::MIDI_OUT && outputType != OutputType::KIT)) {
 		return false;
+	}
+
+	// For kits, verify we have a MIDI drum selected
+	if (outputType == OutputType::KIT) {
+		Kit* kit = (Kit*)getCurrentOutput();
+		if (!kit->selectedDrum || kit->selectedDrum->type != DrumType::MIDI) {
+			return false;
+		}
 	}
 
 	Error error = beginSlotSession(); // Requires currentDir to be set. (Not anymore?)
@@ -87,17 +99,35 @@ Error LoadMidiDeviceDefinitionUI::setupForLoadingMidiDeviceDefinition() {
 
 	String searchFilename;
 
-	MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
+	// Get device definition file name from either MIDI instrument or MIDI drum
+	String* deviceDefinitionFileName = nullptr;
+	Output* output = getCurrentOutput();
+
+	if (output->type == OutputType::MIDI_OUT) {
+		MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
+		deviceDefinitionFileName = &midiInstrument->deviceDefinitionFileName;
+	}
+	else if (output->type == OutputType::KIT) {
+		Kit* kit = (Kit*)output;
+		if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+			MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+			deviceDefinitionFileName = &midiDrum->deviceDefinitionFileName;
+		}
+	}
+
+	if (!deviceDefinitionFileName) {
+		return Error::UNSPECIFIED;
+	}
 
 	// is empty we just start with nothing. currentSlot etc remain set to "zero" from before
-	if (midiInstrument->deviceDefinitionFileName.isEmpty()) {
+	if (deviceDefinitionFileName->isEmpty()) {
 		Error error = currentDir.set(MIDI_DEVICES_DEFINITION_DEFAULT_FOLDER);
 		if (error != Error::NONE) {
 			return error;
 		}
 	}
 	else {
-		char const* fullPath = midiInstrument->deviceDefinitionFileName.get();
+		char const* fullPath = deviceDefinitionFileName->get();
 
 		// locate last occurence of "/" in string
 		char* filename = strrchr((char*)fullPath, '/');
@@ -225,8 +255,22 @@ Error LoadMidiDeviceDefinitionUI::performLoad(bool doClone) {
 	fileName.concatenate(enteredText.get());
 	fileName.concatenate(".XML");
 
-	Error error = StorageManager::loadMidiDeviceDefinitionFile((MIDIInstrument*)getCurrentOutput(),
-	                                                           &currentFileItem->filePointer, &fileName);
+	Error error = Error::UNSPECIFIED;
+	Output* output = getCurrentOutput();
+
+	// Load device definition for either MIDI instrument or MIDI drum
+	if (output->type == OutputType::MIDI_OUT) {
+		error = StorageManager::loadMidiDeviceDefinitionFile((MIDIInstrument*)output, &currentFileItem->filePointer,
+		                                                     &fileName);
+	}
+	else if (output->type == OutputType::KIT) {
+		Kit* kit = (Kit*)output;
+		if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+			MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+			error =
+			    StorageManager::loadMidiDeviceDefinitionFileForDrum(midiDrum, &currentFileItem->filePointer, &fileName);
+		}
+	}
 
 	if (error != Error::NONE) {
 		return error;

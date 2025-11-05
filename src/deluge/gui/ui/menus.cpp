@@ -107,8 +107,11 @@
 #include "gui/menu_item/midi/pgm.h"
 #include "gui/menu_item/midi/program.h"
 #include "gui/menu_item/midi/sound/channel.h"
+#include "gui/menu_item/midi/sound/drum_channel.h"
 #include "gui/menu_item/midi/sound/kit_output_device_selection.h"
+#include "gui/menu_item/midi/sound/note.h"
 #include "gui/menu_item/midi/sound/note_for_drum.h"
+#include "gui/menu_item/midi/sound/velocity.h"
 #include "gui/menu_item/midi/sub.h"
 #include "gui/menu_item/midi/takeover.h"
 #include "gui/menu_item/midi/transpose.h"
@@ -622,12 +625,20 @@ HorizontalMenu soundDistortionMenu{
 
 // Output MIDI for sound drums --------------------------------------------------------------
 midi::sound::OutputMidiChannel outputMidiChannelMenu{STRING_FOR_CHANNEL, STRING_FOR_CHANNEL};
+midi::sound::DrumChannel midiDrumChannelMenu{STRING_FOR_CHANNEL, STRING_FOR_CHANNEL};
+midi::sound::Note midiDrumNoteMenu{STRING_FOR_NOTE, STRING_FOR_NOTE};
+midi::sound::Velocity midiDrumVelocityMenu{STRING_FOR_VELOCITY, STRING_FOR_VELOCITY};
 midi::sound::OutputMidiNoteForDrum outputMidiNoteForDrumMenu{STRING_FOR_NOTE, STRING_FOR_NOTE};
 midi::sound::KitOutputDeviceSelection kitOutputDeviceSelectionMenu{STRING_FOR_OUTPUT_DEVICE, STRING_FOR_OUTPUT_DEVICE};
+
+// Horizontal menu for MIDI drum settings (note, channel, velocity)
+HorizontalMenu midiDrumSettingsMenu{STRING_FOR_MIDI, {&midiDrumNoteMenu, &midiDrumChannelMenu, &midiDrumVelocityMenu}};
+
 Submenu outputMidiSubmenu{STRING_FOR_MIDI,
                           {&outputMidiChannelMenu, &outputMidiNoteForDrumMenu, &kitOutputDeviceSelectionMenu}};
 
 // MIDIInstrument menu ----------------------------------------------------------------------
+// Device definition menu - works for both MIDI instruments and MIDI drum kit rows
 midi::device_definition::Linked midiDeviceLinkedMenu{STRING_FOR_MIDI_DEVICE_DEFINITION_LINKED,
                                                      STRING_FOR_MIDI_DEVICE_DEFINITION_LINKED};
 
@@ -1549,7 +1560,9 @@ menu_item::Submenu soundEditorRootMenuMIDIOrCV{
 menu_item::Submenu soundEditorRootMenuMidiDrum{
     STRING_FOR_MIDI,
     {
+        &midiDrumSettingsMenu, // Note, Channel, Velocity (horizontal menu)
         &kitOutputDeviceSelectionMenu,
+        &midiDeviceDefinitionMenu, // Unified device definition menu (works for both tracks and kit rows)
         &arpMenuMIDIOrCV,
         &randomizerMenu,
     },

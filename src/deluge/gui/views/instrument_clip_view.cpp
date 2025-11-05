@@ -4671,7 +4671,15 @@ void InstrumentClipView::sendAuditionNote(bool on, uint8_t yDisplay, uint8_t vel
 					    && !modelStackWithNoteRow->getNoteRow()->paramManager.containsAnyMainParamCollections()) {
 						FREEZE_WITH_ERROR("E325"); // Trying to catch an E313 that Vinz got
 					}
-					((Kit*)instrument)->beginAuditioningforDrum(modelStackWithNoteRow, drum, velocity, zeroMPEValues);
+
+					// For MIDI drums, use the drum's defaultVelocity instead of pad pressure
+					uint8_t velocityToUse = velocity;
+					if (drum->type == DrumType::MIDI) {
+						velocityToUse = ((MIDIDrum*)drum)->defaultVelocity;
+					}
+
+					((Kit*)instrument)
+					    ->beginAuditioningforDrum(modelStackWithNoteRow, drum, velocityToUse, zeroMPEValues);
 				}
 				else {
 					((Kit*)instrument)->endAuditioningForDrum(modelStackWithNoteRow, drum);
@@ -5607,14 +5615,17 @@ void InstrumentClipView::getDrumName(Drum* drum, StringBuf& drumName) {
 				drumName.appendInt(((GateDrum*)drum)->channel + 1);
 			}
 			else { // MIDI
+				MIDIDrum* midiDrum = (MIDIDrum*)drum;
 				drumName.append("CH: ");
-				drumName.appendInt(((MIDIDrum*)drum)->channel + 1);
+				drumName.appendInt(midiDrum->channel + 1);
 				drumName.append(" N#: ");
-				drumName.appendInt(((MIDIDrum*)drum)->note);
+				drumName.appendInt(midiDrum->note);
+				drumName.append("\nVEL: ");
+				drumName.appendInt(midiDrum->defaultVelocity);
 				drumName.append("\n");
 
 				char noteLabel[5];
-				noteCodeToString(((MIDIDrum*)drum)->note, noteLabel);
+				noteCodeToString(midiDrum->note, noteLabel);
 
 				drumName.append(noteLabel);
 			}

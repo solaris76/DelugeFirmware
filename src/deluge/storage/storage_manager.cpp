@@ -469,6 +469,43 @@ Error StorageManager::loadMidiDeviceDefinitionFile(MIDIInstrument* midiInstrumen
 	return Error::NONE;
 }
 
+// Load MIDI device definition file for MIDI drum (kit row)
+Error StorageManager::loadMidiDeviceDefinitionFileForDrum(MIDIDrum* midiDrum, FilePointer* filePointer,
+                                                          String* fileName, bool updateFileName) {
+	midiDrum->loadDeviceDefinitionFile = false;
+
+	AudioEngine::logAction("loadMidiDeviceDefinitionFileForDrum");
+	D_PRINTLN("opening midi device definition file for drum -  %s from FP  %lu", fileName->get(),
+	          (int32_t)filePointer->sclust);
+
+	Error error = openMidiDeviceDefinitionFile(filePointer);
+	if (error != Error::NONE) {
+		D_PRINTLN("opening midi device definition file failed -  %s", fileName->get());
+		return error;
+	}
+
+	AudioEngine::logAction("readMidiDeviceDefinitionFileForDrum");
+
+	error = midiDrum->readDeviceDefinitionFile(smDeserializer, false);
+
+	FRESULT fileSuccess = activeDeserializer->closeWriter();
+
+	// If that somehow didn't work...
+	if (error != Error::NONE || fileSuccess != FR_OK) {
+		D_PRINTLN("reading midi device definition file failed -  %s", fileName->get());
+		if (!fileSuccess) {
+			error = Error::SD_CARD;
+		}
+
+		return error;
+	}
+	else if (updateFileName) {
+		midiDrum->deviceDefinitionFileName.set(fileName->get());
+	}
+
+	return Error::NONE;
+}
+
 Error StorageManager::openPatternFile(FilePointer* filePointer) {
 
 	AudioEngine::logAction("openPatternFile");

@@ -28,6 +28,7 @@
 #include "model/consequence/consequence_note_existence.h"
 #include "model/drum/drum_name.h"
 #include "model/drum/gate_drum.h"
+#include "model/drum/midi_drum.h"
 #include "model/instrument/kit.h"
 #include "model/note/copied_note_row.h"
 #include "model/note/note.h"
@@ -399,7 +400,13 @@ addNewNote:
 
 		Note* newNote = notes.getElement(i);
 
-		newNote->setVelocity(((Instrument*)((Clip*)modelStack->getTimelineCounter())->output)->defaultVelocity);
+		// Get default velocity - for kits, use drum's velocity if it's a MIDI drum
+		uint8_t velocity = ((Instrument*)((Clip*)modelStack->getTimelineCounter())->output)->defaultVelocity;
+		if (drum && drum->type == DrumType::MIDI) {
+			velocity = ((MIDIDrum*)drum)->defaultVelocity;
+		}
+
+		newNote->setVelocity(velocity);
 		newNote->setLift(kDefaultLiftValue);
 
 		newNote->setProbability(getDefaultProbability());

@@ -20,6 +20,8 @@
 #include "gui/menu_item/toggle.h"
 #include "gui/ui/load/load_midi_device_definition_ui.h"
 #include "gui/ui/sound_editor.h"
+#include "model/drum/midi_drum.h"
+#include "model/instrument/kit.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/output.h"
 #include "model/song/song.h"
@@ -31,11 +33,25 @@ public:
 	using Toggle::Toggle;
 
 	void readCurrentValue() override {
-		MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
-		this->setValue(!midiInstrument->deviceDefinitionFileName.isEmpty());
+		Output* output = getCurrentOutput();
+
+		// Support both MIDI instruments and MIDI drum kit rows
+		if (output->type == OutputType::MIDI_OUT) {
+			MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
+			this->setValue(!midiInstrument->deviceDefinitionFileName.isEmpty());
+		}
+		else if (output->type == OutputType::KIT) {
+			Kit* kit = (Kit*)output;
+			if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+				MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+				this->setValue(!midiDrum->deviceDefinitionFileName.isEmpty());
+			}
+		}
 	}
+
 	void writeCurrentValue() override {
 		t = this->getValue();
+		Output* output = getCurrentOutput();
 
 		// if you want to link a definition file, open the load definition file UI
 		if (t) {
@@ -43,14 +59,31 @@ public:
 		}
 		// if you want to unlink a definition file, just clear the definition file name
 		else {
-			MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
-			midiInstrument->deviceDefinitionFileName.clear();
+			if (output->type == OutputType::MIDI_OUT) {
+				MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
+				midiInstrument->deviceDefinitionFileName.clear();
+			}
+			else if (output->type == OutputType::KIT) {
+				Kit* kit = (Kit*)output;
+				if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+					MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+					midiDrum->deviceDefinitionFileName.clear();
+				}
+			}
 		}
 	}
 
 	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) {
 		Output* output = getCurrentOutput();
-		return (output && output->type == OutputType::MIDI_OUT);
+		// Device definition is relevant for both MIDI instruments and MIDI drum kit rows
+		if (output && output->type == OutputType::MIDI_OUT) {
+			return true;
+		}
+		if (output && output->type == OutputType::KIT) {
+			Kit* kit = (Kit*)output;
+			return (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI);
+		}
+		return false;
 	}
 
 	void renderSubmenuItemTypeForOled(int32_t yPixel) final {
@@ -62,14 +95,27 @@ public:
 			image.drawGraphicMultiLine(deluge::hid::display::OLED::checkedBoxIcon, startX, yPixel,
 			                           kSubmenuIconSpacingX);
 
-			MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
+			// Get device definition file name from either MIDI instrument or MIDI drum
+			char const* fullPath = nullptr;
+			Output* output = getCurrentOutput();
 
-			char const* fullPath = midiInstrument->deviceDefinitionFileName.get();
+			if (output->type == OutputType::MIDI_OUT) {
+				MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
+				fullPath = midiInstrument->deviceDefinitionFileName.get();
+			}
+			else if (output->type == OutputType::KIT) {
+				Kit* kit = (Kit*)output;
+				if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+					MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+					fullPath = midiDrum->deviceDefinitionFileName.get();
+				}
+			}
 
-			// locate last occurence of "/" in string
-			char* fileName = strrchr((char*)fullPath, '/');
-
-			image.drawString(++fileName, kTextSpacingX, yPixel + kTextSpacingY, kTextSpacingX, kTextSpacingY);
+			if (fullPath) {
+				// locate last occurence of "/" in string
+				char* fileName = strrchr((char*)fullPath, '/');
+				image.drawString(++fileName, kTextSpacingX, yPixel + kTextSpacingY, kTextSpacingX, kTextSpacingY);
+			}
 		}
 		else {
 			image.drawGraphicMultiLine(deluge::hid::display::OLED::uncheckedBoxIcon, startX, yPixel,

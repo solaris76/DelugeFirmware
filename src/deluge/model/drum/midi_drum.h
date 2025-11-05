@@ -17,7 +17,13 @@
 
 #pragma once
 
+#include "definitions_cxx.hpp"
 #include "model/drum/non_audio_drum.h"
+#include "util/containers.h"
+#include <array>
+#include <string_view>
+
+class ModelStackWithAutoParam;
 
 class MIDIDrum final : public NonAudioDrum {
 public:
@@ -31,11 +37,18 @@ public:
 	void noteOffPostArp(int32_t noteCodePostArp) override;
 	void writeToFile(Serializer& writer, bool savingSong, ParamManager* paramManager) override;
 	Error readFromFile(Deserializer& reader, Song* song, Clip* clip, int32_t readAutomationUpToPos) override;
+
+	/// Read mod knob CC assignments from file
+	Error readModKnobAssignmentsFromFile(Deserializer& reader, int32_t readAutomationUpToPos);
+	/// Write mod knob CC assignments to file
+	void writeModKnobAssignmentsToFile(Serializer& writer);
 	void getName(char* buffer) override;
 	int32_t getNumChannels() override { return 16; }
 	void killAllVoices() override;
 
 	int8_t modEncoderAction(ModelStackWithThreeMainThings* modelStack, int8_t offset, uint8_t whichModEncoder) override;
+	bool modEncoderButtonAction(uint8_t whichModEncoder, bool on, ModelStackWithThreeMainThings* modelStack);
+	void modButtonAction(uint8_t whichModButton, bool on);
 
 	void expressionEvent(int32_t newValue, int32_t expressionDimension) override;
 
@@ -43,8 +56,53 @@ public:
 	                                              int32_t channelOrNoteNumber,
 	                                              MIDICharacteristic whichCharacteristic) override;
 
+	/// Get MIDI CC parameter for automation (similar to MIDIInstrument)
+	ModelStackWithAutoParam* getParamToControlFromInputMIDIChannel(int32_t cc,
+	                                                               ModelStackWithThreeMainThings* modelStack);
+
+	/// Get param from mod encoder (for gold knob automation)
+	ModelStackWithAutoParam* getParamFromModEncoder(int32_t whichModEncoder, ModelStackWithThreeMainThings* modelStack,
+	                                                bool allowCreation = true);
+
+	/// Check if automation exists on a MIDI CC parameter
+	bool doesAutomationExistOnMIDIParam(ModelStackWithThreeMainThings* modelStack, int32_t cc);
+
+	// CC management (like MIDIInstrument)
+	int32_t changeControlNumberForModKnob(int32_t offset, int32_t whichModEncoder, int32_t modKnobMode);
+	int32_t getKnobPosForNonExistentParam(int32_t whichModEncoder, ModelStackWithAutoParam* modelStack);
+
+	// Mod knob mode support
+	uint8_t* getModKnobMode() { return &modKnobMode; }
+
+	// Device definition file support (for custom CC labels)
+	/// Read device definition file
+	Error readDeviceDefinitionFile(Deserializer& reader, bool readFromPresetOrSong);
+	void readDeviceDefinitionFileNameFromPresetOrSong(Deserializer& reader);
+	Error readCCLabelsFromFile(Deserializer& reader);
+	/// Write device definition file
+	void writeDeviceDefinitionFile(Serializer& writer, bool writeFileNameToPresetOrSong);
+	void writeDeviceDefinitionFileNameToPresetOrSong(Serializer& writer);
+	void writeCCLabelsToFile(Serializer& writer);
+	/// Get/set CC labels
+	std::string_view getNameFromCC(int32_t cc);
+	void setNameForCC(int32_t cc, std::string_view name);
+
 	uint8_t note;
 	int8_t noteEncoderCurrentOffset;
+
+	/// Default velocity for this drum (used when not auditioning)
+	uint8_t defaultVelocity{64};
+
+	/// Current mod knob mode (0 = upper, 1 = lower)
+	uint8_t modKnobMode{0};
+
+	/// Gold knob CC assignments (like MIDIInstrument)
+	/// Stores which CC number is controlled by each gold knob (per mod mode)
+	std::array<int8_t, kNumModButtons * kNumPhysicalModKnobs> modKnobCCAssignments;
+
+	/// Device definition file name (for custom CC labels)
+	String deviceDefinitionFileName;
+	bool loadDeviceDefinitionFile{false};
 
 	/// MIDI output device selection for this drum
 	/// - 0: ALL devices (send to all connected MIDI outputs - default behavior)
@@ -55,4 +113,8 @@ public:
 	/// Store the device name for reliable matching when devices are reconnected
 	/// This ensures the correct device is selected even if USB devices are plugged in a different order
 	String outputDeviceName;
+
+private:
+	/// Custom CC label names loaded from device definition file
+	deluge::fast_map<uint8_t, std::string> labels;
 };

@@ -42,7 +42,9 @@
 #include "model/clip/clip_instance.h"
 #include "model/clip/instrument_clip.h"
 #include "model/consequence/consequence.h"
+#include "model/drum/midi_drum.h"
 #include "model/instrument/cv_instrument.h"
+#include "model/instrument/kit.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/scale/preset_scales.h"
 #include "model/song/song.h"
@@ -74,28 +76,58 @@ void InstrumentClipMinder::selectEncoderAction(int32_t offset) {
 
 	if (currentUIMode == UI_MODE_SELECTING_MIDI_CC) {
 		if (editingMIDICCForWhichModKnob < kNumPhysicalModKnobs) {
-			MIDIInstrument* instrument = (MIDIInstrument*)getCurrentOutput();
-			ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
-			    modelStack->addOtherTwoThingsButNoNoteRow(instrument, &getCurrentInstrumentClip()->paramManager);
+			Output* output = getCurrentOutput();
+			int32_t newCC = CC_NUMBER_NONE;
+			bool automationExists = false;
+			uint8_t currentModKnobMode = 0;
 
-			int32_t newCC;
+			// Handle MIDI Instrument
+			if (output->type == OutputType::MIDI_OUT) {
+				MIDIInstrument* instrument = (MIDIInstrument*)output;
+				ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+				    modelStack->addOtherTwoThingsButNoNoteRow(instrument, &getCurrentInstrumentClip()->paramManager);
 
-			if (!Buttons::isButtonPressed(deluge::hid::button::SELECT_ENC)) {
-				newCC = instrument->changeControlNumberForModKnob(offset, editingMIDICCForWhichModKnob,
-				                                                  instrument->modKnobMode);
-				view.setKnobIndicatorLevels();
+				if (!Buttons::isButtonPressed(deluge::hid::button::SELECT_ENC)) {
+					newCC = instrument->changeControlNumberForModKnob(offset, editingMIDICCForWhichModKnob,
+					                                                  instrument->modKnobMode);
+					view.setKnobIndicatorLevels();
+				}
+				else {
+					newCC = instrument->moveAutomationToDifferentCC(
+					    offset, editingMIDICCForWhichModKnob, instrument->modKnobMode, modelStackWithThreeMainThings);
+					if (newCC == -1) {
+						display->displayPopup(
+						    deluge::l10n::get(deluge::l10n::String::STRING_FOR_NO_FURTHER_UNUSED_MIDI_PARAMS));
+						return;
+					}
+				}
+
+				automationExists = instrument->doesAutomationExistOnMIDIParam(modelStackWithThreeMainThings, newCC);
 			}
-			else {
-				newCC = instrument->moveAutomationToDifferentCC(offset, editingMIDICCForWhichModKnob,
-				                                                instrument->modKnobMode, modelStackWithThreeMainThings);
-				if (newCC == -1) {
-					display->displayPopup(
-					    deluge::l10n::get(deluge::l10n::String::STRING_FOR_NO_FURTHER_UNUSED_MIDI_PARAMS));
-					return;
+			// Handle Kit with MIDI drum row
+			else if (output->type == OutputType::KIT) {
+				Kit* kit = (Kit*)output;
+				if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+					MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+
+					// Get the note row for the selected drum
+					ModelStackWithNoteRow* modelStackWithNoteRow =
+					    ((InstrumentClip*)modelStack->getTimelineCounter())->getNoteRowForSelectedDrum(modelStack);
+
+					if (modelStackWithNoteRow->getNoteRowAllowNull()) {
+						ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+						    modelStackWithNoteRow->addOtherTwoThingsAutomaticallyGivenNoteRow();
+
+						// Just change CC assignment (don't support moveAutomationToDifferentCC for drums yet)
+						newCC = midiDrum->changeControlNumberForModKnob(offset, editingMIDICCForWhichModKnob,
+						                                                midiDrum->modKnobMode);
+						view.setKnobIndicatorLevels();
+
+						automationExists =
+						    midiDrum->doesAutomationExistOnMIDIParam(modelStackWithThreeMainThings, newCC);
+					}
 				}
 			}
-
-			bool automationExists = instrument->doesAutomationExistOnMIDIParam(modelStackWithThreeMainThings, newCC);
 
 			drawMIDIControlNumber(newCC, automationExists);
 		}
@@ -147,17 +179,32 @@ void InstrumentClipMinder::drawMIDIControlNumber(int32_t controlNumber, bool aut
 		buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_MOD_WHEEL));
 	}
 	else {
-		MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
+		// Get CC label name from MIDI instrument or MIDI drum (kit row)
+		std::string_view name{};
 		bool appendedName = false;
 
-		if (controlNumber >= 0 && controlNumber < kNumRealCCNumbers) {
-			std::string_view name = midiInstrument->getNameFromCC(controlNumber);
-			// if we have a name for this midi cc set by the user, display that instead of the cc number
-			if (!name.empty()) {
-				buffer.append(name.data());
-				doScroll = name.size() > 4;
-				appendedName = true;
+		Output* output = getCurrentOutput();
+		if (output->type == OutputType::MIDI_OUT) {
+			MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
+			if (controlNumber >= 0 && controlNumber < kNumRealCCNumbers) {
+				name = midiInstrument->getNameFromCC(controlNumber);
 			}
+		}
+		else if (output->type == OutputType::KIT) {
+			Kit* kit = (Kit*)output;
+			if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+				MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+				if (controlNumber >= 0 && controlNumber < kNumRealCCNumbers) {
+					name = midiDrum->getNameFromCC(controlNumber);
+				}
+			}
+		}
+
+		// if we have a name for this midi cc set by the user, display that instead of the cc number
+		if (!name.empty()) {
+			buffer.append(name.data());
+			doScroll = name.size() > 4;
+			appendedName = true;
 		}
 
 		// if we don't have a midi cc name set, draw CC number instead
