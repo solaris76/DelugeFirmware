@@ -114,6 +114,14 @@ void MidiEngine::sendCC(MIDISource source, int32_t channel, int32_t cc, int32_t 
 	sendMidi(source, MIDIMessage::cc(channel, cc, value), filter);
 }
 
+void MidiEngine::sendCC(MIDISource source, int32_t channel, int32_t cc, int32_t value, int32_t filter,
+                        uint8_t deviceFilter) {
+	if (value > 127) {
+		value = 127;
+	}
+	sendMidi(source, MIDIMessage::cc(channel, cc, value), filter, true, deviceFilter);
+}
+
 void MidiEngine::sendClock(MIDISource source, bool sendUSB, int32_t howMany) {
 	while (howMany--) {
 		sendMidi(source, MIDIMessage::realtimeClock(), kMIDIOutputFilterNoMPE, sendUSB);

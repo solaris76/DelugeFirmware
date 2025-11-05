@@ -4344,7 +4344,9 @@ void InstrumentClip::getActiveModControllable(ModelStackWithTimelineCounter* mod
 	    && getRootUI() != &arrangerView) {
 		Kit* kit = (Kit*)output;
 
-		if (!kit->selectedDrum || kit->selectedDrum->type != DrumType::SOUND) {
+		// Support both SOUND and MIDI drums for kit row automation
+		if (!kit->selectedDrum
+		    || (kit->selectedDrum->type != DrumType::SOUND && kit->selectedDrum->type != DrumType::MIDI)) {
 returnNull:
 			modelStack->setTimelineCounter(nullptr);
 			modelStack->addOtherTwoThingsButNoNoteRow(nullptr, nullptr);
@@ -4358,8 +4360,9 @@ returnNull:
 				goto returnNull;
 			}
 
+			// For both SOUND and MIDI drums, use the drum as modControllable and noteRow paramManager
 			modelStack->addNoteRow(noteRowIndex, noteRow)
-			    ->addOtherTwoThings((SoundDrum*)kit->selectedDrum, &noteRow->paramManager);
+			    ->addOtherTwoThings(kit->selectedDrum->toModControllable(), &noteRow->paramManager);
 		}
 	}
 
