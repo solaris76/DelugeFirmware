@@ -23,6 +23,7 @@
 #include "gui/ui/ui.h"
 #include "hid/display/display.h"
 #include "hid/display/oled.h"
+#include "io/midi/midi_device_helper.h"
 #include "io/midi/midi_device_manager.h"
 #include "model/drum/drum.h"
 #include "model/drum/midi_drum.h"
@@ -88,38 +89,25 @@ public:
 				auto* kit = getCurrentKit();
 				if (kit && kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
 					auto* midiDrum = static_cast<MIDIDrum*>(kit->selectedDrum);
-					if (midiDrum->outputRouting.device > 0) {
+					if (midiDrum->outputDevice > 0) {
 						// Show device name prefix
-						if (midiDrum->outputRouting.device == 1) {
-							snprintf(name, sizeof(name), "D%d", value);
-						}
-						else {
-							// Try to get the actual USB device name
-							int32_t usbIndex = midiDrum->outputRouting.device - 2;
-							if (MIDIDeviceManager::root_usb != nullptr
-							    && usbIndex < MIDIDeviceManager::root_usb->getNumCables()) {
-								auto* cable = MIDIDeviceManager::root_usb->getCable(usbIndex);
-								if (cable && MIDIDeviceManager::root_usb->getType() == RootComplexType::RC_USB_HOST) {
-									auto* hostedCable = static_cast<MIDICableUSBHosted*>(cable);
-									const char* deviceName = hostedCable->getDisplayName();
-									if (deviceName && strlen(deviceName) > 0) {
-										// Use first 2-3 characters of device name as prefix
-										char prefix[4];
-										strncpy(prefix, deviceName, 3);
-										prefix[3] = '\0';
-										snprintf(name, sizeof(name), "%s%d", prefix, value);
-									}
-									else {
-										snprintf(name, sizeof(name), "U%d", value);
-									}
-								}
-								else {
-									snprintf(name, sizeof(name), "U%d", value);
-								}
+						auto deviceName = deluge::io::midi::getDeviceNameForIndex(midiDrum->outputDevice);
+						if (!deviceName.empty()) {
+							if (midiDrum->outputDevice == 1) {
+								// DIN device - use "D" prefix
+								snprintf(name, sizeof(name), "D%d", value);
 							}
 							else {
-								snprintf(name, sizeof(name), "U%d", value);
+								// USB device - use first 2-3 characters of device name as prefix
+								char prefix[4];
+								strncpy(prefix, deviceName.data(), 3);
+								prefix[3] = '\0';
+								snprintf(name, sizeof(name), "%s%d", prefix, value);
 							}
+						}
+						else {
+							// Fallback if device name not found
+							snprintf(name, sizeof(name), "U%d", value);
 						}
 					}
 					else {
