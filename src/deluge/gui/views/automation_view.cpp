@@ -427,20 +427,6 @@ void AutomationView::initializeView() {
 	Output* output = clip->output;
 	OutputType outputType = output->type;
 
-	// Ensure MIDI param collection exists for MIDI kit rows (like MIDI tracks)
-	if (outputType == OutputType::KIT && !getAffectEntire()) {
-		Kit* kit = (Kit*)output;
-		if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
-			// Get the noteRow's param manager for the selected MIDI drum
-			int32_t noteRowIndex;
-			NoteRow* noteRow = clip->getNoteRowForDrum(kit->selectedDrum, &noteRowIndex);
-			if (noteRow && !noteRow->paramManager.containsAnyMainParamCollections()) {
-				// Initialize MIDI param collection (same as MIDI instruments)
-				noteRow->paramManager.setupMIDI();
-			}
-		}
-	}
-
 	if (!onArrangerView) {
 		// only applies to instrument clips (not audio)
 		if (clip) {
@@ -2942,7 +2928,7 @@ bool AutomationView::selectPatchCableAtIndex(Clip* clip, PatchCableSet* set, int
 
 // used with SelectEncoderAction to get the next midi CC
 void AutomationView::selectMIDICC(int32_t offset, Clip* clip) {
-	if (onAutomationOverview()) {
+	if (onAutomationOverview() || clip->lastSelectedParamID == kNoSelection) {
 		clip->lastSelectedParamID = CC_NUMBER_NONE;
 	}
 	auto newCC = clip->lastSelectedParamID;
