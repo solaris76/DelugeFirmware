@@ -239,9 +239,8 @@ void MIDIDrum::polyphonicExpressionEventOnChannelOrNote(int32_t newValue, int32_
 bool MIDIDrum::modEncoderButtonAction(uint8_t whichModEncoder, bool on, ModelStackWithThreeMainThings* modelStack) {
 
 	if (on) {
-		// CRITICAL: Only allow CC assignment when NOT auditioning
-		// When holding audition pad, gold knobs control NOTE and CHANNEL (existing behavior)
-		// When NOT holding pad, gold knob encoder press assigns CCs (new behavior)
+		// Allow CC assignment in normal mode (not when in other UI modes)
+		// Gold knobs always control MIDI CC automation - press encoder to assign different CC
 		if (currentUIMode == UI_MODE_NONE) {
 
 			if (getCurrentUI()->toClipMinder()) {
