@@ -5108,11 +5108,11 @@ void InstrumentClipView::setSelectedDrum(Drum* drum, bool shouldRedrawStuff, Kit
 						if (!automationView.inNoteEditor()) {
 							automationView.initParameterSelection();
 						}
-						uiNeedsRendering(currentUI);
-						// Force OLED display update when switching kit rows in automation view
-						if (display->haveOLED()) {
+						// If in note editor, initParameterSelection wasn't called, so update display manually
+						else if (display->haveOLED()) {
 							automationView.renderDisplay();
 						}
+						uiNeedsRendering(currentUI);
 					}
 					// if in instrument clip view
 					// or automation clip view (with affect entire enabled)
