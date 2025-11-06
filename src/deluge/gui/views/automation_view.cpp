@@ -2017,9 +2017,9 @@ void AutomationView::handleParameterSelection(Clip* clip, Output* output, Output
 		instrumentClipView.resetSelectedNoteRowBlinking();
 	}
 	blinkShortcuts();
-	if (display->have7SEG()) {
-		renderDisplay(); // always display parameter name first, if there's automation it will show after
-	}
+	// Always render display when selecting a parameter (for both 7SEG and OLED)
+	// This ensures OLED shows parameter name immediately, matching MIDI track behavior
+	renderDisplay(); // always display parameter name first, if there's automation it will show after
 	displayAutomation(true);
 	view.setModLedStates();
 	uiNeedsRendering(&automationView);
