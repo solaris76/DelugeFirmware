@@ -303,6 +303,20 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 			}
 			D_PRINTLN("- yes");
+
+			// For kit rows, reset automation parameter selection before entering automation view
+			// Each kit row has different parameters (different drum = different MIDI device/CCs or sound params)
+			// This prevents displaying stale state from a previously selected row
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip->output->type == OutputType::KIT && !clip->affectEntire) {
+				clip->lastSelectedParamID = kNoSelection;
+				clip->lastSelectedParamKind = deluge::modulation::params::Kind::NONE;
+				clip->lastSelectedParamShortcutX = kNoSelection;
+				clip->lastSelectedParamShortcutY = kNoSelection;
+				clip->lastSelectedPatchSource = PatchSource::NONE;
+				clip->lastSelectedParamArrayPosition = 0;
+			}
+
 			changeRootUI(&automationView);
 		}
 		else {
@@ -5095,6 +5109,10 @@ void InstrumentClipView::setSelectedDrum(Drum* drum, bool shouldRedrawStuff, Kit
 							automationView.initParameterSelection();
 						}
 						uiNeedsRendering(currentUI);
+						// Force OLED display update when switching kit rows in automation view
+						if (display->haveOLED()) {
+							automationView.renderDisplay();
+						}
 					}
 					// if in instrument clip view
 					// or automation clip view (with affect entire enabled)
