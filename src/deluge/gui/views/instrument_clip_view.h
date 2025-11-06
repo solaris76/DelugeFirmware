@@ -287,6 +287,7 @@ public:
 	void updateVelocityValue(int32_t& velocityValue, int32_t newVelocity);
 	void displayVelocity(int32_t velocityValue, int32_t velocityChange);
 	void popupVelocity(char const* displayString);
+	void adjustMIDINoteNumber(int32_t noteChange); // For MIDI kit rows
 
 	void handleProbabilityOrIteranceEditing(int8_t offset, bool editNoteRow);
 	void adjustNoteProbabilityWithOffset(int32_t offset);

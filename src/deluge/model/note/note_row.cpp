@@ -34,6 +34,7 @@
 #include "model/note/note.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
+#include "modulation/midi/midi_param.h"
 #include "modulation/midi/midi_param_collection.h"
 #include "modulation/params/param_set.h"
 #include "modulation/patch/patch_cable_set.h"
@@ -3280,6 +3281,63 @@ Error NoteRow::readFromFile(Deserializer& reader, int32_t* minY, InstrumentClip*
 
 finishedNormalStuff:
 			Sound::readParamsFromFile(reader, &paramManager, readAutomationUpToPos);
+		}
+
+		// Read MIDI CC automation for MIDI drums (like MIDI instrument tracks)
+		else if (!strcmp(tagName, "midiParams")) {
+			// Ensure MIDI param collection exists
+			if (!paramManager.containsAnyMainParamCollections()) {
+				Error error = paramManager.setupMIDI();
+				if (error != Error::NONE) {
+					return error;
+				}
+			}
+
+			// Read each MIDI param (cc + automation data)
+			while (*(tagName = reader.readNextTagOrAttributeName())) {
+				if (!strcmp(tagName, "param")) {
+					int32_t paramId = CC_NUMBER_NONE;
+					AutoParam* param = nullptr;
+
+					while (*(tagName = reader.readNextTagOrAttributeName())) {
+						if (!strcmp(tagName, "cc")) {
+							char const* contents = reader.readTagOrAttributeValue();
+							if (!strcasecmp(contents, "none")) {
+								paramId = CC_NUMBER_NONE;
+							}
+							else {
+								paramId = stringToInt(contents);
+								// External mod wheel maps to internal Y axis
+								if (paramId == CC_EXTERNAL_MOD_WHEEL) {
+									paramId = CC_NUMBER_Y_AXIS;
+								}
+							}
+							reader.exitTag("cc");
+						}
+						else if (!strcmp(tagName, "value")) {
+							if (paramId != CC_NUMBER_NONE) {
+								ParamCollectionSummary* summary = paramManager.getMIDIParamCollectionSummary();
+								MIDIParam* midiParam = ((MIDIParamCollection*)summary->paramCollection)
+								                           ->params.getOrCreateParamFromCC(paramId, 0);
+								if (!midiParam) {
+									return Error::INSUFFICIENT_RAM;
+								}
+								Error error = midiParam->param.readFromFile(reader, readAutomationUpToPos);
+								if (error != Error::NONE) {
+									return error;
+								}
+							}
+							reader.exitTag("value");
+						}
+						else {
+							reader.exitTag(tagName);
+						}
+					}
+				}
+				else {
+					reader.exitTag(tagName);
+				}
+			}
 		}
 
 		// Notes stored as XML (before V1.4) - NOT CONVERTED TO ALSO WORK WITH JSON.
