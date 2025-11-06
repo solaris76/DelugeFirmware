@@ -7357,43 +7357,9 @@ void InstrumentClipView::dontDeleteNotesOnDepress() {
 void InstrumentClipView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 	dontDeleteNotesOnDepress();
 
-	InstrumentClip* clip = getCurrentInstrumentClip();
-
-	char modelStackMemory[MODEL_STACK_MAX_SIZE];
-	ModelStack* modelStack = setupModelStackWithSong(modelStackMemory, currentSong);
-
-	Output* output = clip->output;
-
-	if (output->type == OutputType::KIT && isUIModeActive(UI_MODE_AUDITIONING)) {
-
-		Kit* kit = (Kit*)output;
-
-		if (kit->selectedDrum && kit->selectedDrum->type != DrumType::SOUND) {
-
-			if (ALPHA_OR_BETA_VERSION && !kit->getActiveClip()) {
-				FREEZE_WITH_ERROR("E381");
-			}
-
-			ModelStackWithTimelineCounter* modelStackWithTimelineCounter =
-			    modelStack->addTimelineCounter(kit->getActiveClip());
-			ModelStackWithNoteRow* modelStackWithNoteRow =
-			    ((InstrumentClip*)kit->getActiveClip())
-			        ->getNoteRowForDrum(modelStackWithTimelineCounter,
-			                            kit->selectedDrum); // The NoteRow probably doesn't get referred to...
-
-			NonAudioDrum* drum = (NonAudioDrum*)kit->selectedDrum;
-
-			ParamManagerForTimeline* paramManager = nullptr;
-			NoteRow* noteRow = modelStackWithNoteRow->getNoteRowAllowNull();
-			if (noteRow) {
-				paramManager = &noteRow->paramManager; // Should be NULL currently, cos it's a NonAudioDrum.
-			}
-			ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
-			    modelStackWithNoteRow->addOtherTwoThings(drum->toModControllable(), paramManager);
-
-			drum->modEncoderAction(modelStackWithThreeMainThings, offset, whichModEncoder);
-		}
-	}
+	// NOTE: Gold knobs now always control MIDI CC automation for MIDI drums
+	// Note, channel, and velocity are set via the MIDI menu (not gold knobs)
+	// This eliminates the old special case where holding audition pad + gold knob changed note/channel
 
 	ClipNavigationTimelineView::modEncoderAction(whichModEncoder, offset);
 }
