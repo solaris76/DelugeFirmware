@@ -22,6 +22,8 @@
 #include "hid/buttons.h"
 #include "hid/display/display.h"
 #include "hid/led/pad_leds.h"
+#include "model/drum/midi_drum.h"
+#include "model/instrument/kit.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/output.h"
 #include "model/song/song.h"
@@ -39,19 +41,43 @@ bool RenameMidiCCUI::canRename() const {
 
 std::string_view RenameMidiCCUI::getCurrentName() const {
 	Clip* clip = getCurrentClip();
-	MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
 	int32_t cc = clip->lastSelectedParamID;
-	return midiInstrument->getNameFromCC(cc);
+	// Get name from MIDI instrument or MIDI drum
+	if (clip->output->type == OutputType::MIDI_OUT) {
+		MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
+		return midiInstrument->getNameFromCC(cc);
+	}
+	else if (clip->output->type == OutputType::KIT) {
+		Kit* kit = (Kit*)clip->output;
+		if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+			MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+			return midiDrum->getNameFromCC(cc);
+		}
+	}
+	return {};
 }
 
 bool RenameMidiCCUI::trySetName(std::string_view name) {
 
 	Clip* clip = getCurrentClip();
-	MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
 	int32_t cc = clip->lastSelectedParamID;
 
-	midiInstrument->setNameForCC(cc, name);
-	midiInstrument->editedByUser = true; // need to set this to true so that the name gets saved with the song / preset
+	// Set name for MIDI instrument or MIDI drum
+	if (clip->output->type == OutputType::MIDI_OUT) {
+		MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
+		midiInstrument->setNameForCC(cc, name);
+		midiInstrument->editedByUser =
+		    true; // need to set this to true so that the name gets saved with the song / preset
+	}
+	else if (clip->output->type == OutputType::KIT) {
+		Kit* kit = (Kit*)clip->output;
+		if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+			MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+			midiDrum->setNameForCC(cc, name);
+			// Note: For MIDI drums, names are saved per-drum (in device definition file)
+			// No editedByUser flag needed - always saved with the drum
+		}
+	}
 
 	return true;
 }
