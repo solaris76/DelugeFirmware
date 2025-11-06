@@ -46,7 +46,7 @@ public:
 	int32_t getNumChannels() override { return 16; }
 	void killAllVoices() override;
 
-	int8_t modEncoderAction(ModelStackWithThreeMainThings* modelStack, int8_t offset, uint8_t whichModEncoder) override;
+	// NOTE: modEncoderAction no longer overridden - uses default flow for MIDI CC automation
 	bool modEncoderButtonAction(uint8_t whichModEncoder, bool on, ModelStackWithThreeMainThings* modelStack);
 	void modButtonAction(uint8_t whichModButton, bool on);
 
