@@ -21,6 +21,7 @@
 #include "io/midi/midi_engine.h"
 #include "model/action/action_logger.h"
 #include "model/clip/instrument_clip.h"
+#include "model/drum/midi_drum.h"
 #include "model/instrument/instrument.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/model_stack.h"
@@ -286,16 +287,34 @@ void MIDIParamCollection::notifyParamModifiedInSomeWay(ModelStackWithAutoParam c
 	ParamCollection::notifyParamModifiedInSomeWay(modelStack, oldValue, automationChanged, automatedBefore,
 	                                              automatedNow);
 
-	if (modelStack->song->isOutputActiveInArrangement((MIDIInstrument*)modelStack->modControllable)) {
-		auto new_v = modelStack->autoParam->getCurrentValue();
-		bool current_value_changed = modelStack->modControllable->valueChangedEnoughToMatter(
-		    oldValue, new_v, getParamKind(), modelStack->paramId);
-		if (current_value_changed) {
+	auto new_v = modelStack->autoParam->getCurrentValue();
+	bool current_value_changed =
+	    modelStack->modControllable->valueChangedEnoughToMatter(oldValue, new_v, getParamKind(), modelStack->paramId);
+
+	if (!current_value_changed) {
+		return;
+	}
+
+	// Check if this is a kit row (has noteRow) vs a MIDI instrument track
+	if (modelStack->getNoteRowAllowNull()) {
+		// MIDI drum (kit row) - use drum's channel and device
+		MIDIDrum* midiDrum = (MIDIDrum*)modelStack->modControllable;
+		int32_t masterChannel = midiDrum->channel;
+		int32_t midiOutputFilter = midiDrum->channel;
+		uint8_t deviceFilter = midiDrum->outputDevice;
+
+		// Send CC with device filter
+		int32_t newValueSmall = autoparamValueToCC(new_v);
+		midiEngine.sendCC(midiDrum, masterChannel, modelStack->paramId, newValueSmall + 64, midiOutputFilter,
+		                  deviceFilter);
+	}
+	else {
+		// MIDI instrument track
+		if (modelStack->song->isOutputActiveInArrangement((MIDIInstrument*)modelStack->modControllable)) {
 			MIDIInstrument* instrument = (MIDIInstrument*)modelStack->modControllable;
 			int32_t midiOutputFilter = instrument->getChannel();
 			int32_t masterChannel = instrument->getOutputMasterChannel();
-			sendMIDI(instrument, masterChannel, modelStack->paramId, modelStack->autoParam->getCurrentValue(),
-			         midiOutputFilter);
+			sendMIDI(instrument, masterChannel, modelStack->paramId, new_v, midiOutputFilter);
 		}
 	}
 }
