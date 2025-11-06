@@ -2625,6 +2625,11 @@ void AutomationView::selectEncoderAction(int8_t offset) {
 	Output* output = clip->output;
 	OutputType outputType = output->type;
 
+	// Initialize param selection on first SELECT encoder turn in overview mode
+	if (clip->lastSelectedParamID == kNoSelection) {
+		clip->lastSelectedParamArrayPosition = 0;
+	}
+
 	// if you've selected a mod encoder (e.g. by pressing modEncoderButton) and you're in Automation
 	// Overview the currentUIMode will change to Selecting Midi CC. In this case, turning select encoder
 	// should allow you to change the midi CC assignment to that modEncoder
@@ -2723,6 +2728,7 @@ void AutomationView::selectEncoderAction(int8_t offset) {
 	}
 	else {
 		displayAutomation(true, !display->have7SEG());
+		renderDisplay(); // Force OLED refresh when scrolling params
 	}
 	resetParameterShortcutBlinking();
 	blinkShortcuts();
@@ -2930,6 +2936,7 @@ bool AutomationView::selectPatchCableAtIndex(Clip* clip, PatchCableSet* set, int
 void AutomationView::selectMIDICC(int32_t offset, Clip* clip) {
 	if (onAutomationOverview() || clip->lastSelectedParamID == kNoSelection) {
 		clip->lastSelectedParamID = CC_NUMBER_NONE;
+		clip->lastSelectedParamKind = params::Kind::MIDI;
 	}
 	auto newCC = clip->lastSelectedParamID;
 	newCC += offset;
@@ -2944,6 +2951,7 @@ void AutomationView::selectMIDICC(int32_t offset, Clip* clip) {
 		newCC += offset;
 	}
 	clip->lastSelectedParamID = newCC;
+	clip->lastSelectedParamKind = params::Kind::MIDI;
 	automationParamType = AutomationParamType::PER_SOUND;
 }
 
