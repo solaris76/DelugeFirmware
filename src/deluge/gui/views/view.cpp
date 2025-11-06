@@ -937,6 +937,9 @@ void View::modEncoderAction_existentParam(int32_t whichModEncoder, int32_t offse
 	// then blink that middle value and make it harder to turn the knob past middle
 	potentiallyMakeItHarderToTurnKnob(whichModEncoder, modelStackWithParam, newKnobPos);
 
+	// Update the LED indicator for the specific knob that was turned
+	setKnobIndicatorLevel(whichModEncoder);
+
 	// if you're updating a param's value while in the sound editor menu
 	// and it's the same param displayed in the automation editor open underneath
 	// then refresh the automation editor grid

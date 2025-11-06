@@ -212,20 +212,8 @@ std::string MIDIDrum::getDrumName() {
 	return buffer;
 }
 
-int8_t MIDIDrum::modEncoderAction(ModelStackWithThreeMainThings* modelStack, int8_t offset, uint8_t whichModEncoder) {
-
-	// NOTE: Gold knobs are now dedicated to MIDI CC automation ONLY
-	// Note, channel, and velocity are set via menu items (not gold knobs)
-	// This eliminates conflicts and provides cleaner UX
-
-	// When auditioning, gold knobs do NOTHING (no channel/note adjustment)
-	// The audition popup still shows channel, note, velocity (display only)
-
-	// Do NOT call base class NonAudioDrum::modEncoderAction()
-	// because that would change the channel with gold knob 0
-
-	return -64;
-}
+// NOTE: modEncoderAction override removed - gold knobs now always control MIDI CC automation
+// via the normal View::modEncoderAction flow. Note, channel, and velocity are set via menu.
 
 void MIDIDrum::expressionEvent(int32_t newValue, int32_t expressionDimension) {
 
@@ -356,11 +344,8 @@ ModelStackWithAutoParam* MIDIDrum::getParamFromModEncoder(int32_t whichModEncode
 		return modelStack->addParamCollectionAndId(nullptr, nullptr, 0)->addAutoParam(nullptr); // "No param"
 	}
 
-	// CRITICAL: When auditioning (holding pad), gold knobs adjust note/channel, NOT MIDI CCs
-	// Return NULL so View layer doesn't try to update parameters or send MIDI CC
-	if (currentUIMode == UI_MODE_AUDITIONING) {
-		return modelStack->addParamCollectionAndId(nullptr, nullptr, 0)->addAutoParam(nullptr); // "No param"
-	}
+	// NOTE: Gold knobs always control MIDI CC, whether auditioning or not
+	// LED indicators should always show current CC values
 
 	int32_t paramId = modKnobCCAssignments[this->modKnobMode * kNumPhysicalModKnobs + whichModEncoder];
 
