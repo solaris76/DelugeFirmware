@@ -3347,6 +3347,7 @@ finishedNormalStuff:
 					reader.exitTag(tagName);
 				}
 			}
+			reader.exitTag("midiParams"); // Exit the midiParams tag before continuing
 		}
 
 		// Notes stored as XML (before V1.4) - NOT CONVERTED TO ALSO WORK WITH JSON.
