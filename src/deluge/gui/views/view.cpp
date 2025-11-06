@@ -61,6 +61,7 @@
 #include "model/clip/instrument_clip_minder.h"
 #include "model/consequence/consequence.h"
 #include "model/drum/drum.h"
+#include "model/drum/midi_drum.h"
 #include "model/instrument/cv_instrument.h"
 #include "model/instrument/instrument.h"
 #include "model/instrument/kit.h"
@@ -1126,9 +1127,10 @@ void View::displayModEncoderValuePopup(params::Kind kind, int32_t paramID, int32
 			}
 			parameter_name.append(modulation::params::getPatchedParamShortName(paramID));
 		}
-		else if (isClipContext() && getCurrentOutputType() == OutputType::MIDI_OUT) {
-			MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
-			if (kind == params::Kind::EXPRESSION) {
+		else if (isClipContext() && (getCurrentOutputType() == OutputType::MIDI_OUT || kind == params::Kind::MIDI)) {
+			// Handle MIDI expression params (MIDI tracks only)
+			if (getCurrentOutputType() == OutputType::MIDI_OUT && kind == params::Kind::EXPRESSION) {
+				MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
 				if (paramID == X_PITCH_BEND) {
 					parameter_name.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PITCH_BEND));
 				}
@@ -1136,12 +1138,25 @@ void View::displayModEncoderValuePopup(params::Kind kind, int32_t paramID, int32
 					parameter_name.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_CHANNEL_PRESSURE));
 				}
 				else if (paramID == Y_SLIDE_TIMBRE) {
-					// in mono expression this is mod wheel, and y-axis is not directly controllable
 					parameter_name.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_MOD_WHEEL));
 				}
 			}
+			// Handle MIDI CC params (MIDI tracks and MIDI kit rows)
 			else if (paramID >= 0 && paramID < kNumRealCCNumbers) {
-				std::string_view name = midiInstrument->getNameFromCC(paramID);
+				std::string_view name{};
+
+				if (getCurrentOutputType() == OutputType::MIDI_OUT) {
+					MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
+					name = midiInstrument->getNameFromCC(paramID);
+				}
+				else if (kind == params::Kind::MIDI) {
+					Kit* kit = (Kit*)getCurrentOutput();
+					if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+						MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+						name = midiDrum->getNameFromCC(paramID);
+					}
+				}
+
 				if (!name.empty()) {
 					parameter_name.append(name.data());
 				}
