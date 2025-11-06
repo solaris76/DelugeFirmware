@@ -2064,6 +2064,15 @@ ModelStackWithAutoParam* Kit::getModelStackWithParamForKitRow(ModelStackWithTime
 					MIDIDrum* midiDrum = (MIDIDrum*)selectedDrum;
 					// Use similar logic to MIDIInstrument::getParamToControlFromInputMIDIChannel
 					if (modelStackWithThreeMainThings->paramManager) {
+						// Ensure MIDIParamCollection exists (critical for automation overview)
+						if (!modelStackWithThreeMainThings->paramManager
+						         ->containsAnyParamCollectionsIncludingExpression()) {
+							Error error = modelStackWithThreeMainThings->paramManager->setupMIDI();
+							if (error != Error::NONE) {
+								return nullptr;
+							}
+						}
+
 						ParamCollectionSummary* summary =
 						    modelStackWithThreeMainThings->paramManager->getMIDIParamCollectionSummary();
 						if (summary->paramCollection) {
