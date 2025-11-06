@@ -22,6 +22,8 @@
 #include "hid/buttons.h"
 #include "hid/display/display.h"
 #include "hid/led/pad_leds.h"
+#include "model/drum/midi_drum.h"
+#include "model/instrument/kit.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/output.h"
 #include "model/song/song.h"
@@ -39,9 +41,22 @@ bool RenameMidiCCUI::canRename() const {
 
 String RenameMidiCCUI::getName() const {
 	Clip* clip = getCurrentClip();
-	MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
 	int32_t cc = clip->lastSelectedParamID;
-	std::string_view name = midiInstrument->getNameFromCC(cc);
+	std::string_view name{};
+
+	// Get name from MIDI instrument or MIDI drum
+	if (clip->output->type == OutputType::MIDI_OUT) {
+		MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
+		name = midiInstrument->getNameFromCC(cc);
+	}
+	else if (clip->output->type == OutputType::KIT) {
+		Kit* kit = (Kit*)clip->output;
+		if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+			MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+			name = midiDrum->getNameFromCC(cc);
+		}
+	}
+
 	String name_string;
 	name_string.set(name.data(), name.length());
 	return name_string;
@@ -50,11 +65,24 @@ String RenameMidiCCUI::getName() const {
 bool RenameMidiCCUI::trySetName(String* name) {
 
 	Clip* clip = getCurrentClip();
-	MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
 	int32_t cc = clip->lastSelectedParamID;
 
-	midiInstrument->setNameForCC(cc, enteredText.get());
-	midiInstrument->editedByUser = true; // need to set this to true so that the name gets saved with the song / preset
+	// Set name for MIDI instrument or MIDI drum
+	if (clip->output->type == OutputType::MIDI_OUT) {
+		MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
+		midiInstrument->setNameForCC(cc, enteredText.get());
+		midiInstrument->editedByUser =
+		    true; // need to set this to true so that the name gets saved with the song / preset
+	}
+	else if (clip->output->type == OutputType::KIT) {
+		Kit* kit = (Kit*)clip->output;
+		if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+			MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+			midiDrum->setNameForCC(cc, enteredText.get());
+			// Note: For MIDI drums, names are saved per-drum (in device definition file)
+			// No editedByUser flag needed - always saved with the drum
+		}
+	}
 
 	return true;
 }

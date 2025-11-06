@@ -631,8 +631,8 @@ midi::sound::Velocity midiDrumVelocityMenu{STRING_FOR_VELOCITY, STRING_FOR_VELOC
 midi::sound::OutputMidiNoteForDrum outputMidiNoteForDrumMenu{STRING_FOR_NOTE, STRING_FOR_NOTE};
 midi::sound::KitOutputDeviceSelection kitOutputDeviceSelectionMenu{STRING_FOR_OUTPUT_DEVICE, STRING_FOR_OUTPUT_DEVICE};
 
-// Horizontal menu for MIDI drum settings (note, channel, velocity)
-HorizontalMenu midiDrumSettingsMenu{STRING_FOR_MIDI, {&midiDrumNoteMenu, &midiDrumChannelMenu, &midiDrumVelocityMenu}};
+// Horizontal menu for MIDI drum settings (channel, note, velocity)
+HorizontalMenu midiDrumSettingsMenu{STRING_FOR_MIDI, {&midiDrumChannelMenu, &midiDrumNoteMenu, &midiDrumVelocityMenu}};
 
 Submenu outputMidiSubmenu{STRING_FOR_MIDI,
                           {&outputMidiChannelMenu, &outputMidiNoteForDrumMenu, &kitOutputDeviceSelectionMenu}};
