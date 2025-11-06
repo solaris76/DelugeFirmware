@@ -295,8 +295,11 @@ void MIDIParamCollection::notifyParamModifiedInSomeWay(ModelStackWithAutoParam c
 		return;
 	}
 
-	// Check if this is a kit row (has noteRow) vs a MIDI instrument track
-	if (modelStack->getNoteRowAllowNull()) {
+	// Detect if this is a kit row (MIDI drum) vs a MIDI instrument track
+	// Kit rows have a noteRow in the modelStack, instrument tracks don't
+	bool isKitRow = (modelStack->getNoteRowAllowNull() != nullptr);
+
+	if (isKitRow) {
 		// MIDI drum (kit row) - use drum's channel and device
 		MIDIDrum* midiDrum = (MIDIDrum*)modelStack->modControllable;
 		int32_t masterChannel = midiDrum->channel;
