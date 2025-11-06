@@ -2831,6 +2831,65 @@ void InstrumentClipView::adjustVelocity(int32_t velocityChange) {
 	reassessAllAuditionStatus();
 }
 
+// Adjust MIDI note number for MIDI kit rows when holding pad + turning vertical encoder
+void InstrumentClipView::adjustMIDINoteNumber(int32_t noteChange) {
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip->output->type != OutputType::KIT) {
+		return; // Only for kits
+	}
+
+	Kit* kit = (Kit*)clip->output;
+	if (!kit->selectedDrum || kit->selectedDrum->type != DrumType::MIDI) {
+		return; // Only for MIDI drums
+	}
+
+	MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+
+	// Adjust note number (0-127)
+	int32_t newNote = std::clamp<int32_t>((int32_t)midiDrum->note + noteChange, 0, 127);
+
+	if (newNote != midiDrum->note) {
+		midiDrum->note = newNote;
+
+		// Update display with new note
+		char noteLabel[5];
+		noteCodeToString(newNote, noteLabel);
+
+		if (display->haveOLED()) {
+			DEF_STACK_STRING_BUF(popupMsg, 30);
+			popupMsg.append("NOTE: ");
+			popupMsg.append(noteLabel);
+			popupMsg.append(" (");
+			popupMsg.appendInt(newNote);
+			popupMsg.append(")");
+			display->popupText(popupMsg.c_str());
+		}
+		else {
+			display->displayPopup(noteLabel);
+		}
+
+		// Re-audition the pad at the new note if currently auditioning
+		if (isUIModeActive(UI_MODE_AUDITIONING) && !auditioningSilently) {
+			char modelStackMemory[MODEL_STACK_MAX_SIZE];
+			ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+			ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+			    modelStack->addOtherTwoThingsButNoNoteRow(midiDrum, nullptr);
+
+			// Send note at default velocity (or last auditioned velocity)
+			int32_t velocity = midiDrum->defaultVelocity;
+			if (lastAuditionedYDisplay >= 0 && lastAuditionedYDisplay < kDisplayHeight) {
+				if (lastAuditionedVelocityOnScreen[lastAuditionedYDisplay] != 255) {
+					velocity = lastAuditionedVelocityOnScreen[lastAuditionedYDisplay];
+				}
+			}
+
+			// Note off old note, note on new note
+			midiDrum->noteOff(modelStackWithThreeMainThings);
+			midiDrum->noteOn(modelStackWithThreeMainThings, velocity, nullptr);
+		}
+	}
+}
+
 // determines whether or not you're trying to adjust the velocities of multiple notes
 // with different starting velocities (prior to adjustment)
 // used to determine whether to display the updated velocity value or a generalized
@@ -6176,6 +6235,20 @@ ActionResult InstrumentClipView::verticalEncoderAction(int32_t offset, bool inCa
 
 	// If neither button is pressed, we'll do vertical scrolling
 	else {
+		// If holding a MIDI kit row audition pad, adjust note number instead of scrolling
+		if (isUIModeActiveExclusively(UI_MODE_AUDITIONING)) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip->output->type == OutputType::KIT) {
+				Kit* kit = (Kit*)clip->output;
+				if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+					// Adjust MIDI note number for melodic drum programming
+					adjustMIDINoteNumber(offset);
+					return ActionResult::DEALT_WITH;
+				}
+			}
+		}
+
+		// Normal vertical scrolling (when not holding pad, or for non-MIDI drums)
 		if (isUIModeWithinRange(verticalScrollUIModes)) {
 			if (!shouldIgnoreVerticalScrollKnobActionIfNotAlsoPressedForThisNotePress
 			    || (!isUIModeActive(UI_MODE_NOTES_PRESSED) && !isUIModeActive(UI_MODE_AUDITIONING))) {
