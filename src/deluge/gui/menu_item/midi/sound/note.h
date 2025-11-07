@@ -32,9 +32,9 @@ public:
 	void readCurrentValue() override {
 		Output* output = getCurrentOutput();
 		if (output && output->type == OutputType::KIT) {
-			Kit* kit = (Kit*)output;
+			auto* kit = static_cast<Kit*>(output);
 			if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
-				MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+				auto* midiDrum = static_cast<MIDIDrum*>(kit->selectedDrum);
 				this->setValue(midiDrum->note);
 			}
 		}
@@ -43,9 +43,9 @@ public:
 	void writeCurrentValue() override {
 		Output* output = getCurrentOutput();
 		if (output && output->type == OutputType::KIT) {
-			Kit* kit = (Kit*)output;
+			auto* kit = static_cast<Kit*>(output);
 			if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
-				MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+				auto* midiDrum = static_cast<MIDIDrum*>(kit->selectedDrum);
 				midiDrum->note = this->getValue();
 			}
 		}
@@ -64,21 +64,21 @@ public:
 		int32_t noteValue = getValue();
 
 		// Note names array (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
-		static const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+		constexpr const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
 		// Calculate note name and octave
 		int32_t noteName = noteValue % 12;
 		int32_t octave = (noteValue / 12) - 1; // MIDI octave convention (C-1 to G9)
 
-		// Build note string (e.g., "C3", "E#4")
-		char noteStr[16] = {0}; // Larger buffer to avoid warnings
+		// Build note string (e.g., "C3", "F#4")
+		char noteStr[8];
 		const char* note = noteNames[noteName];
 
-		// Simple string building
+		// Copy note name and add octave
 		int idx = 0;
-		noteStr[idx++] = note[0];
-		if (note[1] == '#') {
-			noteStr[idx++] = '#';
+		while (note[idx] != '\0') {
+			noteStr[idx] = note[idx];
+			idx++;
 		}
 
 		// Add octave
@@ -96,7 +96,7 @@ public:
 		}
 		noteStr[idx] = '\0';
 
-		// Draw note name (aligned with velocity slider)
+		// Draw note name centered
 		image.drawStringCentered(noteStr, slot.start_x, slot.start_y + kHorizontalMenuSlotYOffset, kTextTitleSpacingX,
 		                         kTextTitleSizeY, slot.width);
 	}
