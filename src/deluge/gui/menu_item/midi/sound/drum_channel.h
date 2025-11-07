@@ -63,6 +63,22 @@ public:
 		return (output && output->type == OutputType::KIT);
 	}
 
+	// Override to show channel number in horizontal menu (same style as note name)
+	void renderInHorizontalMenu(const HorizontalMenuSlotParams& slot) override {
+		using namespace deluge::hid::display;
+		oled_canvas::Canvas& image = OLED::main;
+
+		int32_t channelValue = getValue();
+
+		// Build channel string (e.g., "1", "16")
+		char channelStr[8] = {0};
+		intToString(channelValue, channelStr, 1);
+
+		// Draw centered (aligned with note name)
+		image.drawStringCentered(channelStr, slot.start_x, slot.start_y + kHorizontalMenuSlotYOffset,
+		                         kTextTitleSpacingX, kTextTitleSizeY, slot.width);
+	}
+
 	int32_t getMinValue() const override { return 1; } // Display as 1-16
 	int32_t getMaxValue() const override { return 16; }
 };
