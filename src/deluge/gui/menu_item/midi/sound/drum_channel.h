@@ -32,9 +32,9 @@ public:
 	void readCurrentValue() override {
 		Output* output = getCurrentOutput();
 		if (output && output->type == OutputType::KIT) {
-			Kit* kit = (Kit*)output;
+			auto* kit = static_cast<Kit*>(output);
 			if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
-				MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+				auto* midiDrum = static_cast<MIDIDrum*>(kit->selectedDrum);
 				// Display as 1-16 (stored internally as 0-15)
 				this->setValue(midiDrum->channel + 1);
 				return;
@@ -46,9 +46,9 @@ public:
 	void writeCurrentValue() override {
 		Output* output = getCurrentOutput();
 		if (output && output->type == OutputType::KIT) {
-			Kit* kit = (Kit*)output;
+			auto* kit = static_cast<Kit*>(output);
 			if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
-				MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+				auto* midiDrum = static_cast<MIDIDrum*>(kit->selectedDrum);
 				// Convert from displayed 1-16 to internal 0-15
 				int32_t value = this->getValue();
 				if (value >= 1 && value <= 16) {
