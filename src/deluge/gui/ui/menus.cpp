@@ -109,6 +109,7 @@
 #include "gui/menu_item/midi/sound/channel.h"
 #include "gui/menu_item/midi/sound/drum_channel.h"
 #include "gui/menu_item/midi/sound/kit_output_device_selection.h"
+#include "gui/menu_item/midi/sound/kit_output_device_selection_horizontal.h"
 #include "gui/menu_item/midi/sound/note.h"
 #include "gui/menu_item/midi/sound/note_for_drum.h"
 #include "gui/menu_item/midi/sound/velocity.h"
@@ -630,9 +631,12 @@ midi::sound::Note midiDrumNoteMenu{STRING_FOR_NOTE, STRING_FOR_NOTE};
 midi::sound::Velocity midiDrumVelocityMenu{STRING_FOR_VELOCITY, STRING_FOR_VELOCITY};
 midi::sound::OutputMidiNoteForDrum outputMidiNoteForDrumMenu{STRING_FOR_NOTE, STRING_FOR_NOTE};
 midi::sound::KitOutputDeviceSelection kitOutputDeviceSelectionMenu{STRING_FOR_OUTPUT_DEVICE, STRING_FOR_OUTPUT_DEVICE};
+midi::sound::KitOutputDeviceSelectionHorizontal kitOutputDeviceSelectionHorizontalMenu{STRING_FOR_OUTPUT_DEVICE,
+                                                                                       STRING_FOR_OUTPUT_DEVICE};
 
 // Horizontal menu for MIDI drum settings (channel, note, velocity)
-HorizontalMenu midiDrumSettingsMenu{STRING_FOR_MIDI, {&midiDrumChannelMenu, &midiDrumNoteMenu, &midiDrumVelocityMenu}};
+HorizontalMenu midiDrumSettingsMenu{STRING_FOR_MIDI_OUTPUT,
+                                    {&midiDrumChannelMenu, &midiDrumNoteMenu, &midiDrumVelocityMenu}};
 
 Submenu outputMidiSubmenu{STRING_FOR_MIDI,
                           {&outputMidiChannelMenu, &outputMidiNoteForDrumMenu, &kitOutputDeviceSelectionMenu}};
@@ -1560,9 +1564,9 @@ menu_item::Submenu soundEditorRootMenuMIDIOrCV{
 menu_item::Submenu soundEditorRootMenuMidiDrum{
     STRING_FOR_MIDI,
     {
-        &midiDrumSettingsMenu, // Note, Channel, Velocity (horizontal menu)
-        &kitOutputDeviceSelectionMenu,
-        &midiDeviceDefinitionMenu, // Unified device definition menu (works for both tracks and kit rows)
+        &midiDrumSettingsMenu,         // Channel, Note, Velocity (horizontal menu)
+        &kitOutputDeviceSelectionMenu, // Output device selection (separate submenu)
+        &midiDeviceDefinitionMenu,     // Unified device definition menu (works for both tracks and kit rows)
         &arpMenuMIDIOrCV,
         &randomizerMenu,
     },
