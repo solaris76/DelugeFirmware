@@ -113,7 +113,6 @@
 #include "gui/menu_item/midi/sound/channel.h"
 #include "gui/menu_item/midi/sound/drum_channel.h"
 #include "gui/menu_item/midi/sound/kit_output_device_selection.h"
-#include "gui/menu_item/midi/sound/kit_output_device_selection_horizontal.h"
 #include "gui/menu_item/midi/sound/note.h"
 #include "gui/menu_item/midi/sound/note_for_drum.h"
 #include "gui/menu_item/midi/sound/velocity.h"
@@ -634,8 +633,6 @@ midi::sound::Note midiDrumNoteMenu{STRING_FOR_NOTE, STRING_FOR_NOTE};
 midi::sound::Velocity midiDrumVelocityMenu{STRING_FOR_VELOCITY, STRING_FOR_VELOCITY};
 midi::sound::OutputMidiNoteForDrum outputMidiNoteForDrumMenu{STRING_FOR_NOTE, STRING_FOR_NOTE};
 midi::sound::KitOutputDeviceSelection kitOutputDeviceSelectionMenu{STRING_FOR_OUTPUT_DEVICE, STRING_FOR_OUTPUT_DEVICE};
-midi::sound::KitOutputDeviceSelectionHorizontal kitOutputDeviceSelectionHorizontalMenu{STRING_FOR_OUTPUT_DEVICE,
-                                                                                       STRING_FOR_OUTPUT_DEVICE};
 
 // Horizontal menu for MIDI drum settings (channel, note, velocity)
 HorizontalMenu midiDrumSettingsMenu{STRING_FOR_MIDI_OUTPUT,
