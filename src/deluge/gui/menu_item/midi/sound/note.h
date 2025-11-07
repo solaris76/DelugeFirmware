@@ -56,6 +56,51 @@ public:
 		return (output && output->type == OutputType::KIT);
 	}
 
+	// Override to show note name in horizontal menu
+	void renderInHorizontalMenu(const HorizontalMenuSlotParams& slot) override {
+		using namespace deluge::hid::display;
+		oled_canvas::Canvas& image = OLED::main;
+
+		int32_t noteValue = getValue();
+
+		// Note names array (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+		static const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
+		// Calculate note name and octave
+		int32_t noteName = noteValue % 12;
+		int32_t octave = (noteValue / 12) - 1; // MIDI octave convention (C-1 to G9)
+
+		// Build note string (e.g., "C3", "E#4")
+		char noteStr[16] = {0}; // Larger buffer to avoid warnings
+		const char* note = noteNames[noteName];
+
+		// Simple string building
+		int idx = 0;
+		noteStr[idx++] = note[0];
+		if (note[1] == '#') {
+			noteStr[idx++] = '#';
+		}
+
+		// Add octave
+		if (octave < 0) {
+			noteStr[idx++] = '-';
+			noteStr[idx++] = '0' + (-octave);
+		}
+		else if (octave < 10) {
+			noteStr[idx++] = '0' + octave;
+		}
+		else {
+			// For octave 10+, use two digits
+			noteStr[idx++] = '1';
+			noteStr[idx++] = '0' + (octave - 10);
+		}
+		noteStr[idx] = '\0';
+
+		// Draw note name (aligned with velocity slider)
+		image.drawStringCentered(noteStr, slot.start_x, slot.start_y + kHorizontalMenuSlotYOffset, kTextTitleSpacingX,
+		                         kTextTitleSizeY, slot.width);
+	}
+
 	int32_t getMinValue() const override { return 0; }
 	int32_t getMaxValue() const override { return 127; }
 };

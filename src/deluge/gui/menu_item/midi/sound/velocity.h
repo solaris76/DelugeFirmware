@@ -56,6 +56,9 @@ public:
 		return (output && output->type == OutputType::KIT);
 	}
 
+	// Use slider/bar rendering like oscillator mixer volume
+	[[nodiscard]] RenderingStyle getRenderingStyle() const override { return BAR; }
+
 	int32_t getMinValue() const override { return 1; }
 	int32_t getMaxValue() const override { return 127; }
 };
