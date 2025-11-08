@@ -28,6 +28,7 @@
 #include "io/midi/midi_device_helper.h"
 #include "io/midi/midi_device_manager.h"
 #include "model/instrument/midi_instrument.h"
+#include "model/song/song.h"
 #include "modulation/arpeggiator.h"
 #include "processing/audio_output.h"
 #include "processing/sound/sound.h"
@@ -613,12 +614,11 @@ char const* getOutputTypeName(OutputType outputType, int32_t channel, Output* ou
 			// For MIDI tracks, show the selected output device instead of "MIDI"
 			// Use the provided output if available, otherwise fall back to getCurrentOutput()
 			Output* currentOutput = output;
-			if (!currentOutput) {
-				extern Output* getCurrentOutput();
+			if (currentOutput == nullptr) {
 				currentOutput = getCurrentOutput();
 			}
 
-			if (currentOutput && currentOutput->type == OutputType::MIDI_OUT) {
+			if (currentOutput != nullptr && currentOutput->type == OutputType::MIDI_OUT) {
 				MIDIInstrument* midiInstrument = static_cast<MIDIInstrument*>(currentOutput);
 				uint8_t outputDevice = midiInstrument->outputDevice;
 
