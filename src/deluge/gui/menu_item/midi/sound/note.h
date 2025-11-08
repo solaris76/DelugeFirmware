@@ -68,7 +68,7 @@ public:
 
 		// Calculate note name and octave
 		int32_t noteName = noteValue % 12;
-		int32_t octave = (noteValue / 12) - 1; // MIDI octave convention (C-1 to G9)
+		int32_t octave = (noteValue / 12) - 2; // MIDI octave convention (C-2 to G9)
 
 		// Build note string (e.g., "C3", "F#4")
 		char noteStr[8];
