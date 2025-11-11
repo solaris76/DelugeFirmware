@@ -25,16 +25,20 @@
 #include "hid/display/oled.h"
 #include "io/debug/log.h"
 #include "model/action/action_logger.h"
+#include "model/clip/instrument_clip.h"
 #include "model/song/song.h"
 #include "storage/file_item.h"
 #include "storage/storage_manager.h"
 #include "util/functions.h"
+#include <string>
 
 using namespace deluge;
 
 static constexpr const char* PATTERN_RHYTHMIC_KIT_DEFAULT_FOLDER = "PATTERNS/RHYTHMIC/KIT";
 static constexpr const char* PATTERN_RHYTHMIC_DRUM_DEFAULT_FOLDER = "PATTERNS/RHYTHMIC/DRUM";
 static constexpr const char* PATTERN_MELODIC_DEFAULT_FOLDER = "PATTERNS/MELODIC";
+static constexpr const char* PATTERN_SEQUENCER_STEP_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/STEP";
+static constexpr const char* PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/PULSE";
 
 LoadPatternUI loadPatternUI{};
 
@@ -57,6 +61,15 @@ bool LoadPatternUI::opened() {
 		return false;
 	}
 
+	// Cache sequencer mode name BEFORE any SD card operations to avoid pausing playback
+	cachedSequencerModeName.clear();
+	if (getCurrentOutputType() != OutputType::KIT) {
+		InstrumentClip* clip = (InstrumentClip*)getCurrentClip();
+		if (clip->hasSequencerMode()) {
+			cachedSequencerModeName = clip->getSequencerModeName();
+		}
+	}
+
 	Error error = createFoldersRecursiveIfNotExists(PATTERN_RHYTHMIC_KIT_DEFAULT_FOLDER);
 	if (error != Error::NONE) {
 		display->displayError(error);
@@ -68,6 +81,16 @@ bool LoadPatternUI::opened() {
 		return false;
 	}
 	error = createFoldersRecursiveIfNotExists(PATTERN_MELODIC_DEFAULT_FOLDER);
+	if (error != Error::NONE) {
+		display->displayError(error);
+		return false;
+	}
+	error = createFoldersRecursiveIfNotExists(PATTERN_SEQUENCER_STEP_DEFAULT_FOLDER);
+	if (error != Error::NONE) {
+		display->displayError(error);
+		return false;
+	}
+	error = createFoldersRecursiveIfNotExists(PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER);
 	if (error != Error::NONE) {
 		display->displayError(error);
 		return false;
@@ -91,9 +114,31 @@ bool LoadPatternUI::opened() {
 		}
 	}
 	else {
-		defaultDir = std::string(PATTERN_MELODIC_DEFAULT_FOLDER);
-		favouritesManager.setCategory(PATTERN_MELODIC_DEFAULT_FOLDER);
-		title = "Load Pattern";
+		// Melodic instruments - use cached sequencer mode name
+		if (!cachedSequencerModeName.empty()) {
+			if (cachedSequencerModeName == "step_sequencer") {
+				defaultDir = PATTERN_SEQUENCER_STEP_DEFAULT_FOLDER;
+				favouritesManager.setCategory(PATTERN_SEQUENCER_STEP_DEFAULT_FOLDER);
+				title = "Load Step Pattern";
+			}
+			else if (cachedSequencerModeName == "pulse_seq") {
+				defaultDir = PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER;
+				favouritesManager.setCategory(PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER);
+				title = "Load Pulse Pattern";
+			}
+			else {
+				// Unknown sequencer mode, use default
+				defaultDir = std::string(PATTERN_MELODIC_DEFAULT_FOLDER);
+				favouritesManager.setCategory(PATTERN_MELODIC_DEFAULT_FOLDER);
+				title = "Load Pattern";
+			}
+		}
+		else {
+			// Piano roll (no sequencer mode)
+			defaultDir = std::string(PATTERN_MELODIC_DEFAULT_FOLDER);
+			favouritesManager.setCategory(PATTERN_MELODIC_DEFAULT_FOLDER);
+			title = "Load Pattern";
+		}
 		selectedDrumOnly = false;
 	}
 
