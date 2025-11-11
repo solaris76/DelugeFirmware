@@ -49,6 +49,6 @@ struct ExpressiveChordSet {
 	std::array<ExpressiveChordSlot, kExpressiveChordsPerSet> slots;
 };
 
-extern const std::array<ExpressiveChordSet, kExpressiveChordSetCount> expressiveChordSets;
+extern std::array<ExpressiveChordSet, kExpressiveChordSetCount> expressiveChordSets;
 
 } // namespace deluge::gui::ui::keyboard

@@ -64,7 +64,7 @@ public:
 	}
 
 	// Override to show channel number in horizontal menu (same style as note name)
-	void renderInHorizontalMenu(const HorizontalMenuSlotParams& slot) override {
+	void renderInHorizontalMenu(const SlotPosition& slot) override {
 		using namespace deluge::hid::display;
 		oled_canvas::Canvas& image = OLED::main;
 
