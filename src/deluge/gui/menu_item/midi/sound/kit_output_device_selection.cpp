@@ -30,6 +30,7 @@
 #include "model/instrument/kit.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/song/song.h" // Added for getCurrentInstrument()
+#include <algorithm>
 
 namespace deluge::gui::menu_item::midi::sound {
 
@@ -89,7 +90,7 @@ void KitOutputDeviceSelection::drawValue() {
 
 		// Debug: always show at least 3 options regardless of current value
 		int32_t startIndex = 0;
-		int32_t endIndex = etl::min<int32_t>(numOptions, 3);
+		int32_t endIndex = std::min<int32_t>(numOptions, 3);
 
 		int32_t yPixel = OLED_MAIN_TOPMOST_PIXEL + 15;
 
