@@ -30,6 +30,8 @@
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
 #include "model/clip/clip_instance.h"
+#include "model/clip/sequencer/modes/step_sequencer_mode.h"
+#include "model/clip/sequencer/sequencer_mode_manager.h"
 #include "model/consequence/consequence_note_row_mute.h"
 #include "model/consequence/consequence_scale_add_note.h"
 #include "model/drum/drum_name.h"
@@ -145,6 +147,34 @@ void InstrumentClip::copyBasicsFrom(Clip const* otherClip) {
 	}
 
 	arpSettings.cloneFrom(&otherInstrumentClip->arpSettings);
+
+	// Copy sequencer mode data
+	sequencerModeName_ = otherInstrumentClip->sequencerModeName_;
+
+	// Clone the active sequencer mode if it exists
+	if (otherInstrumentClip->sequencerMode_) {
+		auto& manager = deluge::model::clip::sequencer::SequencerModeManager::instance();
+		sequencerMode_ = manager.createMode(sequencerModeName_);
+		if (sequencerMode_) {
+			// TODO: We should implement a proper clone method for sequencer modes
+			// For now, the new clip will get default sequencer mode data
+			sequencerMode_->initialize();
+		}
+	}
+
+	// Clone cached sequencer modes
+	for (const auto& [modeName, mode] : otherInstrumentClip->cachedSequencerModes_) {
+		if (mode) {
+			auto& manager = deluge::model::clip::sequencer::SequencerModeManager::instance();
+			auto clonedMode = manager.createMode(modeName);
+			if (clonedMode) {
+				// TODO: We should implement a proper clone method for sequencer modes
+				// For now, the cached modes will have default data
+				clonedMode->initialize();
+				cachedSequencerModes_[modeName] = std::move(clonedMode);
+			}
+		}
+	}
 }
 
 // Will replace the Clip in the modelStack, if success.
@@ -699,6 +729,12 @@ void InstrumentClip::processCurrentPos(ModelStackWithTimelineCounter* modelStack
 	// We already incremented / decremented noteRowsNumTicksBehindClip and ticksTilNextNoteRowEvent, in the call to
 	// incrementPos().
 
+	// If sequencer mode is active, skip normal note row processing
+	// (sequencer processing is now handled in Session::doTickForward)
+	if (sequencerMode_) {
+		return;
+	}
+
 	if (ticksTilNextNoteRowEvent <= 0) {
 
 		// Ok, time to do some ticks
@@ -1152,6 +1188,18 @@ void InstrumentClip::expectNoFurtherTicks(Song* song, bool actuallySoundChange) 
 	    setupModelStackWithTimelineCounter(modelStackMemory, song, this); // TODO: make caller supply this
 
 	stopAllNotesPlaying(modelStack, actuallySoundChange && !currentlyRecordingLinearly); // Stop all sound
+
+	// Stop sequencer mode notes if active
+	if (sequencerMode_) {
+		sequencerMode_->stopAllNotes(modelStack);
+	}
+
+	// Also stop notes in cached sequencer modes
+	for (auto& [name, mode] : cachedSequencerModes_) {
+		if (mode) {
+			mode->stopAllNotes(modelStack);
+		}
+	}
 
 	ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
 	    modelStack->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &paramManager);
@@ -2431,6 +2479,18 @@ void InstrumentClip::writeDataToFile(Serializer& writer, Song* song) {
 
 		writer.writeArrayEnding("noteRows");
 	}
+
+	// Write sequencer mode data if active (for song save)
+	if (hasSequencerMode()) {
+		writer.writeOpeningTagBeginning("sequencerMode");
+		writer.writeAttribute("mode", sequencerModeName_.c_str());
+		writer.writeOpeningTagEnd();
+
+		// Write the active sequencer mode's data
+		sequencerMode_->writeToFile(writer, true); // Include scenes
+
+		writer.writeClosingTag("sequencerMode");
+	}
 }
 
 Error InstrumentClip::readFromFile(Deserializer& reader, Song* song) {
@@ -2826,6 +2886,49 @@ createNewParamManager:
 				reader.exitTag(nullptr, true); // leave box.
 			}
 			reader.match(']');
+		}
+
+		// Sequencer mode data (for song loading)
+		else if (!strcmp(tagName, "sequencerMode")) {
+			char const* modeName = nullptr;
+
+			// Read sequencer mode attributes first
+			while (*(tagName = reader.readNextTagOrAttributeName())) {
+				if (!strcmp(tagName, "mode")) {
+					modeName = reader.readTagOrAttributeValue();
+
+					// Set the sequencer mode based on the mode name
+					if (modeName) {
+						if (!hasSequencerMode() || getSequencerModeName() != modeName) {
+							setSequencerMode(modeName);
+						}
+					}
+				}
+				else if (!strcmp(tagName, "controlColumns")) {
+					// Handle control columns directly (sequencer modes delegate this back)
+					if (sequencerMode_) {
+						error = sequencerMode_->getControlColumnState().readFromFile(reader);
+						if (error != Error::NONE) {
+							goto someError;
+						}
+					}
+					else {
+						reader.exitTag(tagName);
+					}
+				}
+				else {
+					// This is a child element, let the sequencer mode handle it
+					if (sequencerMode_) {
+						error = sequencerMode_->readFromFile(reader);
+						if (error != Error::NONE) {
+							goto someError;
+						}
+					}
+					else {
+						reader.exitTag(tagName);
+					}
+				}
+			}
 		}
 
 		// These are the expression params for MPE
@@ -4721,6 +4824,70 @@ void InstrumentClip::incrementPos(ModelStackWithTimelineCounter* modelStack, int
 			}
 		}
 	}
+}
+
+// SEQUENCER MODE MANAGEMENT
+
+void InstrumentClip::setSequencerMode(const std::string& modeName) {
+	// Handle piano roll mode (empty string)
+	if (modeName.empty()) {
+		// Cache current sequencer mode if we have one
+		if (sequencerMode_ && !sequencerModeName_.empty()) {
+			cachedSequencerModes_[sequencerModeName_] = std::move(sequencerMode_);
+		}
+
+		// Clear active mode but keep cache
+		sequencerMode_.reset();
+		sequencerModeName_ = "";
+		return;
+	}
+
+	// If we're already in this mode, don't recreate it
+	if (hasSequencerMode() && sequencerModeName_ == modeName) {
+		return;
+	}
+
+	// Cache current mode if switching to a different mode
+	if (sequencerMode_ && !sequencerModeName_.empty() && sequencerModeName_ != modeName) {
+		cachedSequencerModes_[sequencerModeName_] = std::move(sequencerMode_);
+	}
+
+	// Try to restore from cache first
+	if (cachedSequencerModes_.count(modeName)) {
+		sequencerMode_ = std::move(cachedSequencerModes_[modeName]);
+		cachedSequencerModes_.erase(modeName);
+	}
+	else {
+		// Create new mode
+		auto& manager = deluge::model::clip::sequencer::SequencerModeManager::instance();
+		sequencerMode_ = manager.createMode(modeName);
+
+		if (sequencerMode_) {
+			sequencerMode_->initialize();
+		}
+	}
+
+	// Set active mode
+	if (sequencerMode_) {
+		sequencerModeName_ = modeName;
+		expectEvent();
+	}
+}
+
+void InstrumentClip::clearSequencerMode() {
+	if (sequencerMode_) {
+		sequencerMode_->cleanup();
+		sequencerMode_.reset();
+		sequencerModeName_.clear();
+	}
+
+	// Clear cache as well
+	for (auto& [name, mode] : cachedSequencerModes_) {
+		if (mode) {
+			mode->cleanup();
+		}
+	}
+	cachedSequencerModes_.clear();
 }
 
 /*

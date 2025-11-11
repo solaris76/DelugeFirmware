@@ -59,6 +59,7 @@
 #include "model/action/action_logger.h"
 #include "model/clip/clip.h"
 #include "model/clip/instrument_clip.h"
+#include "model/clip/sequencer/sequencer_mode.h"
 #include "model/consequence/consequence_instrument_clip_multiply.h"
 #include "model/consequence/consequence_note_array_change.h"
 #include "model/consequence/consequence_note_row_horizontal_shift.h"
@@ -744,6 +745,19 @@ ActionResult InstrumentClipView::buttonAction(deluge::hid::Button b, bool on, bo
 	// Horizontal encoder button
 	else if (b == X_ENC) {
 
+		// Check if sequencer mode wants to handle encoder button (for toggle/momentary mode switch)
+		if (on) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip && clip->hasSequencerMode()) {
+				auto* sequencerMode = clip->getSequencerMode();
+				// Call with offset=0 and encoderPressed=true to trigger mode toggle
+				if (sequencerMode && sequencerMode->handleHorizontalEncoder(0, true)) {
+					uiNeedsRendering(this, 0xFFFFFFFF, 0);
+					return ActionResult::DEALT_WITH;
+				}
+			}
+		}
+
 		// If user wants to "multiple" Clip contents
 		if (on && Buttons::isShiftButtonPressed() && !isUIModeActiveExclusively(UI_MODE_NOTES_PRESSED)) {
 			if (isNoUIModeActive()) {
@@ -793,6 +807,18 @@ doCancelPopup:
 
 	// Vertical encoder button
 	else if (b == Y_ENC) {
+
+		// Check if sequencer mode wants to handle vertical encoder button (for toggle/momentary mode switch)
+		if (on) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (clip && clip->hasSequencerMode()) {
+				auto* sequencerMode = clip->getSequencerMode();
+				if (sequencerMode && sequencerMode->handleVerticalEncoderButton()) {
+					uiNeedsRendering(this, 0xFFFFFFFF, 0);
+					return ActionResult::DEALT_WITH;
+				}
+			}
+		}
 
 		// If holding notes down...
 		if (isUIModeActiveExclusively(UI_MODE_NOTES_PRESSED)) {
@@ -1138,16 +1164,34 @@ void InstrumentClipView::copyNotes(Serializer* writer, bool selectedDrumOnly) {
 	// getCurrentClip()->yScroll;
 	copiedYNoteOfBottomRow = getCurrentInstrumentClip()->getYNoteFromYDisplay(0, currentSong);
 
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	bool hasSequencerMode = clip->hasSequencerMode();
+
 	if (copyToFile) {
+		// Always use <pattern> root tag (Deluge convention)
 		writer->writeOpeningTag("pattern");
 		writer->writeOpeningTagBeginning("attributes");
 
 		writer->writeAttribute("patternVersion", PATTERN_FILE_VERSION);
+
+		// Add sequencer mode name if present (distinguishes sequencer patterns from piano roll)
+		if (hasSequencerMode) {
+			writer->writeAttribute("sequencerMode", clip->getSequencerModeName().c_str());
+		}
+
 		writer->writeAttribute("screenWidth", copiedScreenWidth);
 		writer->writeAttribute("scaleType", static_cast<int32_t>(copiedScaleType));
 		writer->writeAttribute("yNoteOfBottomRow", getCurrentInstrumentClip()->getYNoteFromYDisplay(0, currentSong));
 
 		writer->closeTag();
+
+		// Write sequencer mode data first (if present)
+		if (hasSequencerMode) {
+			auto* mode = clip->getSequencerMode();
+			if (mode) {
+				mode->writeToFile(*writer, true); // Include scenes
+			}
+		}
 
 		writer->writeArrayStart("noteRows");
 	}
@@ -1287,6 +1331,8 @@ ramError:
 
 	if (copyToFile) {
 		writer->writeArrayEnding("noteRows");
+
+		// Always close with <pattern>
 		writer->writeClosingTag("pattern");
 	}
 
@@ -1564,6 +1610,7 @@ ramError:
 	int32_t pastedScreenWidth = endPos - startPos;
 	float scaleFactor = 0;
 	String patternVersion;
+	String sequencerModeName; // NEW: Detect if this is a sequencer pattern
 
 	if (pastedScreenWidth == 0) {
 		return Error::NONE;
@@ -1580,6 +1627,10 @@ ramError:
 						return Error::INVALID_PATTERN_VERSION;
 					}
 				}
+				else if (!strcmp(tagName, "sequencerMode")) {
+					// NEW: Sequencer pattern detected!
+					reader.readTagOrAttributeValueString(&sequencerModeName);
+				}
 				else if (!strcmp(tagName, "scaleType")) {
 					copiedScaleType = static_cast<ScaleType>(reader.readTagOrAttributeValueInt());
 				}
@@ -1589,6 +1640,74 @@ ramError:
 				else if (!strcmp(tagName, "screenWidth")) {
 					copiedScreenWidth = reader.readTagOrAttributeValueInt();
 				}
+			}
+		}
+		// NEW: Load sequencer mode data
+		else if (!strcmp(tagName, "stepSequencer")) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (!sequencerModeName.isEmpty() && sequencerModeName.equals("step_sequencer")) {
+				// Ensure sequencer mode is active
+				if (!clip->hasSequencerMode() || clip->getSequencerModeName() != "step_sequencer") {
+					clip->setSequencerMode("step_sequencer");
+				}
+
+				// Load step data
+				auto* mode = clip->getSequencerMode();
+				if (mode) {
+					Error error = mode->readFromFile(reader);
+					if (error != Error::NONE) {
+						return error;
+					}
+
+					// Refresh UI to show loaded pattern
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
+			}
+		}
+		else if (!strcmp(tagName, "pulseSequencer")) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (!sequencerModeName.isEmpty() && sequencerModeName.equals("pulse_seq")) {
+				// Ensure sequencer mode is active
+				if (!clip->hasSequencerMode() || clip->getSequencerModeName() != "pulse_seq") {
+					clip->setSequencerMode("pulse_seq");
+				}
+
+				// Load pulse data
+				auto* mode = clip->getSequencerMode();
+				if (mode) {
+					Error error = mode->readFromFile(reader);
+					if (error != Error::NONE) {
+						return error;
+					}
+
+					// Refresh UI to show loaded pattern
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
+			}
+		}
+		else if (!strcmp(tagName, "controlColumns")) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (!sequencerModeName.isEmpty() && clip->hasSequencerMode()) {
+				// Load control column configuration
+				auto* mode = clip->getSequencerMode();
+				if (mode) {
+					Error error = mode->getControlColumnState().readFromFile(reader);
+					if (error != Error::NONE) {
+						return error;
+					}
+
+					// Refresh UI to show loaded control columns
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
 			}
 		}
 		else if (!strcmp(tagName, "noteRows")) {
@@ -1861,6 +1980,17 @@ const uint32_t auditionPadActionUIModes[] = {UI_MODE_AUDITIONING,
                                              0};
 
 ActionResult InstrumentClipView::padAction(int32_t x, int32_t y, int32_t velocity) {
+
+	// Check if the current clip has an active sequencer mode that wants to handle pad input
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		if (sequencerMode && sequencerMode->handlePadPress(x, y, velocity)) {
+			// Sequencer mode handled the pad - request UI refresh
+			uiNeedsRendering(this, 0xFFFFFFFF, 0);
+			return ActionResult::DEALT_WITH;
+		}
+	}
 
 	// Drum Randomizer
 	if (x == 15 && y == 2 && velocity > 0
@@ -2149,11 +2279,6 @@ ActionResult InstrumentClipView::potentiallyRandomizeDrumSample(Kit* kit, Drum* 
 		afh->filePath.concatenate(chosenFilename);
 		afh->loadFile(false, true, true, 1, nullptr, false);
 
-		char* dot = strrchr(chosenFilename, '.');
-		if (dot) {
-			// Remove the extension (e.g., ".WAV", ".AIFF") from chosenFilename before assigning as name
-			*dot = '\0';
-		}
 		soundDrum->name.set(chosenFilename);
 		kit->beenEdited();
 		*slashAddress = '/';
@@ -3769,37 +3894,41 @@ bool InstrumentClipView::handleNoteRowEditorPadAction(int32_t x, int32_t y, int3
 	return true;
 }
 
-// handles editing notes on the grid
+// handles editing notes if shift is pressed
 bool InstrumentClipView::handleNoteRowEditorMainPadAction(int32_t x, int32_t y, int32_t on) {
-	bool wasntHoldingNote = !isUIModeActive(UI_MODE_NOTES_PRESSED);
+	// if shift is active, allow editing notes on the grid
+	if (Buttons::isShiftButtonPressed()) {
+		bool wasntHoldingNote = !isUIModeActive(UI_MODE_NOTES_PRESSED);
 
-	editPadAction(on, y, x, currentSong->xZoom[NAVIGATION_CLIP]);
+		editPadAction(on, y, x, currentSong->xZoom[NAVIGATION_CLIP]);
 
-	bool nowHoldingNote = isUIModeActive(UI_MODE_NOTES_PRESSED);
+		bool nowHoldingNote = isUIModeActive(UI_MODE_NOTES_PRESSED);
 
-	// toggle note menu if you weren't holding note and now you are
-	// or if you were holding note and now you aren't
-	bool toggleMenu = (wasntHoldingNote && nowHoldingNote) || (!wasntHoldingNote && !nowHoldingNote);
+		// toggle note menu if you weren't holding note and now you are
+		// or if you were holding note and now you aren't
+		bool toggleMenu = (wasntHoldingNote && nowHoldingNote) || (!wasntHoldingNote && !nowHoldingNote);
 
-	// if we selected a note / created a note
-	// update the row selection
-	// so that menu can be potentially refreshed
-	if (lastSelectedNoteYDisplay != kNoSelection) {
-		handleNoteRowEditorAuditionPadAction(lastSelectedNoteYDisplay);
+		// if we selected a note / created a note
+		// update the row selection
+		// so that menu can be potentially refreshed
+		if (lastSelectedNoteYDisplay != kNoSelection) {
+			handleNoteRowEditorAuditionPadAction(lastSelectedNoteYDisplay);
+		}
+
+		if (toggleMenu) {
+			// toggle showing note editor param menu while holding / release note pad
+			soundEditor.toggleNoteEditorParamMenu(on);
+		}
+		else {
+			// if you were holding a note and are still holding a note
+			// it means you were holding more than one note and released one
+			// so refresh parameter menu so it reflects the note remaining
+			soundEditor.getCurrentMenuItem()->readValueAgain();
+		}
+
+		return true;
 	}
-
-	if (toggleMenu) {
-		// toggle showing note editor param menu while holding / release note pad
-		soundEditor.toggleNoteEditorParamMenu(on);
-	}
-	else {
-		// if you were holding a note and are still holding a note
-		// it means you were holding more than one note and released one
-		// so refresh parameter menu so it reflects the note remaining
-		soundEditor.getCurrentMenuItem()->readValueAgain();
-	}
-
-	return true;
+	return false;
 }
 
 void InstrumentClipView::handleNoteRowEditorAuditionPadAction(int32_t y) {
@@ -5978,6 +6107,15 @@ bool InstrumentClipView::renderSidebar(uint32_t whichRows, RGB image[][kDisplayW
 		return true;
 	}
 
+	// Check if the current clip has an active sequencer mode that wants to handle sidebar
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		if (sequencerMode && sequencerMode->renderSidebar(whichRows, image, occupancyMask)) {
+			return true; // Sequencer mode handled the sidebar
+		}
+	}
+
 	int32_t macroColumn = kDisplayWidth;
 	bool armed = false;
 	for (int32_t i = 0; i < kDisplayHeight; i++) {
@@ -6202,6 +6340,17 @@ ActionResult InstrumentClipView::verticalEncoderAction(int32_t offset, bool inCa
 		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE; // Allow sometimes.
 	}
 
+	// Check if the current clip has an active sequencer mode that wants to handle the vertical encoder
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		if (sequencerMode && sequencerMode->handleVerticalEncoder(offset)) {
+			// Sequencer mode handled the encoder - request UI refresh
+			uiNeedsRendering(this, 0xFFFFFFFF, 0);
+			return ActionResult::DEALT_WITH;
+		}
+	}
+
 	bool inNoteRowEditor = getCurrentUI() == &soundEditor && soundEditor.inNoteRowEditor();
 
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];
@@ -6334,6 +6483,18 @@ static const uint32_t noteNudgeUIModes[] = {UI_MODE_NOTES_PRESSED, UI_MODE_HOLDI
 ActionResult InstrumentClipView::horizontalEncoderAction(int32_t offset) {
 	if (sdRoutineLock) {
 		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE; // Just be safe - maybe not necessary
+	}
+
+	// Check if sequencer mode wants to handle encoder (for control column value adjustment)
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		bool encoderPressed = isUIModeActive(UI_MODE_HOLDING_HORIZONTAL_ENCODER_BUTTON);
+		if (sequencerMode && sequencerMode->handleHorizontalEncoder(offset, encoderPressed)) {
+			// Sequencer mode handled the encoder (control column adjustment)
+			uiNeedsRendering(this, 0xFFFFFFFF, 0);
+			return ActionResult::DEALT_WITH;
+		}
 	}
 
 	// If holding down notes
@@ -7008,6 +7169,12 @@ void InstrumentClipView::graphicsRoutine() {
 		return;
 	}
 
+	// Don't render default playback position if sequencer mode is active
+	// (sequencer modes render their own position indicators)
+	if (clip && clip->hasSequencerMode()) {
+		return;
+	}
+
 	int32_t newTickSquare;
 
 	bool reallyNoTickSquare = (!playbackHandler.isEitherClockActive() || !currentSong->isClipActive(clip)
@@ -7188,6 +7355,15 @@ void InstrumentClipView::performActualRender(uint32_t whichRows, RGB* image,
                                              uint32_t xZoom, int32_t renderWidth, int32_t imageWidth,
                                              bool drawUndefinedArea) {
 	InstrumentClip* clip = getCurrentInstrumentClip();
+
+	// Check if clip has an active sequencer mode that wants to handle rendering
+	if (clip && clip->hasSequencerMode()) {
+		auto* sequencerMode = clip->getSequencerMode();
+		if (sequencerMode
+		    && sequencerMode->renderPads(whichRows, image, occupancyMask, xScroll, xZoom, renderWidth, imageWidth)) {
+			return; // Sequencer mode handled the rendering
+		}
+	}
 
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];
 	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
