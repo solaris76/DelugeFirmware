@@ -11,6 +11,7 @@
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/sysex.h"
+#include "io/midi/sysex/parameter_sysex.h"
 #include "io/midi/sysex/settings_sysex.h"
 #include "io/midi/sysex/transport_sysex.h"
 #include "memory/general_memory_allocator.h"
@@ -953,6 +954,34 @@ void smSysex::handleNextSysEx() {
 		}
 		else if (!strcmp(tagName, "getFirmwareVersion")) {
 			SettingsSysex::getFirmwareVersion(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getParameters")) {
+			ParameterSysex::getParameters(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setParameter")) {
+			ParameterSysex::setParameter(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getParameter")) {
+			ParameterSysex::getParameter(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getPatchCables")) {
+			ParameterSysex::getPatchCables(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setPatchCable")) {
+			ParameterSysex::setPatchCable(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "subscribeParameters")) {
+			ParameterSysex::subscribeParameters(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "unsubscribeParameters")) {
+			ParameterSysex::unsubscribeParameters(de.cable, parser);
 			goto done;
 		}
 		parser.exitTag();
