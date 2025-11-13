@@ -253,6 +253,18 @@
         </div>
       </div>
 
+      <div class="panel">
+        <h2>🎛️ Parameter Control</h2>
+        <p style="color: #888; font-size: 12px; margin-bottom: 10px;">Read all synth sound parameters (requires synth clip selected on Deluge)</p>
+        <div class="button-group">
+          <button class="btn" id="getParametersBtn" disabled>Get All Parameters</button>
+          <button class="btn btn-small" id="clearParamsBtn">Clear Display</button>
+        </div>
+        <div id="parametersDisplay" class="log-container" style="max-height: 400px; margin-top: 10px; font-size: 11px; overflow-y: auto;">
+          <div style="color: #888;">Parameters will appear here</div>
+        </div>
+      </div>
+
       <div class="panel" style="grid-column: 1 / -1;">
         <h2>📋 Message Log</h2>
         <div style="margin-bottom: 10px;">
@@ -324,6 +336,10 @@
       // Edit commands
       document.getElementById('undoBtn').addEventListener('click', () => sendCommand({transport: {command: "undo"}}));
       document.getElementById('redoBtn').addEventListener('click', () => sendCommand({transport: {command: "redo"}}));
+      
+      // Parameters
+      document.getElementById('getParametersBtn').addEventListener('click', () => sendCommand({getParameters: {}}));
+      document.getElementById('clearParamsBtn').addEventListener('click', clearParametersDisplay);
       document.getElementById('setTempoBtn').addEventListener('click', setTempo);
       document.getElementById('getTransportBtn').addEventListener('click', () => sendCommand({getTransportState: {}}));
       document.getElementById('subscribeTransportBtn').addEventListener('click', () => sendCommand({subscribeTransport: {}}));
@@ -434,6 +450,7 @@
       document.getElementById('setTempoBtn').disabled = false;
       document.getElementById('getTransportBtn').disabled = false;
       document.getElementById('subscribeTransportBtn').disabled = false;
+      document.getElementById('getParametersBtn').disabled = false;
     }
 
     function disableControls() {
@@ -577,6 +594,12 @@
         document.getElementById('fwVersion').textContent = versionStr;
         document.getElementById('fwVersionDisplay').style.display = 'flex';
         log(`✓ Firmware: ${versionStr}`, 'success');
+      }
+      
+      if (response['^parameters']) {
+        log(`✓ Received ${Object.keys(response['^parameters']).length} parameter groups`, 'success');
+        displayParameters(response['^parameters']);
+        storeLatestJson(response);
       }
       
       if (response['^error']) {
@@ -786,6 +809,176 @@
       });
       html += '</div>';
       display.innerHTML = html;
+    }
+
+    function displayParameters(params) {
+      const display = document.getElementById('parametersDisplay');
+      
+      let html = '<div style="font-family: monospace; font-size: 11px;">';
+      
+      // Check for error
+      if (params.error) {
+        html += `<div style="color: #f44336; padding: 10px; border: 1px solid #f44336; border-radius: 4px;">`;
+        html += `⚠️ ${params.error}</div></div>`;
+        display.innerHTML = html;
+        return;
+      }
+      
+      let totalParams = 0;
+      
+      // General section
+      if (params.general) {
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🎹 GENERAL</div>`;
+        Object.entries(params.general).forEach(([key, value]) => {
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50;">${value}</span></div>`;
+          totalParams++;
+        });
+        html += `</div>`;
+      }
+      
+      // Unison section
+      if (params.unison) {
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🔊 UNISON</div>`;
+        Object.entries(params.unison).forEach(([key, value]) => {
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50;">${value}</span></div>`;
+          totalParams++;
+        });
+        html += `</div>`;
+      }
+      
+      // Oscillators
+      ['osc1', 'osc2'].forEach(oscName => {
+        if (params[oscName]) {
+          const oscNum = oscName.slice(-1);
+          html += `<div style="margin-bottom: 15px;">`;
+          html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🌊 OSC ${oscNum}</div>`;
+          Object.entries(params[oscName]).forEach(([key, value]) => {
+            const displayValue = key === 'type' ? `<span style="background: #333; padding: 2px 6px; border-radius: 3px;">${value}</span>` : value;
+            html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50;">${displayValue}</span></div>`;
+            totalParams++;
+          });
+          html += `</div>`;
+        }
+      });
+      
+      // Osc2 Sync
+      if (params.osc2Sync !== undefined) {
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="padding: 2px 0;"><span style="color: #aaa;">osc2Sync:</span> <span style="color: ${params.osc2Sync ? '#4caf50' : '#f44336'};">${params.osc2Sync ? 'ON' : 'OFF'}</span></div>`;
+        html += `</div>`;
+        totalParams++;
+      }
+      
+      // Patched Parameters
+      if (params.patched) {
+        const patchedCount = Object.keys(params.patched).length;
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🎛️ PATCHED PARAMETERS (${patchedCount})</div>`;
+        html += `<div style="padding-left: 10px; max-height: 200px; overflow-y: auto; background: #1a1a1a; border-radius: 4px; padding: 8px;">`;
+        
+        // Group patched params by category
+        const categories = {
+          'Volume': ['oscAVolume', 'oscBVolume', 'volume', 'noiseVolume', 'modulator0Volume', 'modulator1Volume', 'volumePostFX', 'volumePostReverbSend'],
+          'Filter': ['lpfFrequency', 'lpfResonance', 'lpfMorph', 'hpfFrequency', 'hpfResonance', 'hpfMorph'],
+          'Pitch': ['pitchAdjust', 'oscAPitchAdjust', 'oscBPitchAdjust', 'modulator0PitchAdjust', 'modulator1PitchAdjust'],
+          'Envelopes': ['env0Attack', 'env0Decay', 'env0Sustain', 'env0Release', 'env1Attack', 'env1Decay', 'env1Sustain', 'env1Release', 
+                        'env2Attack', 'env2Decay', 'env2Sustain', 'env2Release', 'env3Attack', 'env3Decay', 'env3Sustain', 'env3Release'],
+          'Feedback': ['modulator0Feedback', 'modulator1Feedback', 'carrier0Feedback', 'carrier1Feedback', 'delayFeedback'],
+          'Wave': ['oscAPhaseWidth', 'oscBPhaseWidth', 'oscAWaveIndex', 'oscBWaveIndex'],
+          'LFO': ['lfoFrequency1', 'lfoFrequency2', 'lfo1LocalFrequency', 'lfo2LocalFrequency'],
+          'FX': ['modFXDepth', 'modFXRate', 'delayRate', 'reverbAmount', 'arpRate'],
+          'Other': ['pan', 'fold']
+        };
+        
+        Object.entries(categories).forEach(([catName, catParams]) => {
+          const matchingParams = Object.entries(params.patched).filter(([k, v]) => catParams.includes(k));
+          if (matchingParams.length > 0) {
+            html += `<div style="color: #888; font-size: 10px; margin-top: 8px; margin-bottom: 2px;">${catName}:</div>`;
+            matchingParams.forEach(([key, value]) => {
+              const hexValue = value < 0 ? `0x${(value >>> 0).toString(16).toUpperCase()}` : `0x${value.toString(16).toUpperCase()}`;
+              html += `<div style="padding: 1px 0; font-size: 10px;"><span style="color: #666;">${key}:</span> <span style="color: #667eea; font-family: 'Courier New';">${hexValue}</span></div>`;
+              totalParams++;
+            });
+          }
+        });
+        
+        html += `</div></div>`;
+      }
+      
+      // Unpatched Parameters
+      if (params.unpatched) {
+        const unpatchedCount = Object.keys(params.unpatched).length;
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🎚️ UNPATCHED PARAMETERS (${unpatchedCount})</div>`;
+        html += `<div style="padding-left: 10px; columns: 2; column-gap: 20px;">`;
+        Object.entries(params.unpatched).forEach(([key, value]) => {
+          const hexValue = value < 0 ? `0x${(value >>> 0).toString(16).toUpperCase()}` : `0x${value.toString(16).toUpperCase()}`;
+          html += `<div style="padding: 1px 0; font-size: 10px; break-inside: avoid;"><span style="color: #aaa;">${key}:</span> <span style="color: #667eea;">${hexValue}</span></div>`;
+          totalParams++;
+        });
+        html += `</div></div>`;
+      }
+      
+      // Filters
+      if (params.filters) {
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🔧 FILTERS</div>`;
+        Object.entries(params.filters).forEach(([key, value]) => {
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="background: #333; padding: 2px 6px; border-radius: 3px; color: #4caf50;">${value}</span></div>`;
+          totalParams++;
+        });
+        html += `</div>`;
+      }
+      
+      // LFOs
+      if (params.lfos) {
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🌀 LFOs</div>`;
+        Object.entries(params.lfos).forEach(([lfoName, lfoData]) => {
+          html += `<div style="padding: 4px 0; padding-left: 10px; border-left: 2px solid #333; margin-left: 5px;">`;
+          html += `<div style="color: #888; font-size: 11px; margin-bottom: 2px;">${lfoName.toUpperCase()}:</div>`;
+          Object.entries(lfoData).forEach(([key, value]) => {
+            html += `<div style="padding: 1px 0; padding-left: 10px; font-size: 10px;"><span style="color: #666;">${key}:</span> <span style="color: #4caf50;">${value}</span></div>`;
+            totalParams++;
+          });
+          html += `</div>`;
+        });
+        html += `</div>`;
+      }
+      
+      // ModFX
+      if (params.modFX) {
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">✨ MOD FX</div>`;
+        Object.entries(params.modFX).forEach(([key, value]) => {
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="background: #333; padding: 2px 6px; border-radius: 3px; color: #4caf50;">${value}</span></div>`;
+          totalParams++;
+        });
+        html += `</div>`;
+      }
+      
+      // Sidechain
+      if (params.sidechainSend !== undefined) {
+        html += `<div style="margin-bottom: 15px;">`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">⚡ SIDECHAIN</div>`;
+        html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">sidechainSend:</span> <span style="color: #4caf50;">${params.sidechainSend}</span></div>`;
+        html += `</div>`;
+        totalParams++;
+      }
+      
+      // Summary at top
+      html = `<div style="background: #1a3a1a; padding: 10px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #4caf50;">` +
+             `<div style="color: #4caf50; font-weight: bold; font-size: 14px;">✓ Total Parameters Retrieved: ${totalParams}</div>` +
+             `</div>` + html;
+      
+      html += '</div>';
+      display.innerHTML = html;
+    }
+
+    function clearParametersDisplay() {
+      document.getElementById('parametersDisplay').innerHTML = '<div style="color: #888;">Parameters will appear here</div>';
     }
 
     function log(message, type = 'info') {
