@@ -519,14 +519,25 @@ void setParameter(MIDICable& cable, JsonDeserializer& reader) {
 		InstrumentClip* instrumentClip = (InstrumentClip*)clip;
 		ParamManagerForTimeline* paramManager = &instrumentClip->paramManager;
 
+		// Setup model stack for proper parameter updates
+		char modelStackMemory[MODEL_STACK_MAX_SIZE];
+		ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+		ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+		    modelStack->addOtherTwoThingsButNoNoteRow(sound, paramManager);
+
 		// Try unpatched params first
 		if (paramManager->summaries[0].paramCollection) {
 			UnpatchedParamSet* unpatchedParams = (UnpatchedParamSet*)paramManager->summaries[0].paramCollection;
+			ParamCollection* unpatchedParamCollection = paramManager->summaries[0].paramCollection;
 
 			for (int32_t p = 0; p < UNPATCHED_SOUND_MAX_NUM; p++) {
 				const char* checkName = paramNameForFile(Kind::UNPATCHED_SOUND, p + UNPATCHED_START);
 				if (checkName && !strcmp(name, checkName)) {
-					unpatchedParams->params[p].setCurrentValueBasicForSetup(intValue);
+					AutoParam* param = &unpatchedParams->params[p];
+					ModelStackWithAutoParam* modelStackWithParam = modelStackWithThreeMainThings->addParam(
+					    unpatchedParamCollection, &paramManager->summaries[0], p, param);
+					// Use setCurrentValueInResponseToUserInput to trigger recalculations
+					param->setCurrentValueInResponseToUserInput(intValue, modelStackWithParam);
 					success = true;
 					break;
 				}
@@ -536,11 +547,16 @@ void setParameter(MIDICable& cable, JsonDeserializer& reader) {
 		// Try patched params if not found
 		if (!success && paramManager->summaries[1].paramCollection) {
 			PatchedParamSet* patchedParams = (PatchedParamSet*)paramManager->summaries[1].paramCollection;
+			ParamCollection* patchedParamCollection = paramManager->summaries[1].paramCollection;
 
 			for (int32_t p = 0; p < kNumParams; p++) {
 				const char* checkName = paramNameForFile(Kind::PATCHED, p);
 				if (checkName && !strcmp(name, checkName)) {
-					patchedParams->params[p].setCurrentValueBasicForSetup(intValue);
+					AutoParam* param = &patchedParams->params[p];
+					ModelStackWithAutoParam* modelStackWithParam = modelStackWithThreeMainThings->addParam(
+					    patchedParamCollection, &paramManager->summaries[1], p, param);
+					// Use setCurrentValueInResponseToUserInput to trigger recalculations
+					param->setCurrentValueInResponseToUserInput(intValue, modelStackWithParam);
 					success = true;
 					break;
 				}
