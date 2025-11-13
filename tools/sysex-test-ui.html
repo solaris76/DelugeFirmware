@@ -45,6 +45,16 @@
     .test-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #333; }
     .test-pass { color: #4caf50; }
     .test-fail { color: #f44336; }
+
+    /* Accordion Styles */
+    .accordion { background: #2a2a2a; border-radius: 10px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .accordion-header { background: #333; padding: 15px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; transition: background 0.2s; }
+    .accordion-header:hover { background: #3a3a3a; }
+    .accordion-header h2 { font-size: 16px; color: #667eea; border: none; padding: 0; margin: 0; }
+    .accordion-icon { font-size: 18px; transition: transform 0.3s; color: #667eea; }
+    .accordion-icon.open { transform: rotate(180deg); }
+    .accordion-content { padding: 20px; display: none; }
+    .accordion-content.open { display: block; }
   </style>
 </head>
 <body>
@@ -64,8 +74,12 @@
     </header>
 
     <div class="main-grid">
-      <div class="panel">
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
         <h2>📡 Connection</h2>
+          <span class="accordion-icon open">▼</span>
+        </div>
+        <div class="accordion-content open">
         <div class="button-group">
           <button class="btn btn-success" id="connectBtn">Connect</button>
           <button class="btn" id="disconnectBtn" disabled>Disconnect</button>
@@ -80,10 +94,15 @@
           <div class="feature-item"><span>Settings Control</span><span class="feature-badge badge-not-implemented" id="settingsBadge">NOT TESTED</span></div>
           <div class="feature-item"><span>Parameter Control</span><span class="feature-badge badge-not-implemented" id="parameterBadge">NOT TESTED</span></div>
         </div>
+        </div>
       </div>
 
-      <div class="panel">
-        <h2>🧪 Basic Tests</h2>
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
+          <h2>🧪 Basic Tests</h2>
+          <span class="accordion-icon">▼</span>
+        </div>
+        <div class="accordion-content">
         <div class="button-group">
           <button class="btn" id="pingBtn" disabled>Ping</button>
           <button class="btn" id="dirBtn" disabled>List Root Dir</button>
@@ -92,10 +111,15 @@
         <div class="log-container" id="testResults" style="max-height: 200px;">
           <div>Waiting for connection...</div>
         </div>
+        </div>
       </div>
 
-      <div class="panel">
-        <h2>📁 File Browser</h2>
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
+          <h2>📁 File Browser</h2>
+          <span class="accordion-icon">▼</span>
+        </div>
+        <div class="accordion-content">
         <div class="form-group">
           <label>Path:</label>
           <input type="text" id="filePath" value="/" placeholder="/SYNTHS/LEAD.XML">
@@ -107,10 +131,15 @@
         <div id="fileResult" class="log-container" style="max-height: 200px; margin-top: 10px;">
           <div style="color: #888;">File operations will appear here...</div>
         </div>
+        </div>
       </div>
 
-      <div class="panel">
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
         <h2>🚀 Firmware Upload</h2>
+          <span class="accordion-icon">▼</span>
+        </div>
+        <div class="accordion-content">
         <div class="form-group">
           <label>Select deluge.bin:</label>
           <input type="file" id="firmwareFile" accept=".bin" style="margin: 10px 0;">
@@ -134,10 +163,15 @@
           </div>
           <div id="uploadStatus" style="color: #888; margin-top: 8px;">Ready to upload firmware</div>
         </div>
+        </div>
       </div>
 
-      <div class="panel">
-        <h2>⚙️ Settings Groups</h2>
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
+          <h2>⚙️ Settings Groups</h2>
+          <span class="accordion-icon">▼</span>
+        </div>
+        <div class="accordion-content">
         <p style="color: #888; font-size: 12px; margin-bottom: 10px;">Get settings by category (matches Deluge menu structure)</p>
         <div class="button-group">
           <button class="btn btn-small" id="getCVBtn" disabled>CV (6)</button>
@@ -223,10 +257,15 @@
           <h3 style="margin: 10px 0; color: #667eea;">📋 Raw JSON Response</h3>
           <pre id="jsonContent" style="background: #1e1e1e; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; color: #d4d4d4;"></pre>
         </div>
+        </div>
       </div>
 
-      <div class="panel">
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
         <h2>⏯️ Transport</h2>
+          <span class="accordion-icon open">▼</span>
+        </div>
+        <div class="accordion-content open">
         <div class="button-group">
           <button class="btn" id="playBtn" disabled>▶ Play</button>
           <button class="btn" id="stopBtn" disabled>■ Stop</button>
@@ -252,10 +291,15 @@
           <button class="btn btn-small" id="getTransportBtn" disabled>Get State</button>
           <button class="btn btn-small" id="subscribeTransportBtn" disabled>Subscribe</button>
         </div>
+        </div>
       </div>
 
-      <div class="panel">
-        <h2>🎛️ Parameter Control</h2>
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
+          <h2>🎛️ Parameter Control</h2>
+          <span class="accordion-icon open">▼</span>
+        </div>
+        <div class="accordion-content open">
         <p style="color: #888; font-size: 12px; margin-bottom: 10px;">Read/write synth sound parameters (requires synth clip selected on Deluge)</p>
         <div class="button-group">
           <button class="btn" id="getParametersBtn" disabled>Get All Parameters</button>
@@ -295,14 +339,22 @@
                 <option value="hpfMorph">hpfMorph (0x80000000 to 0x7FFFFFFF)</option>
               </optgroup>
               <optgroup label="Envelopes">
-                <option value="env0Attack">env0Attack (0x80000000 to 0x7FFFFFFF)</option>
-                <option value="env0Decay">env0Decay (0x80000000 to 0x7FFFFFFF)</option>
-                <option value="env0Sustain">env0Sustain (0x80000000 to 0x7FFFFFFF)</option>
-                <option value="env0Release">env0Release (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="env1Attack">env1Attack (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="env1Decay">env1Decay (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="env1Sustain">env1Sustain (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="env1Release">env1Release (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env2Attack">env2Attack (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env2Decay">env2Decay (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env2Sustain">env2Sustain (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env2Release">env2Release (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env3Attack">env3Attack (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env3Decay">env3Decay (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env3Sustain">env3Sustain (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env3Release">env3Release (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env4Attack">env4Attack (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env4Decay">env4Decay (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env4Sustain">env4Sustain (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="env4Release">env4Release (0x80000000 to 0x7FFFFFFF)</option>
               </optgroup>
               <optgroup label="Delay & Sidechain">
                 <option value="delayPingPong">delayPingPong (0/1)</option>
@@ -322,12 +374,40 @@
                 <option value="bitcrushing">bitcrushing (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="clippingAmount">clippingAmount (0-255)</option>
               </optgroup>
-              <optgroup label="Volumes">
+              <optgroup label="Volumes & Levels">
                 <option value="volume">volume (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="oscAVolume">oscAVolume (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="oscBVolume">oscBVolume (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="noiseVolume">noiseVolume (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="modulator1Volume">modulator1Volume (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="modulator2Volume">modulator2Volume (0x80000000 to 0x7FFFFFFF)</option>
                 <option value="pan">pan (0x80000000 to 0x7FFFFFFF)</option>
+              </optgroup>
+              <optgroup label="Pitch & Tuning">
+                <option value="pitch">pitch (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="oscAPitch">oscAPitch (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="oscBPitch">oscBPitch (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="modulator1Pitch">modulator1Pitch (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="modulator2Pitch">modulator2Pitch (0x80000000 to 0x7FFFFFFF)</option>
+              </optgroup>
+              <optgroup label="Wave Shape & Position">
+                <option value="oscAPhaseWidth">oscAPhaseWidth (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="oscBPhaseWidth">oscBPhaseWidth (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="oscAWavetablePosition">oscAWavetablePosition (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="oscBWavetablePosition">oscBWavetablePosition (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="waveFold">waveFold (0x80000000 to 0x7FFFFFFF)</option>
+              </optgroup>
+              <optgroup label="Feedback">
+                <option value="carrier1Feedback">carrier1Feedback (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="carrier2Feedback">carrier2Feedback (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="modulator1Feedback">modulator1Feedback (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="modulator2Feedback">modulator2Feedback (0x80000000 to 0x7FFFFFFF)</option>
+              </optgroup>
+              <optgroup label="LFO">
+                <option value="lfo1Rate">lfo1Rate (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="lfo2Rate">lfo2Rate (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="lfo3Rate">lfo3Rate (0x80000000 to 0x7FFFFFFF)</option>
+                <option value="lfo4Rate">lfo4Rate (0x80000000 to 0x7FFFFFFF)</option>
               </optgroup>
             </select>
           </div>
@@ -343,15 +423,21 @@
         <div id="parametersDisplay" class="log-container" style="max-height: 350px; margin-top: 10px; font-size: 11px; overflow-y: auto;">
           <div style="color: #888;">Parameters will appear here</div>
         </div>
+        </div>
       </div>
 
-      <div class="panel" style="grid-column: 1 / -1;">
+      <div class="accordion" style="grid-column: 1 / -1;">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
         <h2>📋 Message Log</h2>
+          <span class="accordion-icon open">▼</span>
+        </div>
+        <div class="accordion-content open">
         <div style="margin-bottom: 10px;">
           <button class="btn btn-small" id="clearLogBtn">Clear Log</button>
         </div>
         <div class="log-container" id="messageLog">
           <div class="log-entry"><div class="log-timestamp">[00:00:00]</div><div class="log-info">Ready to connect...</div></div>
+        </div>
         </div>
       </div>
     </div>
@@ -380,12 +466,12 @@
       document.getElementById('pingBtn').addEventListener('click', () => sendCommand({ping: {}}));
       document.getElementById('dirBtn').addEventListener('click', () => sendCommand({dir: {path: "/"}}));
       document.getElementById('runAllBtn').addEventListener('click', runAllTests);
-      
+
       document.getElementById('dirListBtn').addEventListener('click', listDirectory);
       document.getElementById('openFileBtn').addEventListener('click', openFile);
       document.getElementById('uploadFirmwareBtn').addEventListener('click', uploadFirmware);
       document.getElementById('testWriteBtn').addEventListener('click', testWrite);
-      
+
       // Settings group buttons
       document.getElementById('getCVBtn').addEventListener('click', () => sendCommand({getSettingsCV: {}}));
       document.getElementById('getGateBtn').addEventListener('click', () => sendCommand({getSettingsGate: {}}));
@@ -400,23 +486,23 @@
       document.getElementById('setSettingBtn').addEventListener('click', setSettingValue);
       document.getElementById('getSettingBtn').addEventListener('click', getSingleSetting);
       document.getElementById('showJsonBtn').addEventListener('click', toggleJsonViewer);
-      
+
       // Basic transport
       document.getElementById('playBtn').addEventListener('click', () => sendCommand({transport: {command: "play"}}));
       document.getElementById('stopBtn').addEventListener('click', () => sendCommand({transport: {command: "stop"}}));
       document.getElementById('recordBtn').addEventListener('click', () => sendCommand({transport: {command: "record"}}));
       document.getElementById('restartBtn').addEventListener('click', () => sendCommand({transport: {command: "restart"}}));
       document.getElementById('metronomeBtn').addEventListener('click', toggleMetronome);
-      
+
       // Loop commands
       document.getElementById('loopBtn').addEventListener('click', () => sendCommand({transport: {command: "loop"}}));
       document.getElementById('loopLayeringBtn').addEventListener('click', () => sendCommand({transport: {command: "loopLayering"}}));
       document.getElementById('fillBtn').addEventListener('click', () => sendCommand({transport: {command: "fill"}}));
-      
+
       // Edit commands
       document.getElementById('undoBtn').addEventListener('click', () => sendCommand({transport: {command: "undo"}}));
       document.getElementById('redoBtn').addEventListener('click', () => sendCommand({transport: {command: "redo"}}));
-      
+
       // Parameters
       document.getElementById('getParametersBtn').addEventListener('click', () => sendCommand({getParameters: {}}));
       document.getElementById('clearParamsBtn').addEventListener('click', clearParametersDisplay);
@@ -436,12 +522,12 @@
         // Find Deluge on port 3 (dedicated SysEx port)
         const inputs = Array.from(midi.inputs.values());
         const outputs = Array.from(midi.outputs.values());
-        
+
         // Prefer port 3 for SysEx, fallback to any Deluge port
         midiInput = inputs.find(port => port.name.toLowerCase().includes('deluge') && port.name.includes('3'))
                  || inputs.find(port => port.name.toLowerCase().includes('deluge'))
                  || null;
-        
+
         midiOutput = outputs.find(port => port.name.toLowerCase().includes('deluge') && port.name.includes('3'))
                   || outputs.find(port => port.name.toLowerCase().includes('deluge'))
                   || null;
@@ -452,16 +538,16 @@
           log('Available outputs: ' + outputs.map(p => p.name).join(', '), 'info');
           throw new Error('Deluge not found');
         }
-        
+
         log(`✓ Connected to input: ${midiInput.name}`, 'success');
         log(`✓ Connected to output: ${midiOutput.name}`, 'success');
-        
+
         if (midiInput.name.includes('3')) {
           log('✓ Using dedicated SysEx port (Port 3)', 'success');
         } else {
           log('⚠ Not on port 3 - file transfers may be slower', 'warning');
         }
-        
+
         midiInput.onmidimessage = handleMidiMessage;
         connected = true;
         updateConnectionStatus(true);
@@ -567,29 +653,29 @@
       if (event.data[0] !== 0xF0) return;
       try {
         const data = new Uint8Array(event.data);
-        
+
         // Debug: Log first few bytes of any SysEx message
         const debugBytes = Array.from(data.slice(0, 10)).map(b => b.toString(16).padStart(2, '0')).join(' ');
         console.log(`[MIDI IN] First 10 bytes: ${debugBytes}...`);
-        
+
         // Verify Deluge manufacturer ID
         if (data[1] !== 0x00 || data[2] !== 0x21 || data[3] !== 0x7B || data[4] !== 0x01) {
           console.log('[MIDI IN] Not a Deluge message, ignoring');
           return;
         }
-        
+
         // Check command byte
         if (data[5] !== 0x05) {
           console.log('Unexpected command byte:', data[5].toString(16));
         }
-        
+
         const payload = event.data.slice(7, -1);
         const jsonStr = new TextDecoder().decode(payload);
-        
+
         console.log(`[MIDI IN] Payload length: ${payload.length} bytes`);
         console.log(`[MIDI IN] JSON starts with: "${jsonStr.substring(0, 100)}"`);
         console.log(`[MIDI IN] JSON ends with: "...${jsonStr.substring(jsonStr.length - 50)}"`);
-        
+
         // DEBUG: Show corruption details
         if (!jsonStr.startsWith('{')) {
           const rawHex = Array.from(payload.slice(0, 30)).map(b => b.toString(16).padStart(2,'0')).join(' ');
@@ -598,12 +684,12 @@
           console.error('[MIDI IN] Message does not start with {');
           return;
         }
-        
+
         try {
-          const response = JSON.parse(jsonStr);
+        const response = JSON.parse(jsonStr);
           log(`◀ Received: ${jsonStr.substring(0, 200)}${jsonStr.length > 200 ? '...' : ''}`, 'received');
           console.log('[MIDI IN] Parsed successfully:', Object.keys(response));
-          handleResponse(response);
+        handleResponse(response);
         } catch (parseError) {
           console.error('[MIDI IN] JSON parse failed:', parseError.message);
           console.error('[MIDI IN] JSON snippet:', jsonStr.substring(0, 500));
@@ -616,16 +702,16 @@
 
     function handleResponse(response) {
       if (response['^ping']) updateTestResult('Ping', true);
-      
+
       if (response['^dir']) {
         updateTestResult('Directory List', true);
         displayFileList(response['^dir'].list);
       }
-      
+
       if (response['^open']) {
         log(`✓ File opened: FID ${response['^open'].fid}, Size: ${response['^open'].size} bytes`, 'success');
       }
-      
+
       if (response['^transportState']) {
         updateTestResult('Get Transport State', true);
         document.getElementById('transportBadge').textContent = 'WORKING';
@@ -636,17 +722,17 @@
         updateMetronomeButton();
         log(`Transport: ${s.playing?'Playing':'Stopped'} @ ${s.bpm} BPM`, 'info');
       }
-      
+
       if (response['^tempoSet']) {
         updateTestResult('Set Tempo', true);
         updateTempoDisplay(response['^tempoSet'].bpm);
       }
-      
+
       if (response['^tempoChanged']) {
         log(`🔄 Tempo changed: ${response['^tempoChanged'].bpm} BPM`, 'info');
         updateTempoDisplay(response['^tempoChanged'].bpm);
       }
-      
+
       if (response['^transportChanged']) {
         const s = response['^transportChanged'];
         updateTempoDisplay(s.bpm);
@@ -655,22 +741,22 @@
           updateMetronomeButton();
         }
       }
-      
+
       if (response['^metronomeSet']) {
         metronomeOn = response['^metronomeSet'].enabled;
         updateMetronomeButton();
         log(`✓ Metronome: ${metronomeOn ? 'ON' : 'OFF'}`, 'success');
       }
-      
+
       if (response['^transportSubscribed']) {
         log('✓ Subscribed to transport changes', 'success');
       }
-      
+
       // Handle all settings responses (grouped and full)
-      const settingsKeys = ['^settings', '^settingsCV', '^settingsGate', '^settingsClock', 
-                            '^settingsMidi', '^settingsDefaults', '^settingsPads', 
+      const settingsKeys = ['^settings', '^settingsCV', '^settingsGate', '^settingsClock',
+                            '^settingsMidi', '^settingsDefaults', '^settingsPads',
                             '^settingsRecording', '^settingsCommunity', '^settingsUI'];
-      
+
       for (const key of settingsKeys) {
         if (response[key]) {
           updateTestResult('Get Settings', true);
@@ -681,16 +767,16 @@
           break;
         }
       }
-      
+
       if (response['^settingSet']) {
         log(`✓ ${response['^settingSet'].name} = ${response['^settingSet'].value}`, 'success');
       }
-      
+
       if (response['^setting']) {
         document.getElementById('settingValue').value = response['^setting'].value;
         log(`✓ ${response['^setting'].name} = ${response['^setting'].value}`, 'info');
       }
-      
+
       if (response['^firmware']) {
         const fw = response['^firmware'];
         const versionStr = `${fw.type} ${fw.major}.${fw.minor}.${fw.patch}`;
@@ -698,46 +784,51 @@
         document.getElementById('fwVersionDisplay').style.display = 'flex';
         log(`✓ Firmware: ${versionStr}`, 'success');
       }
-      
+
       if (response['^parameters']) {
         const paramCount = Object.keys(response['^parameters']).length;
         log(`✓ Received ${paramCount} parameters`, 'success');
         displayParameters(response['^parameters']);
         storeLatestJson(response);
-        
+
         // Update feature badge
         if (!response['^parameters'].error) {
           document.getElementById('parameterBadge').textContent = 'WORKING';
           document.getElementById('parameterBadge').className = 'feature-badge badge-working';
         }
       }
-      
+
       // Check for error field inside parameters response
       if (response['^parameters'] && response['^parameters'].error) {
         log(`⚠️ ${response['^parameters'].error}`, 'error');
       }
-      
+
       if (response['^parameterSet']) {
         const r = response['^parameterSet'];
         if (r.success) {
           log(`✓ ${r.name} = ${r.value}`, 'success');
+          // Automatically refresh the parameter display to show the new value
+          sendCommand({getParameters: {}});
         } else if (r.error) {
           log(`✗ Set failed: ${r.error}`, 'error');
         }
       }
-      
+
       if (response['^parametersSubscribed']) {
         log('✓ Subscribed to parameter changes', 'success');
       }
-      
+
       if (response['^parametersUnsubscribed']) {
         log('✓ Unsubscribed from parameter changes', 'success');
       }
-      
+
       if (response['^parameterChanged']) {
-        log(`🔄 Parameter changed: kind=${response['^parameterChanged'].kind} id=${response['^parameterChanged'].id} value=${response['^parameterChanged'].value}`, 'info');
+        const pc = response['^parameterChanged'];
+        log(`🔄 Parameter changed: kind=${pc.kind} id=${pc.id} value=${pc.value}`, 'info');
+        // Refresh display when subscribed parameter changes
+        sendCommand({getParameters: {}});
       }
-      
+
       if (response['^error']) {
         log(`✗ Error: ${response['^error'].message}`, 'error');
       }
@@ -810,12 +901,12 @@
     function setParameterValue() {
       const name = document.getElementById('paramNameSelect').value;
       const valueStr = document.getElementById('paramValueInput').value;
-      
+
       if (!name) {
         log('✗ Please select a parameter name', 'error');
         return;
       }
-      
+
       // Parse value - support both decimal and hex (0x...)
       let value;
       if (valueStr.toLowerCase().startsWith('0x')) {
@@ -823,12 +914,12 @@
       } else {
         value = parseInt(valueStr);
       }
-      
+
       if (isNaN(value)) {
         log('✗ Invalid value - use integer or hex (0x...)', 'error');
         return;
       }
-      
+
       sendCommand({setParameter: {name, value}});
     }
 
@@ -836,7 +927,7 @@
       const select = document.getElementById('paramNameSelect');
       const hint = document.getElementById('paramValueHint');
       const selectedOption = select.options[select.selectedIndex];
-      
+
       if (selectedOption && selectedOption.value) {
         // Extract range from option text (everything in parentheses)
         const text = selectedOption.text;
@@ -861,7 +952,7 @@
     function toggleJsonViewer() {
       const viewer = document.getElementById('jsonViewer');
       const jsonContent = document.getElementById('jsonContent');
-      
+
       if (viewer.style.display === 'none') {
         if (latestJsonResponse) {
           jsonContent.textContent = JSON.stringify(latestJsonResponse, null, 2);
@@ -974,15 +1065,15 @@
     function displaySettings(settings, category = '^settings') {
       const display = document.getElementById('settingsDisplay');
       const categoryName = category.replace('^settings', '').replace('^', '') || 'All';
-      
+
       let html = '<div style="font-family: monospace; font-size: 11px;">';
       html += `<div style="color: #667eea; margin-bottom: 8px; border-bottom: 2px solid #667eea; padding-bottom: 4px; font-weight: bold;">`;
       html += `✓ ${categoryName} Settings (${Object.keys(settings).length} total)</div>`;
-      
+
       Object.entries(settings).sort().forEach(([key, value]) => {
         const label = settingLabels[key] || key;
         const color = typeof value === 'boolean' || (typeof value === 'number' && (value === 0 || value === 1))
-          ? (value ? '#4caf50' : '#f44336') 
+          ? (value ? '#4caf50' : '#f44336')
           : '#667eea';
         html += `<div style="padding: 3px; border-bottom: 1px solid #333;">`;
         html += `<span style="color: #aaa;">${label} (${key}):</span> `;
@@ -994,9 +1085,9 @@
 
     function displayParameters(params) {
       const display = document.getElementById('parametersDisplay');
-      
+
       let html = '<div style="font-family: monospace; font-size: 11px;">';
-      
+
       // Check for error
       if (params.error) {
         html += `<div style="color: #f44336; padding: 10px; border: 1px solid #f44336; border-radius: 4px;">`;
@@ -1004,11 +1095,11 @@
         display.innerHTML = html;
         return;
       }
-      
+
       // Params are FLAT structure, not nested
       // Group them by prefix for display
       let totalParams = 0;
-      
+
       const grouped = {
         general: {},
         unison: {},
@@ -1021,16 +1112,16 @@
         modFX: {},
         other: {}
       };
-      
+
       // Extract preset name separately
       const presetName = params.presetName || '(Unnamed Patch)';
-      
+
       // Group parameters by prefix/type
       Object.entries(params).forEach(([key, value]) => {
         if (key === 'presetName') return; // Skip, we handle this separately
-        
+
         totalParams++;
-        
+
         if (['polyphonic', 'voicePriority', 'mode', 'transpose', 'maxVoices'].includes(key)) {
           grouped.general[key] = value;
         } else if (key.startsWith('unison')) {
@@ -1059,10 +1150,10 @@
           grouped.patched[key] = value;
         }
       });
-      
+
       // Original nested structure code follows but works with grouped data
       let displayTotalParams = 0;
-      
+
       // General section
       if (Object.keys(grouped.general).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
@@ -1076,7 +1167,7 @@
         });
         html += `</div>`;
       }
-      
+
       // Unison section
       if (Object.keys(grouped.unison).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
@@ -1088,7 +1179,7 @@
         });
         html += `</div>`;
       }
-      
+
       // Oscillators
       ['osc1', 'osc2'].forEach(oscName => {
         if (Object.keys(grouped[oscName]).length > 0) {
@@ -1110,7 +1201,7 @@
           html += `</div>`;
         }
       });
-      
+
       // Osc2 Sync
       if (grouped.other.osc2Sync !== undefined) {
         html += `<div style="margin-bottom: 15px;">`;
@@ -1118,28 +1209,28 @@
         html += `</div>`;
         displayTotalParams++;
       }
-      
+
       // Patched Parameters
       if (Object.keys(grouped.patched).length > 0) {
         const patchedCount = Object.keys(grouped.patched).length;
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🎛️ PATCHED PARAMETERS (${patchedCount})</div>`;
         html += `<div style="padding-left: 10px; max-height: 200px; overflow-y: auto; background: #1a1a1a; border-radius: 4px; padding: 8px;">`;
-        
+
         // Group patched params by category
         const categories = {
-          'Volume': ['oscAVolume', 'oscBVolume', 'volume', 'noiseVolume', 'modulator0Volume', 'modulator1Volume', 'volumePostFX', 'volumePostReverbSend'],
+          'Volume': ['oscAVolume', 'oscBVolume', 'volume', 'noiseVolume', 'modulator1Volume', 'modulator2Volume', 'volumePostFX', 'volumePostReverbSend'],
           'Filter': ['lpfFrequency', 'lpfResonance', 'lpfMorph', 'hpfFrequency', 'hpfResonance', 'hpfMorph'],
-          'Pitch': ['pitchAdjust', 'oscAPitchAdjust', 'oscBPitchAdjust', 'modulator0PitchAdjust', 'modulator1PitchAdjust'],
-          'Envelopes': ['env0Attack', 'env0Decay', 'env0Sustain', 'env0Release', 'env1Attack', 'env1Decay', 'env1Sustain', 'env1Release', 
-                        'env2Attack', 'env2Decay', 'env2Sustain', 'env2Release', 'env3Attack', 'env3Decay', 'env3Sustain', 'env3Release'],
-          'Feedback': ['modulator0Feedback', 'modulator1Feedback', 'carrier0Feedback', 'carrier1Feedback', 'delayFeedback'],
-          'Wave': ['oscAPhaseWidth', 'oscBPhaseWidth', 'oscAWaveIndex', 'oscBWaveIndex'],
-          'LFO': ['lfoFrequency1', 'lfoFrequency2', 'lfo1LocalFrequency', 'lfo2LocalFrequency'],
+          'Pitch': ['pitch', 'oscAPitch', 'oscBPitch', 'modulator1Pitch', 'modulator2Pitch'],
+          'Envelopes': ['env1Attack', 'env1Decay', 'env1Sustain', 'env1Release', 'env2Attack', 'env2Decay', 'env2Sustain', 'env2Release',
+                        'env3Attack', 'env3Decay', 'env3Sustain', 'env3Release', 'env4Attack', 'env4Decay', 'env4Sustain', 'env4Release'],
+          'Feedback': ['modulator1Feedback', 'modulator2Feedback', 'carrier1Feedback', 'carrier2Feedback', 'delayFeedback'],
+          'Wave': ['oscAPhaseWidth', 'oscBPhaseWidth', 'oscAWavetablePosition', 'oscBWavetablePosition', 'waveFold'],
+          'LFO': ['lfo1Rate', 'lfo2Rate', 'lfo3Rate', 'lfo4Rate'],
           'FX': ['modFXDepth', 'modFXRate', 'delayRate', 'reverbAmount', 'arpRate'],
-          'Other': ['pan', 'fold']
+          'Other': ['pan']
         };
-        
+
         Object.entries(categories).forEach(([catName, catParams]) => {
           const matchingParams = Object.entries(grouped.patched).filter(([k, v]) => catParams.includes(k));
           if (matchingParams.length > 0) {
@@ -1152,10 +1243,10 @@
             });
           }
         });
-        
+
         html += `</div></div>`;
       }
-      
+
       // Unpatched Parameters
       if (Object.keys(grouped.unpatched).length > 0) {
         const unpatchedCount = Object.keys(grouped.unpatched).length;
@@ -1170,7 +1261,7 @@
         });
         html += `</div></div>`;
       }
-      
+
       // Filters
       if (Object.keys(grouped.filters).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
@@ -1181,7 +1272,7 @@
         });
         html += `</div>`;
       }
-      
+
       // LFOs
       if (Object.keys(grouped.lfos).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
@@ -1193,7 +1284,7 @@
         });
         html += `</div></div>`;
       }
-      
+
       // ModFX
       if (Object.keys(grouped.modFX).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
@@ -1204,7 +1295,7 @@
         });
         html += `</div>`;
       }
-      
+
       // Other (delay, sidechain, osc2Sync, clipping)
       if (Object.keys(grouped.other).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
@@ -1221,13 +1312,13 @@
         });
         html += `</div>`;
       }
-      
+
       // Summary at top with preset name
       html = `<div style="background: #1a3a1a; padding: 12px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #4caf50;">` +
              `<div style="color: #4caf50; font-weight: bold; font-size: 16px; margin-bottom: 8px;">🎵 ${presetName}</div>` +
              `<div style="color: #4caf50; font-size: 13px;">✓ Total Parameters: ${totalParams}</div>` +
              `</div>` + html;
-      
+
       html += '</div>';
       display.innerHTML = html;
     }
@@ -1296,7 +1387,7 @@
 
       log(`📍 Connected to: ${midiInput.name}`, 'info');
       log(`📍 Output: ${midiOutput.name}`, 'info');
-      
+
       if (!midiInput.name.includes('3')) {
         log('⚠ WARNING: Not using Port 3! Switch to Port 3 for SysEx operations.', 'warning');
       }
@@ -1304,26 +1395,26 @@
       try {
         const testFile = '/test.txt';
         const testData = 'Hello Deluge!';
-        
+
         log('🧪 Testing write operation...', 'info');
-        
+
         // Try to open for write
         log(`→ Opening ${testFile} for write...`, 'info');
         const openCmd = {open: {path: testFile, write: 1}};
         const openResp = await sendCommandWithResponse(openCmd, 10000);
         log(`← Open response: ${JSON.stringify(openResp)}`, 'info');
-        
+
         if (openResp['^error']) {
           throw new Error('Open failed: ' + openResp['^error'].message);
         }
-        
+
         if (!openResp['^open'] || openResp['^open'].fid === 0) {
           throw new Error('Failed to get file ID');
         }
-        
+
         const fid = openResp['^open'].fid;
         log(`✓ File opened with FID ${fid}`, 'success');
-        
+
         // Write test data
         const encoded = encode7to8(new TextEncoder().encode(testData));
         const writeJson = JSON.stringify({write: {fid: fid, addr: 0, size: testData.length}});
@@ -1331,9 +1422,9 @@
         const header = [0xF0, 0x00, 0x21, 0x7B, 0x01, 0x04, seq]; // 0x04 = SYSEX_CMD_JSON
         const jsonBytes = Array.from(writeJson).map(c => c.charCodeAt(0));
         const msg = [...header, ...jsonBytes, 0x00, ...encoded, 0xF7];
-        
+
         log(`→ Writing ${testData.length} bytes...`, 'info');
-        
+
         await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error('Write timeout')), 10000);
           const handler = (e) => {
@@ -1347,15 +1438,15 @@
           midiInput.addEventListener('midimessage', handler);
           midiOutput.send(msg);
         });
-        
+
         log(`✓ Write successful`, 'success');
-        
+
         // Close
         const closeCmd = {close: {fid: fid}};
         await sendCommandWithResponse(closeCmd, 5000);
-        
+
         log('✅ Write test PASSED! Firmware upload should work.', 'success');
-        
+
       } catch (error) {
         log(`✗ Write test FAILED: ${error.message}`, 'error');
         log('This means file uploads won\'t work. Check:', 'error');
@@ -1367,7 +1458,7 @@
 
     // Firmware Upload Functions
     let seqNum = 1;
-    
+
     function getNextSeqNum() {
       seqNum = (seqNum % 127) + 1;
       return seqNum;
@@ -1379,7 +1470,7 @@
         const chunk = data.slice(i, Math.min(i + 7, data.length));
         let hiBits = 0;
         const encoded = [0]; // placeholder for hiBits
-        
+
         for (let j = 0; j < chunk.length; j++) {
           const byte = chunk[j];
           encoded.push(byte & 0x7F);
@@ -1401,7 +1492,7 @@
 
       const fileInput = document.getElementById('firmwareFile');
       const file = fileInput.files[0];
-      
+
       if (!file) {
         log('✗ Please select a firmware file', 'error');
         return;
@@ -1415,13 +1506,13 @@
       const progressBar = document.getElementById('progressBar');
       const progressFill = document.getElementById('progressFill');
       const uploadStatus = document.getElementById('uploadStatus');
-      
+
       try {
         // Read file
         const arrayBuffer = await file.arrayBuffer();
         const fileData = new Uint8Array(arrayBuffer);
         const fileName = '/deluge.bin';
-        
+
         log(`📤 Uploading ${file.name} (${fileData.length} bytes)...`, 'info');
         progressBar.style.display = 'block';
         uploadStatus.textContent = 'Deleting old firmware...';
@@ -1445,44 +1536,44 @@
         const openCmd = {open: {path: fileName, write: 1}};
         log(`Attempting to open ${fileName} for writing...`, 'info');
         const openResponse = await sendCommandWithResponse(openCmd, 15000); // 15 second timeout
-        
+
         log(`Open response: ${JSON.stringify(openResponse)}`, 'info');
-        
+
         if (openResponse['^error']) {
           throw new Error(openResponse['^error'].message || 'Failed to open file');
         }
-        
+
         if (!openResponse['^open']) {
           throw new Error('No ^open response received: ' + JSON.stringify(openResponse));
         }
-        
+
         const fid = openResponse['^open'].fid;
         const err = openResponse['^open'].err;
-        
+
         if (err && err !== 0) {
           throw new Error(`File open error code: ${err}`);
         }
-        
+
         log(`✓ File opened (FID: ${fid})`, 'success');
 
         // Step 3: Write file in chunks
         const chunkSize = parseInt(document.getElementById('chunkSizeSelect').value) || 1024;
         const totalChunks = Math.ceil(fileData.length / chunkSize);
-        
+
         log(`Using chunk size: ${chunkSize} bytes (${totalChunks} chunks total)`, 'info');
-        
+
         for (let i = 0; i < totalChunks; i++) {
           const start = i * chunkSize;
           const end = Math.min(start + chunkSize, fileData.length);
           const chunk = fileData.slice(start, end);
-          
+
           // Encode chunk
           const encoded = encode7to8(chunk);
-          
+
           // Send write command with binary payload
           const writeCmd = {write: {fid: fid, addr: start, size: chunk.length}};
           const writeResp = await sendCommandWithResponse(writeCmd, 10000, encoded);
-          
+
           // Check for write errors
           if (writeResp['^write'] && writeResp['^write'].err !== 0) {
             const errCode = writeResp['^write'].err;
@@ -1492,7 +1583,7 @@
             else if (errCode === 5) errMsg = 'SD card full';
             throw new Error(errMsg);
           }
-          
+
           // Update progress
           const progress = ((i + 1) / totalChunks * 100).toFixed(1);
           progressFill.style.width = `${progress}%`;
@@ -1506,17 +1597,17 @@
         await delay(100);
         const closeCmd = {close: {fid: fid}};
         await sendCommandWithResponse(closeCmd);
-        
+
         log(`✅ Firmware uploaded successfully! Power cycle Deluge with SHIFT+SELECT to flash.`, 'success');
         uploadStatus.textContent = '✅ Upload complete! Ready to flash firmware.';
         uploadStatus.style.color = '#4caf50';
-        
+
         setTimeout(() => {
           progressBar.style.display = 'none';
           uploadStatus.textContent = 'Ready to upload firmware';
           uploadStatus.style.color = '#888';
         }, 5000);
-        
+
       } catch (error) {
         log(`✗ Upload failed: ${error.message}`, 'error');
         uploadStatus.textContent = `✗ Error: ${error.message}`;
@@ -1535,7 +1626,7 @@
         const seq = getNextSeqNum();
         const header = [0xF0, 0x00, 0x21, 0x7B, 0x01, 0x04, seq]; // 0x04 = SYSEX_CMD_JSON
         const jsonBytes = Array.from(json).map(c => c.charCodeAt(0));
-        
+
         let msg;
         if (binaryPayload) {
           // Write command with binary data
@@ -1544,26 +1635,26 @@
         } else {
           msg = [...header, ...jsonBytes, 0xF7];
         }
-        
+
         log(`→ ${json}`, 'info');
-        
+
         const timeout = setTimeout(() => {
           midiInput.removeEventListener('midimessage', handler);
           reject(new Error(`Command timeout (${timeoutMs}ms): ${JSON.stringify(cmd).substring(0, 50)}`));
         }, timeoutMs);
-        
+
         const handler = (e) => {
           const data = Array.from(e.data);
           // Check for SYSEX_CMD_JSON_REPLY (0x05) and matching seq
           if (data[0] === 0xF0 && data[5] === 0x05 && data[6] === seq) {
             clearTimeout(timeout);
             midiInput.removeEventListener('midimessage', handler);
-            
+
             const jsonEnd = data.indexOf(0xF7);
             const jsonBytes = data.slice(7, jsonEnd);
             const jsonStr = String.fromCharCode(...jsonBytes);
             log(`← ${jsonStr}`, 'info');
-            
+
             try {
               const response = JSON.parse(jsonStr);
               resolve(response);
@@ -1572,10 +1663,23 @@
             }
           }
         };
-        
+
         midiInput.addEventListener('midimessage', handler);
         midiOutput.send(msg);
       });
+    }
+
+    function toggleAccordion(header) {
+      const content = header.nextElementSibling;
+      const icon = header.querySelector('.accordion-icon');
+
+      if (content.classList.contains('open')) {
+        content.classList.remove('open');
+        icon.classList.remove('open');
+      } else {
+        content.classList.add('open');
+        icon.classList.add('open');
+      }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

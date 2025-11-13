@@ -16,6 +16,7 @@
  */
 
 #include "io/midi/sysex/parameter_sysex.h"
+#include "gui/ui/ui.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
 #include "model/model_stack.h"
@@ -568,6 +569,9 @@ void setParameter(MIDICable& cable, JsonDeserializer& reader) {
 		jWriter.writeAttribute("name", name);
 		jWriter.writeAttribute("value", intValue);
 		jWriter.writeAttribute("success", 1);
+
+		// Trigger UI refresh to show the new value
+		uiNeedsRendering(getCurrentUI());
 
 		// Notify subscribers if enabled
 		if (parametersSubscribed) {
