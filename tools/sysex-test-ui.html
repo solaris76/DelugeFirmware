@@ -78,6 +78,7 @@
           <div class="feature-item"><span>File Operations</span><span class="feature-badge badge-working">WORKING</span></div>
           <div class="feature-item"><span>Transport Control</span><span class="feature-badge badge-not-implemented" id="transportBadge">NOT TESTED</span></div>
           <div class="feature-item"><span>Settings Control</span><span class="feature-badge badge-not-implemented" id="settingsBadge">NOT TESTED</span></div>
+          <div class="feature-item"><span>Parameter Control</span><span class="feature-badge badge-not-implemented" id="parameterBadge">NOT TESTED</span></div>
         </div>
       </div>
 
@@ -255,12 +256,32 @@
 
       <div class="panel">
         <h2>🎛️ Parameter Control</h2>
-        <p style="color: #888; font-size: 12px; margin-bottom: 10px;">Read all synth sound parameters (requires synth clip selected on Deluge)</p>
+        <p style="color: #888; font-size: 12px; margin-bottom: 10px;">Read/write synth sound parameters (requires synth clip selected on Deluge)</p>
         <div class="button-group">
           <button class="btn" id="getParametersBtn" disabled>Get All Parameters</button>
           <button class="btn btn-small" id="clearParamsBtn">Clear Display</button>
         </div>
-        <div id="parametersDisplay" class="log-container" style="max-height: 400px; margin-top: 10px; font-size: 11px; overflow-y: auto;">
+        <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 8px; font-size: 12px;">✏️ Set Parameter</div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Parameter Name:</label>
+            <input type="text" id="paramNameInput" placeholder="e.g., lpfFrequency, transpose, unisonNum" style="width: 100%; font-size: 11px;" disabled>
+          </div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Value (int32 or hex):</label>
+            <input type="text" id="paramValueInput" placeholder="e.g., 100 or 0x7FFFFFFF" style="width: 100%; font-size: 11px;" disabled>
+          </div>
+          <div class="button-group">
+            <button class="btn btn-small" id="setParameterBtn" disabled>Set Parameter</button>
+            <button class="btn btn-small" id="subscribeParamsBtn" disabled>Subscribe</button>
+          </div>
+          <div style="color: #888; font-size: 10px; margin-top: 8px; line-height: 1.4;">
+            Examples: <span style="color: #667eea; cursor: pointer;" onclick="document.getElementById('paramNameInput').value='transpose'; document.getElementById('paramValueInput').value='12';">transpose=12</span>, 
+            <span style="color: #667eea; cursor: pointer;" onclick="document.getElementById('paramNameInput').value='unisonNum'; document.getElementById('paramValueInput').value='4';">unisonNum=4</span>, 
+            <span style="color: #667eea; cursor: pointer;" onclick="document.getElementById('paramNameInput').value='delayPingPong'; document.getElementById('paramValueInput').value='1';">delayPingPong=1</span>
+          </div>
+        </div>
+        <div id="parametersDisplay" class="log-container" style="max-height: 350px; margin-top: 10px; font-size: 11px; overflow-y: auto;">
           <div style="color: #888;">Parameters will appear here</div>
         </div>
       </div>
@@ -340,6 +361,8 @@
       // Parameters
       document.getElementById('getParametersBtn').addEventListener('click', () => sendCommand({getParameters: {}}));
       document.getElementById('clearParamsBtn').addEventListener('click', clearParametersDisplay);
+      document.getElementById('setParameterBtn').addEventListener('click', setParameterValue);
+      document.getElementById('subscribeParamsBtn').addEventListener('click', () => sendCommand({subscribeParameters: {}}));
       document.getElementById('setTempoBtn').addEventListener('click', setTempo);
       document.getElementById('getTransportBtn').addEventListener('click', () => sendCommand({getTransportState: {}}));
       document.getElementById('subscribeTransportBtn').addEventListener('click', () => sendCommand({subscribeTransport: {}}));
@@ -451,6 +474,10 @@
       document.getElementById('getTransportBtn').disabled = false;
       document.getElementById('subscribeTransportBtn').disabled = false;
       document.getElementById('getParametersBtn').disabled = false;
+      document.getElementById('paramNameInput').disabled = false;
+      document.getElementById('paramValueInput').disabled = false;
+      document.getElementById('setParameterBtn').disabled = false;
+      document.getElementById('subscribeParamsBtn').disabled = false;
     }
 
     function disableControls() {
@@ -614,14 +641,42 @@
       }
       
       if (response['^parameters']) {
-        log(`✓ Received ${Object.keys(response['^parameters']).length} parameter groups`, 'success');
+        const paramCount = Object.keys(response['^parameters']).length;
+        log(`✓ Received ${paramCount} parameters`, 'success');
         displayParameters(response['^parameters']);
         storeLatestJson(response);
+        
+        // Update feature badge
+        if (!response['^parameters'].error) {
+          document.getElementById('parameterBadge').textContent = 'WORKING';
+          document.getElementById('parameterBadge').className = 'feature-badge badge-working';
+        }
       }
       
       // Check for error field inside parameters response
       if (response['^parameters'] && response['^parameters'].error) {
         log(`⚠️ ${response['^parameters'].error}`, 'error');
+      }
+      
+      if (response['^parameterSet']) {
+        const r = response['^parameterSet'];
+        if (r.success) {
+          log(`✓ ${r.name} = ${r.value}`, 'success');
+        } else if (r.error) {
+          log(`✗ Set failed: ${r.error}`, 'error');
+        }
+      }
+      
+      if (response['^parametersSubscribed']) {
+        log('✓ Subscribed to parameter changes', 'success');
+      }
+      
+      if (response['^parametersUnsubscribed']) {
+        log('✓ Unsubscribed from parameter changes', 'success');
+      }
+      
+      if (response['^parameterChanged']) {
+        log(`🔄 Parameter changed: kind=${response['^parameterChanged'].kind} id=${response['^parameterChanged'].id} value=${response['^parameterChanged'].value}`, 'info');
       }
       
       if (response['^error']) {
@@ -691,6 +746,31 @@
     function getSingleSetting() {
       const name = document.getElementById('settingName').value;
       sendCommand({getSetting: {name}});
+    }
+
+    function setParameterValue() {
+      const name = document.getElementById('paramNameInput').value;
+      const valueStr = document.getElementById('paramValueInput').value;
+      
+      if (!name) {
+        log('✗ Please enter a parameter name', 'error');
+        return;
+      }
+      
+      // Parse value - support both decimal and hex (0x...)
+      let value;
+      if (valueStr.toLowerCase().startsWith('0x')) {
+        value = parseInt(valueStr, 16);
+      } else {
+        value = parseInt(valueStr);
+      }
+      
+      if (isNaN(value)) {
+        log('✗ Invalid value - use integer or hex (0x...)', 'error');
+        return;
+      }
+      
+      sendCommand({setParameter: {name, value}});
     }
 
     let latestJsonResponse = null;
@@ -846,56 +926,123 @@
         return;
       }
       
+      // Params are FLAT structure, not nested
+      // Group them by prefix for display
       let totalParams = 0;
       
+      const grouped = {
+        general: {},
+        unison: {},
+        osc1: {},
+        osc2: {},
+        patched: {},
+        unpatched: {},
+        filters: {},
+        lfos: {},
+        modFX: {},
+        other: {}
+      };
+      
+      // Extract preset name separately
+      const presetName = params.presetName || '(Unnamed Patch)';
+      
+      // Group parameters by prefix/type
+      Object.entries(params).forEach(([key, value]) => {
+        if (key === 'presetName') return; // Skip, we handle this separately
+        
+        totalParams++;
+        
+        if (['polyphonic', 'voicePriority', 'mode', 'transpose', 'maxVoices'].includes(key)) {
+          grouped.general[key] = value;
+        } else if (key.startsWith('unison')) {
+          grouped.unison[key] = value;
+        } else if (key.startsWith('osc1') || key === 'osc1File') {
+          grouped.osc1[key] = value;
+        } else if ((key.startsWith('osc2') || key === 'osc2File') && key !== 'osc2Sync') {
+          grouped.osc2[key] = value;
+        } else if (key === 'osc2Sync') {
+          grouped.other[key] = value;
+        } else if (key.startsWith('lfo')) {
+          grouped.lfos[key] = value;
+        } else if (key.includes('Mode') || key.includes('lpf') || key.includes('hpf') || key === 'filterRoute') {
+          grouped.filters[key] = value;
+        } else if (key.startsWith('modFX')) {
+          grouped.modFX[key] = value;
+        } else if (key.startsWith('sidechain') || key === 'clippingAmount' || key.startsWith('delay')) {
+          grouped.other[key] = value;
+        } else if (['portamento', 'stutterRate', 'bass', 'treble', 'bitcrushing', 'sampleRateReduction',
+                    'bassFrequency', 'trebleFrequency', 'modFXOffset', 'modFXFeedback',
+                    'sidechainShape', 'compressorThreshold'].includes(key) || key.startsWith('arp') ||
+                   key.includes('Probability') || key.includes('Spread')) {
+          grouped.unpatched[key] = value;
+        } else {
+          // Patched params - everything else
+          grouped.patched[key] = value;
+        }
+      });
+      
+      // Original nested structure code follows but works with grouped data
+      let displayTotalParams = 0;
+      
       // General section
-      if (params.general) {
+      if (Object.keys(grouped.general).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🎹 GENERAL</div>`;
-        Object.entries(params.general).forEach(([key, value]) => {
-          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50;">${value}</span></div>`;
-          totalParams++;
+        Object.entries(grouped.general).forEach(([key, value]) => {
+          const isNumber = typeof value === 'number';
+          const clickable = isNumber ? `cursor: pointer; text-decoration: underline dotted;` : '';
+          const onClick = isNumber ? `onclick="document.getElementById('paramNameInput').value='${key}'; document.getElementById('paramValueInput').value='${value}'; document.getElementById('paramNameInput').scrollIntoView({behavior: 'smooth', block: 'center'});"` : '';
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50; ${clickable}" ${onClick} title="${isNumber ? 'Click to edit' : ''}">${value}</span></div>`;
+          displayTotalParams++;
         });
         html += `</div>`;
       }
       
       // Unison section
-      if (params.unison) {
+      if (Object.keys(grouped.unison).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🔊 UNISON</div>`;
-        Object.entries(params.unison).forEach(([key, value]) => {
-          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50;">${value}</span></div>`;
-          totalParams++;
+        Object.entries(grouped.unison).forEach(([key, value]) => {
+          const onClick = `onclick="document.getElementById('paramNameInput').value='${key}'; document.getElementById('paramValueInput').value='${value}'; document.getElementById('paramNameInput').scrollIntoView({behavior: 'smooth', block: 'center'});"`;
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50; cursor: pointer; text-decoration: underline dotted;" ${onClick} title="Click to edit">${value}</span></div>`;
+          displayTotalParams++;
         });
         html += `</div>`;
       }
       
       // Oscillators
       ['osc1', 'osc2'].forEach(oscName => {
-        if (params[oscName]) {
+        if (Object.keys(grouped[oscName]).length > 0) {
           const oscNum = oscName.slice(-1);
           html += `<div style="margin-bottom: 15px;">`;
           html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🌊 OSC ${oscNum}</div>`;
-          Object.entries(params[oscName]).forEach(([key, value]) => {
-            const displayValue = key === 'type' ? `<span style="background: #333; padding: 2px 6px; border-radius: 3px;">${value}</span>` : value;
+          Object.entries(grouped[oscName]).forEach(([key, value]) => {
+            let displayValue = value;
+            if (key.includes('Type')) {
+              displayValue = `<span style="background: #333; padding: 2px 6px; border-radius: 3px;">${value}</span>`;
+            } else if (key.includes('File')) {
+              // Show file path with just the filename highlighted
+              const filename = value.substring(value.lastIndexOf('/') + 1);
+              displayValue = `<span style="color: #888;">${value.substring(0, value.lastIndexOf('/') + 1)}</span><span style="color: #ffa500; font-weight: bold;">${filename}</span>`;
+            }
             html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50;">${displayValue}</span></div>`;
-            totalParams++;
+            displayTotalParams++;
           });
           html += `</div>`;
         }
       });
       
       // Osc2 Sync
-      if (params.osc2Sync !== undefined) {
+      if (grouped.other.osc2Sync !== undefined) {
         html += `<div style="margin-bottom: 15px;">`;
-        html += `<div style="padding: 2px 0;"><span style="color: #aaa;">osc2Sync:</span> <span style="color: ${params.osc2Sync ? '#4caf50' : '#f44336'};">${params.osc2Sync ? 'ON' : 'OFF'}</span></div>`;
+        html += `<div style="padding: 2px 0;"><span style="color: #aaa;">osc2Sync:</span> <span style="color: ${grouped.other.osc2Sync ? '#4caf50' : '#f44336'};">${grouped.other.osc2Sync ? 'ON' : 'OFF'}</span></div>`;
         html += `</div>`;
-        totalParams++;
+        displayTotalParams++;
       }
       
       // Patched Parameters
-      if (params.patched) {
-        const patchedCount = Object.keys(params.patched).length;
+      if (Object.keys(grouped.patched).length > 0) {
+        const patchedCount = Object.keys(grouped.patched).length;
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🎛️ PATCHED PARAMETERS (${patchedCount})</div>`;
         html += `<div style="padding-left: 10px; max-height: 200px; overflow-y: auto; background: #1a1a1a; border-radius: 4px; padding: 8px;">`;
@@ -915,13 +1062,13 @@
         };
         
         Object.entries(categories).forEach(([catName, catParams]) => {
-          const matchingParams = Object.entries(params.patched).filter(([k, v]) => catParams.includes(k));
+          const matchingParams = Object.entries(grouped.patched).filter(([k, v]) => catParams.includes(k));
           if (matchingParams.length > 0) {
             html += `<div style="color: #888; font-size: 10px; margin-top: 8px; margin-bottom: 2px;">${catName}:</div>`;
             matchingParams.forEach(([key, value]) => {
               const hexValue = value < 0 ? `0x${(value >>> 0).toString(16).toUpperCase()}` : `0x${value.toString(16).toUpperCase()}`;
               html += `<div style="padding: 1px 0; font-size: 10px;"><span style="color: #666;">${key}:</span> <span style="color: #667eea; font-family: 'Courier New';">${hexValue}</span></div>`;
-              totalParams++;
+              displayTotalParams++;
             });
           }
         });
@@ -930,69 +1077,74 @@
       }
       
       // Unpatched Parameters
-      if (params.unpatched) {
-        const unpatchedCount = Object.keys(params.unpatched).length;
+      if (Object.keys(grouped.unpatched).length > 0) {
+        const unpatchedCount = Object.keys(grouped.unpatched).length;
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🎚️ UNPATCHED PARAMETERS (${unpatchedCount})</div>`;
         html += `<div style="padding-left: 10px; columns: 2; column-gap: 20px;">`;
-        Object.entries(params.unpatched).forEach(([key, value]) => {
+        Object.entries(grouped.unpatched).forEach(([key, value]) => {
           const hexValue = value < 0 ? `0x${(value >>> 0).toString(16).toUpperCase()}` : `0x${value.toString(16).toUpperCase()}`;
           html += `<div style="padding: 1px 0; font-size: 10px; break-inside: avoid;"><span style="color: #aaa;">${key}:</span> <span style="color: #667eea;">${hexValue}</span></div>`;
-          totalParams++;
+          displayTotalParams++;
         });
         html += `</div></div>`;
       }
       
       // Filters
-      if (params.filters) {
+      if (Object.keys(grouped.filters).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🔧 FILTERS</div>`;
-        Object.entries(params.filters).forEach(([key, value]) => {
+        Object.entries(grouped.filters).forEach(([key, value]) => {
           html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="background: #333; padding: 2px 6px; border-radius: 3px; color: #4caf50;">${value}</span></div>`;
-          totalParams++;
+          displayTotalParams++;
         });
         html += `</div>`;
       }
       
       // LFOs
-      if (params.lfos) {
+      if (Object.keys(grouped.lfos).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🌀 LFOs</div>`;
-        Object.entries(params.lfos).forEach(([lfoName, lfoData]) => {
-          html += `<div style="padding: 4px 0; padding-left: 10px; border-left: 2px solid #333; margin-left: 5px;">`;
-          html += `<div style="color: #888; font-size: 11px; margin-bottom: 2px;">${lfoName.toUpperCase()}:</div>`;
-          Object.entries(lfoData).forEach(([key, value]) => {
-            html += `<div style="padding: 1px 0; padding-left: 10px; font-size: 10px;"><span style="color: #666;">${key}:</span> <span style="color: #4caf50;">${value}</span></div>`;
-            totalParams++;
-          });
-          html += `</div>`;
+        html += `<div style="padding-left: 10px;">`;
+        Object.entries(grouped.lfos).forEach(([key, value]) => {
+          html += `<div style="padding: 1px 0; font-size: 10px;"><span style="color: #666;">${key}:</span> <span style="color: #4caf50;">${value}</span></div>`;
+          displayTotalParams++;
         });
-        html += `</div>`;
+        html += `</div></div>`;
       }
       
       // ModFX
-      if (params.modFX) {
+      if (Object.keys(grouped.modFX).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">✨ MOD FX</div>`;
-        Object.entries(params.modFX).forEach(([key, value]) => {
+        Object.entries(grouped.modFX).forEach(([key, value]) => {
           html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="background: #333; padding: 2px 6px; border-radius: 3px; color: #4caf50;">${value}</span></div>`;
-          totalParams++;
+          displayTotalParams++;
         });
         html += `</div>`;
       }
       
-      // Sidechain
-      if (params.sidechainSend !== undefined) {
+      // Other (delay, sidechain, osc2Sync, clipping)
+      if (Object.keys(grouped.other).length > 0) {
         html += `<div style="margin-bottom: 15px;">`;
-        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">⚡ SIDECHAIN</div>`;
-        html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">sidechainSend:</span> <span style="color: #4caf50;">${params.sidechainSend}</span></div>`;
+        html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">⚡ DELAY & SIDECHAIN</div>`;
+        Object.entries(grouped.other).forEach(([key, value]) => {
+          let displayValue = value;
+          if (key === 'osc2Sync' || key === 'delayPingPong' || key === 'delayAnalog') {
+            displayValue = `<span style="color: ${value ? '#4caf50' : '#f44336'};">${value ? 'ON' : 'OFF'}</span>`;
+          } else if (typeof value === 'number' && key.includes('sidechain') && !key.includes('Send')) {
+            displayValue = `<span style="color: #667eea;">${value}</span>`;
+          }
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> ${displayValue}</div>`;
+          displayTotalParams++;
+        });
         html += `</div>`;
-        totalParams++;
       }
       
-      // Summary at top
-      html = `<div style="background: #1a3a1a; padding: 10px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #4caf50;">` +
-             `<div style="color: #4caf50; font-weight: bold; font-size: 14px;">✓ Total Parameters Retrieved: ${totalParams}</div>` +
+      // Summary at top with preset name
+      html = `<div style="background: #1a3a1a; padding: 12px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #4caf50;">` +
+             `<div style="color: #4caf50; font-weight: bold; font-size: 16px; margin-bottom: 8px;">🎵 ${presetName}</div>` +
+             `<div style="color: #4caf50; font-size: 13px;">✓ Total Parameters: ${totalParams}</div>` +
              `</div>` + html;
       
       html += '</div>';

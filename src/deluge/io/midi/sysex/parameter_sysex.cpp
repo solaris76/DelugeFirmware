@@ -19,14 +19,19 @@
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
 #include "model/model_stack.h"
+#include "model/sample/sample_holder.h"
 #include "model/song/song.h"
 #include "modulation/params/param.h"
 #include "modulation/params/param_collection.h"
+#include "modulation/params/param_manager.h"
 #include "modulation/params/param_set.h"
 #include "modulation/patch/patch_cable_set.h"
 #include "processing/sound/sound.h"
 #include "processing/sound/sound_instrument.h"
+#include "storage/audio/audio_file_holder.h"
+#include "storage/multi_range/multi_range.h"
 #include "storage/smsysex.h"
+#include <algorithm>
 #include <cstring>
 
 extern JsonSerializer jWriter;
@@ -168,31 +173,44 @@ void getParameters(MIDICable& cable, JsonDeserializer& reader) {
 	smSysex::startReply(jWriter, reader);
 	jWriter.writeOpeningTag("^parameters", false, true);
 
-	Sound* sound = getCurrentSound();
-	if (!sound) {
-		jWriter.writeAttribute("error", "No synth sound selected");
+	if (!currentSong) {
+		jWriter.writeAttribute("error", "No song");
 		jWriter.closeTag(true);
 		smSysex::sendMsg(cable, jWriter);
 		return;
 	}
 
-	ModelStackWithTimelineCounter* modelStack = nullptr;
-	getCurrentSound(&modelStack);
-
-	if (!modelStack) {
-		jWriter.writeAttribute("error", "Invalid model stack");
+	Clip* clip = currentSong->getCurrentClip();
+	if (!clip) {
+		jWriter.writeAttribute("error", "No clip selected");
 		jWriter.closeTag(true);
 		smSysex::sendMsg(cable, jWriter);
 		return;
 	}
 
-	// Check if this is an instrument clip
-	InstrumentClip* clip = (InstrumentClip*)modelStack->getTimelineCounter();
-	ParamManager* paramManager = &clip->paramManager;
+	Output* output = clip->output;
+	if (!output || output->type != OutputType::SYNTH) {
+		jWriter.writeAttribute("error", "Not a synth clip");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
 
-	// === GENERAL SOUND ATTRIBUTES ===
-	jWriter.writeOpeningTag("general", false, true);
+	SoundInstrument* soundInstrument = (SoundInstrument*)output;
+	Sound* sound = (Sound*)soundInstrument;
 
+	// Setup proper model stack using Song's method
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+	InstrumentClip* instrumentClip = (InstrumentClip*)clip;
+	ParamManagerForTimeline* paramManager = &instrumentClip->paramManager;
+
+	// === PATCH NAME ===
+	if (!output->name.isEmpty()) {
+		jWriter.writeAttribute("presetName", output->name.get());
+	}
+
+	// === GENERAL SOUND ATTRIBUTES (flat structure for simplicity) ===
 	// Polyphonic mode
 	const char* polyMode = "poly";
 	switch (sound->polyphonic) {
@@ -247,87 +265,126 @@ void getParameters(MIDICable& cable, JsonDeserializer& reader) {
 	jWriter.writeAttribute("transpose", sound->transpose);
 	jWriter.writeAttribute("maxVoices", sound->maxVoiceCount);
 
-	jWriter.closeTag(true);
+	// Unison
+	jWriter.writeAttribute("unisonNum", sound->numUnison);
+	jWriter.writeAttribute("unisonDetune", sound->unisonDetune);
+	jWriter.writeAttribute("unisonSpread", sound->unisonStereoSpread);
 
-	// === UNISON ===
-	jWriter.writeOpeningTag("unison", false, true);
-	jWriter.writeAttribute("num", sound->numUnison);
-	jWriter.writeAttribute("detune", sound->unisonDetune);
-	jWriter.writeAttribute("spread", sound->unisonStereoSpread);
-	jWriter.closeTag(true);
-
-	// === OSCILLATORS ===
+	// Oscillators
 	for (int32_t s = 0; s < kNumSources; s++) {
-		const char* oscName = (s == 0) ? "osc1" : "osc2";
-		jWriter.writeOpeningTag(oscName, false, true);
-
 		Source* source = &sound->sources[s];
+		char prefix[10];
+		sprintf(prefix, "osc%d", s + 1);
 
-		jWriter.writeAttribute("type", getOscTypeString(source->oscType));
-		jWriter.writeAttribute("transpose", sound->modulatorTranspose[s]);
-		jWriter.writeAttribute("cents", sound->modulatorCents[s]);
+		char attrName[32];
+		sprintf(attrName, "%sType", prefix);
+		jWriter.writeAttribute(attrName, getOscTypeString(source->oscType));
 
-		// Retrig phase (4294967295 = off)
+		sprintf(attrName, "%sTranspose", prefix);
+		jWriter.writeAttribute(attrName, sound->modulatorTranspose[s]);
+
+		sprintf(attrName, "%sCents", prefix);
+		jWriter.writeAttribute(attrName, sound->modulatorCents[s]);
+
+		sprintf(attrName, "%sRetrigPhase", prefix);
 		if (sound->oscRetriggerPhase[s] == 4294967295) {
-			jWriter.writeAttribute("retrigPhase", -1);
+			jWriter.writeAttribute(attrName, -1);
 		}
 		else {
-			jWriter.writeAttribute("retrigPhase", (int32_t)sound->oscRetriggerPhase[s]);
+			jWriter.writeAttribute(attrName, (int32_t)sound->oscRetriggerPhase[s]);
 		}
 
-		jWriter.closeTag(true);
+		// Get file path for sample/wavetable oscillators
+		if (source->oscType == OscType::SAMPLE || source->oscType == OscType::WAVETABLE) {
+			if (source->ranges.getNumElements() > 0) {
+				MultiRange* range = source->ranges.getElement(0);
+				if (range) {
+					AudioFileHolder* holder = range->getAudioFileHolder();
+					if (holder && holder->filePath.isEmpty() == false) {
+						sprintf(attrName, "%sFile", prefix);
+						jWriter.writeAttribute(attrName, holder->filePath.get());
+					}
+				}
+			}
+		}
 	}
 
 	// Osc sync
 	jWriter.writeAttribute("osc2Sync", sound->oscillatorSync ? 1 : 0);
 
-	// === PATCHED PARAMETERS (Local + Global) ===
-	// Note: Patched params temporarily disabled to avoid E411 crash
-	// TODO: Need to safely check if summaries[1].paramCollection exists
-	// jWriter.writeOpeningTag("patched", false, true);
-	// ... patched params ...
-	// jWriter.closeTag(true);
-
 	// === UNPATCHED PARAMETERS ===
-	jWriter.writeOpeningTag("unpatched", false, true);
+	// Try to safely access unpatched params
+	if (paramManager->summaries[0].paramCollection) {
+		UnpatchedParamSet* unpatchedParams = (UnpatchedParamSet*)paramManager->summaries[0].paramCollection;
 
-	UnpatchedParamSet* unpatchedParams = paramManager->getUnpatchedParamSet();
-
-	for (int32_t p = 0; p < UNPATCHED_SOUND_MAX_NUM; p++) {
-		int32_t value = unpatchedParams->getValue(p);
-		const char* paramName = paramNameForFile(Kind::UNPATCHED_SOUND, p + UNPATCHED_START);
-		if (paramName) {
-			jWriter.writeAttribute(paramName, value);
+		for (int32_t p = 0; p < UNPATCHED_SOUND_MAX_NUM; p++) {
+			int32_t value = unpatchedParams->getValue(p);
+			const char* paramName = paramNameForFile(Kind::UNPATCHED_SOUND, p + UNPATCHED_START);
+			if (paramName) {
+				jWriter.writeAttribute(paramName, value);
+			}
 		}
 	}
 
-	jWriter.closeTag(true);
+	// === PATCHED PARAMETERS ===
+	// Try to safely access patched params
+	if (paramManager->summaries[1].paramCollection) {
+		PatchedParamSet* patchedParams = (PatchedParamSet*)paramManager->summaries[1].paramCollection;
 
-	// === FILTER MODES ===
-	jWriter.writeOpeningTag("filters", false, true);
+		for (int32_t p = 0; p < kNumParams; p++) {
+			AutoParam* param = &patchedParams->params[p];
+			int32_t value = param->getCurrentValue();
+			const char* paramName = paramNameForFile(Kind::PATCHED, p);
+			if (paramName) {
+				jWriter.writeAttribute(paramName, value);
+			}
+		}
+	}
+
+	// === FILTER MODES & ROUTING ===
 	jWriter.writeAttribute("lpfMode", getFilterModeString(sound->lpfMode));
 	jWriter.writeAttribute("hpfMode", getFilterModeString(sound->hpfMode));
-	jWriter.closeTag(true);
 
-	// === LFO CONFIGURATION ===
-	jWriter.writeOpeningTag("lfos", false, true);
-	for (int32_t i = 0; i < LFO_COUNT; i++) {
-		char lfoName[8];
-		sprintf(lfoName, "lfo%d", i + 1);
-		jWriter.writeOpeningTag(lfoName, false, true);
-		jWriter.writeAttribute("syncLevel", sound->lfoConfig[i].syncLevel);
-		jWriter.writeAttribute("syncType", sound->lfoConfig[i].syncType);
-		jWriter.closeTag(true);
+	const char* routeName = "H2L";
+	switch (sound->filterRoute) {
+	case FilterRoute::HIGH_TO_LOW:
+		routeName = "H2L";
+		break;
+	case FilterRoute::LOW_TO_HIGH:
+		routeName = "L2H";
+		break;
+	case FilterRoute::PARALLEL:
+		routeName = "parallel";
+		break;
 	}
-	jWriter.closeTag(true);
+	jWriter.writeAttribute("filterRoute", routeName);
+
+	// === DELAY CONFIGURATION ===
+	jWriter.writeAttribute("delayPingPong", sound->delay.pingPong ? 1 : 0);
+	jWriter.writeAttribute("delayAnalog", sound->delay.analog ? 1 : 0);
+	jWriter.writeAttribute("delaySyncLevel", (int32_t)sound->delay.syncLevel);
+	jWriter.writeAttribute("delaySyncType", (int32_t)sound->delay.syncType);
+
+	// === SIDECHAIN (static params) ===
+	jWriter.writeAttribute("sidechainAttack", sound->sidechain.attack);
+	jWriter.writeAttribute("sidechainRelease", sound->sidechain.release);
+	jWriter.writeAttribute("sidechainSend", sound->sideChainSendLevel);
+
+	// === CLIPPING ===
+	jWriter.writeAttribute("clippingAmount", sound->clippingAmount);
+
+	// === LFO CONFIGURATION (flat structure) ===
+	for (int32_t i = 0; i < LFO_COUNT; i++) {
+		char attrName[32];
+		sprintf(attrName, "lfo%dSyncLevel", i + 1);
+		jWriter.writeAttribute(attrName, sound->lfoConfig[i].syncLevel);
+
+		sprintf(attrName, "lfo%dSyncType", i + 1);
+		jWriter.writeAttribute(attrName, sound->lfoConfig[i].syncType);
+	}
 
 	// === MOD FX ===
-	jWriter.writeOpeningTag("modFX", false, true);
-	jWriter.writeAttribute("type", getModFXTypeString(sound->getModFXType()));
-	jWriter.closeTag(true);
-
-	// === SIDECHAIN ===
-	jWriter.writeAttribute("sidechainSend", sound->sideChainSendLevel);
+	jWriter.writeAttribute("modFXType", getModFXTypeString(sound->getModFXType()));
 
 	jWriter.closeTag(true);
 	smSysex::sendMsg(cable, jWriter);
@@ -341,8 +398,170 @@ void setParameter(MIDICable& cable, JsonDeserializer& reader) {
 	smSysex::startReply(jWriter, reader);
 	jWriter.writeOpeningTag("^parameterSet", false, true);
 
-	// TODO: Implement parameter setting logic
-	jWriter.writeAttribute("error", "Not yet implemented");
+	if (!currentSong) {
+		jWriter.writeAttribute("error", "No song");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	Clip* clip = currentSong->getCurrentClip();
+	if (!clip) {
+		jWriter.writeAttribute("error", "No clip selected");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	Output* output = clip->output;
+	if (!output || output->type != OutputType::SYNTH) {
+		jWriter.writeAttribute("error", "Not a synth clip");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	SoundInstrument* soundInstrument = (SoundInstrument*)output;
+	Sound* sound = (Sound*)soundInstrument;
+
+	// Parse parameters from JSON
+	String paramName;
+	int32_t intValue = 0;
+	String strValue;
+	bool hasIntValue = false;
+	bool hasStrValue = false;
+
+	char const* tagName;
+	reader.match('{');
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "name")) {
+			reader.readTagOrAttributeValueString(&paramName);
+		}
+		else if (!strcmp(tagName, "value")) {
+			// Try reading as int first
+			intValue = reader.readTagOrAttributeValueInt();
+			hasIntValue = true;
+		}
+		else if (!strcmp(tagName, "strValue")) {
+			reader.readTagOrAttributeValueString(&strValue);
+			hasStrValue = true;
+		}
+		else {
+			reader.exitTag();
+		}
+	}
+	reader.match('}');
+
+	if (paramName.isEmpty()) {
+		jWriter.writeAttribute("error", "Missing parameter name");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	const char* name = paramName.get();
+	bool success = false;
+	const char* errorMsg = "Unknown parameter";
+
+	// === HANDLE DIFFERENT PARAMETER TYPES ===
+
+	// General attributes
+	if (!strcmp(name, "transpose")) {
+		sound->transpose = intValue;
+		success = true;
+	}
+	else if (!strcmp(name, "maxVoices")) {
+		sound->maxVoiceCount = std::clamp<int32_t>(intValue, 1, 8);
+		success = true;
+	}
+	else if (!strcmp(name, "unisonNum")) {
+		sound->numUnison = std::clamp<int32_t>(intValue, 1, 8);
+		success = true;
+	}
+	else if (!strcmp(name, "unisonDetune")) {
+		sound->unisonDetune = std::clamp<int32_t>(intValue, 0, 50);
+		success = true;
+	}
+	else if (!strcmp(name, "unisonSpread")) {
+		sound->unisonStereoSpread = std::clamp<int32_t>(intValue, 0, 127);
+		success = true;
+	}
+	else if (!strcmp(name, "osc2Sync")) {
+		sound->oscillatorSync = (intValue != 0);
+		success = true;
+	}
+	else if (!strcmp(name, "clippingAmount")) {
+		sound->clippingAmount = std::clamp<int32_t>(intValue, 0, 255);
+		success = true;
+	}
+	else if (!strcmp(name, "delayPingPong")) {
+		sound->delay.pingPong = (intValue != 0);
+		success = true;
+	}
+	else if (!strcmp(name, "delayAnalog")) {
+		sound->delay.analog = (intValue != 0);
+		success = true;
+	}
+	else if (!strcmp(name, "delaySyncLevel")) {
+		sound->delay.syncLevel = (SyncLevel)std::clamp<int32_t>(intValue, 0, 9);
+		success = true;
+	}
+	else if (!strcmp(name, "delaySyncType")) {
+		sound->delay.syncType = (SyncType)std::clamp<int32_t>(intValue, 0, 2);
+		success = true;
+	}
+	else if (!strcmp(name, "sidechainSend")) {
+		sound->sideChainSendLevel = intValue;
+		success = true;
+	}
+	else {
+		// Try patched/unpatched params via ParamManager
+		InstrumentClip* instrumentClip = (InstrumentClip*)clip;
+		ParamManagerForTimeline* paramManager = &instrumentClip->paramManager;
+
+		// Try unpatched params first
+		if (paramManager->summaries[0].paramCollection) {
+			UnpatchedParamSet* unpatchedParams = (UnpatchedParamSet*)paramManager->summaries[0].paramCollection;
+
+			for (int32_t p = 0; p < UNPATCHED_SOUND_MAX_NUM; p++) {
+				const char* checkName = paramNameForFile(Kind::UNPATCHED_SOUND, p + UNPATCHED_START);
+				if (checkName && !strcmp(name, checkName)) {
+					unpatchedParams->params[p].setCurrentValueBasicForSetup(intValue);
+					success = true;
+					break;
+				}
+			}
+		}
+
+		// Try patched params if not found
+		if (!success && paramManager->summaries[1].paramCollection) {
+			PatchedParamSet* patchedParams = (PatchedParamSet*)paramManager->summaries[1].paramCollection;
+
+			for (int32_t p = 0; p < kNumParams; p++) {
+				const char* checkName = paramNameForFile(Kind::PATCHED, p);
+				if (checkName && !strcmp(name, checkName)) {
+					patchedParams->params[p].setCurrentValueBasicForSetup(intValue);
+					success = true;
+					break;
+				}
+			}
+		}
+	}
+
+	if (success) {
+		jWriter.writeAttribute("name", name);
+		jWriter.writeAttribute("value", intValue);
+		jWriter.writeAttribute("success", 1);
+
+		// Notify subscribers if enabled
+		if (parametersSubscribed) {
+			notifyParameterChanged(0, 0, intValue); // TODO: pass proper kind/id
+		}
+	}
+	else {
+		jWriter.writeAttribute("error", errorMsg);
+		jWriter.writeAttribute("name", name);
+	}
 
 	jWriter.closeTag(true);
 	smSysex::sendMsg(cable, jWriter);
