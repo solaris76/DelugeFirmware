@@ -11,6 +11,7 @@
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/sysex.h"
+#include "io/midi/sysex/kit_sysex.h"
 #include "io/midi/sysex/parameter_sysex.h"
 #include "io/midi/sysex/settings_sysex.h"
 #include "io/midi/sysex/transport_sysex.h"
@@ -982,6 +983,51 @@ void smSysex::handleNextSysEx() {
 		}
 		else if (!strcmp(tagName, "unsubscribeParameters")) {
 			ParameterSysex::unsubscribeParameters(de.cable, parser);
+			goto done;
+		}
+		// Kit commands
+		else if (!strcmp(tagName, "getKitInfo")) {
+			KitSysex::getKitInfo(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getKitDrums")) {
+			KitSysex::getKitDrums(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getDrumInfo")) {
+			KitSysex::getDrumInfo(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "addDrum")) {
+			KitSysex::addDrum(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "removeDrum")) {
+			KitSysex::removeDrum(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setDrumProperty")) {
+			KitSysex::setDrumProperty(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "createKit")) {
+			KitSysex::createKit(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "loadKit")) {
+			KitSysex::loadKit(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "saveKit")) {
+			KitSysex::saveKit(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "subscribeKit")) {
+			KitSysex::subscribeKit(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "unsubscribeKit")) {
+			KitSysex::unsubscribeKit(de.cable, parser);
 			goto done;
 		}
 		parser.exitTag();

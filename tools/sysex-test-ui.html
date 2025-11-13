@@ -507,6 +507,74 @@
         </div>
       </div>
 
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
+          <h2>🥁 Kit / Drum Control</h2>
+          <span class="accordion-icon">▼</span>
+        </div>
+        <div class="accordion-content">
+        <div class="button-group">
+          <button class="btn" id="getKitInfoBtn" disabled>Get Kit Info</button>
+          <button class="btn" id="getKitDrumsBtn" disabled>Get All Drums</button>
+          <button class="btn btn-small" id="subscribeKitBtn" disabled>Subscribe to Changes</button>
+        </div>
+        <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 8px; font-size: 12px;">🔍 Get Drum Info</div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Drum Index:</label>
+            <input type="number" id="getDrumIndexInput" min="0" max="127" value="0" style="width: 100px; font-size: 11px;" disabled>
+            <button class="btn btn-small" id="getDrumInfoBtn" disabled style="margin-left: 10px;">Get Info</button>
+          </div>
+        </div>
+        <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 8px; font-size: 12px;">➕ Add Drum</div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Drum Type:</label>
+            <select id="addDrumTypeSelect" style="width: 150px; font-size: 11px;" disabled>
+              <option value="sound">Sound (Synth/Sample)</option>
+              <option value="midi">MIDI</option>
+              <option value="gate">Gate (CV)</option>
+            </select>
+            <button class="btn btn-small" id="addDrumBtn" disabled style="margin-left: 10px;">Add Drum</button>
+          </div>
+        </div>
+        <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 8px; font-size: 12px;">✏️ Set Drum Property</div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Drum Index:</label>
+            <input type="number" id="setDrumIndexInput" min="0" max="127" value="0" style="width: 100px; font-size: 11px;" disabled>
+          </div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Property:</label>
+            <select id="drumPropertySelect" style="width: 150px; font-size: 11px;" disabled>
+              <option value="midiNote">MIDI Note (0-127)</option>
+              <option value="midiChannel">MIDI Channel (0-15)</option>
+              <option value="muteNote">Mute Note (0-127)</option>
+              <option value="muteChannel">Mute Channel (0-15)</option>
+              <option value="arpMode">Arp Mode (0-3)</option>
+              <option value="arpOctaves">Arp Octaves (1-4)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Value:</label>
+            <input type="number" id="drumPropertyValueInput" min="0" max="127" value="0" style="width: 100px; font-size: 11px;" disabled>
+            <button class="btn btn-small" id="setDrumPropertyBtn" disabled style="margin-left: 10px;">Set Property</button>
+          </div>
+        </div>
+        <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 8px; font-size: 12px;">🗑️ Remove Drum</div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Drum Index:</label>
+            <input type="number" id="removeDrumIndexInput" min="0" max="127" value="0" style="width: 100px; font-size: 11px;" disabled>
+            <button class="btn btn-small" id="removeDrumBtn" disabled style="margin-left: 10px;">Remove Drum</button>
+          </div>
+        </div>
+        <div id="kitDisplay" class="log-container" style="max-height: 400px; margin-top: 10px; font-size: 11px;">
+          <div style="color: #888;">Kit/Drum info will appear here</div>
+        </div>
+        </div>
+      </div>
+
       <div class="accordion" style="grid-column: 1 / -1;">
         <div class="accordion-header" onclick="toggleAccordion(this)">
         <h2>📋 Message Log</h2>
@@ -593,6 +661,15 @@
       document.getElementById('getTransportBtn').addEventListener('click', () => sendCommand({getTransportState: {}}));
       document.getElementById('subscribeTransportBtn').addEventListener('click', () => sendCommand({subscribeTransport: {}}));
       document.getElementById('tempoInput').addEventListener('change', setTempo);
+
+      // Kit/Drum controls
+      document.getElementById('getKitInfoBtn').addEventListener('click', () => sendCommand({getKitInfo: {}}));
+      document.getElementById('getKitDrumsBtn').addEventListener('click', () => sendCommand({getKitDrums: {}}));
+      document.getElementById('subscribeKitBtn').addEventListener('click', () => sendCommand({subscribeKit: {}}));
+      document.getElementById('getDrumInfoBtn').addEventListener('click', getDrumInfo);
+      document.getElementById('addDrumBtn').addEventListener('click', addDrum);
+      document.getElementById('setDrumPropertyBtn').addEventListener('click', setDrumProperty);
+      document.getElementById('removeDrumBtn').addEventListener('click', removeDrum);
     }
 
     async function connectToDeluge() {
@@ -704,6 +781,21 @@
       document.getElementById('paramValueInput').disabled = false;
       document.getElementById('setParameterBtn').disabled = false;
       document.getElementById('subscribeParamsBtn').disabled = false;
+
+      // Enable kit controls
+      document.getElementById('getKitInfoBtn').disabled = false;
+      document.getElementById('getKitDrumsBtn').disabled = false;
+      document.getElementById('subscribeKitBtn').disabled = false;
+      document.getElementById('getDrumIndexInput').disabled = false;
+      document.getElementById('getDrumInfoBtn').disabled = false;
+      document.getElementById('addDrumTypeSelect').disabled = false;
+      document.getElementById('addDrumBtn').disabled = false;
+      document.getElementById('setDrumIndexInput').disabled = false;
+      document.getElementById('drumPropertySelect').disabled = false;
+      document.getElementById('drumPropertyValueInput').disabled = false;
+      document.getElementById('setDrumPropertyBtn').disabled = false;
+      document.getElementById('removeDrumIndexInput').disabled = false;
+      document.getElementById('removeDrumBtn').disabled = false;
     }
 
     function disableControls() {
@@ -925,6 +1017,71 @@
         sendCommand({getParameters: {}});
       }
 
+      // Kit responses
+      if (response['^kitInfo']) {
+        displayKitInfo(response['^kitInfo']);
+        storeLatestJson(response);
+      }
+
+      if (response['^kitDrums']) {
+        displayKitDrums(response['^kitDrums']);
+        storeLatestJson(response);
+      }
+
+      if (response['^drumInfo']) {
+        displayDrumInfo(response['^drumInfo']);
+        storeLatestJson(response);
+      }
+
+      if (response['^drumAdded']) {
+        const r = response['^drumAdded'];
+        if (r.success) {
+          log(`✓ Drum added at index ${r.index} (type: ${r.type})`, 'success');
+          sendCommand({getKitDrums: {}}); // Refresh drum list
+        } else if (r.error) {
+          log(`✗ Add drum failed: ${r.error}`, 'error');
+        }
+      }
+
+      if (response['^drumRemoved']) {
+        const r = response['^drumRemoved'];
+        if (r.success) {
+          log(`✓ Drum ${r.index} removed`, 'success');
+          sendCommand({getKitDrums: {}}); // Refresh drum list
+        } else if (r.error) {
+          log(`✗ Remove drum failed: ${r.error}`, 'error');
+        }
+      }
+
+      if (response['^drumPropertySet']) {
+        const r = response['^drumPropertySet'];
+        if (r.success) {
+          log(`✓ Drum ${r.index}: ${r.property} = ${r.value}`, 'success');
+          sendCommand({getDrumInfo: {index: r.index}}); // Refresh that drum's info
+        } else if (r.error) {
+          log(`✗ Set property failed: ${r.error}`, 'error');
+        }
+      }
+
+      if (response['^kitSubscribed']) {
+        log('✓ Subscribed to kit changes', 'success');
+      }
+
+      if (response['^kitUnsubscribed']) {
+        log('✓ Unsubscribed from kit changes', 'success');
+      }
+
+      if (response['^drumChanged']) {
+        log(`🔄 Drum ${response['^drumChanged'].index} changed`, 'info');
+        sendCommand({getKitDrums: {}}); // Refresh drum list
+      }
+
+      if (response['^kitChanged']) {
+        log('🔄 Kit changed', 'info');
+        sendCommand({getKitInfo: {}});
+        sendCommand({getKitDrums: {}});
+      }
+
       if (response['^error']) {
         log(`✗ Error: ${response['^error'].message}`, 'error');
       }
@@ -1073,6 +1230,31 @@
         }
       } else {
         hint.textContent = '';
+      }
+    }
+
+    // Kit/Drum functions
+    function getDrumInfo() {
+      const index = parseInt(document.getElementById('getDrumIndexInput').value);
+      sendCommand({getDrumInfo: {index}});
+    }
+
+    function addDrum() {
+      const type = document.getElementById('addDrumTypeSelect').value;
+      sendCommand({addDrum: {type}});
+    }
+
+    function setDrumProperty() {
+      const index = parseInt(document.getElementById('setDrumIndexInput').value);
+      const property = document.getElementById('drumPropertySelect').value;
+      const value = parseInt(document.getElementById('drumPropertyValueInput').value);
+      sendCommand({setDrumProperty: {index, property, value}});
+    }
+
+    function removeDrum() {
+      const index = parseInt(document.getElementById('removeDrumIndexInput').value);
+      if (confirm(`Are you sure you want to remove drum ${index}?`)) {
+        sendCommand({removeDrum: {index}});
       }
     }
 
@@ -1494,6 +1676,118 @@
 
     function clearParametersDisplay() {
       document.getElementById('parametersDisplay').innerHTML = '<div style="color: #888;">Parameters will appear here</div>';
+    }
+
+    // Kit display functions
+    function displayKitInfo(kitInfo) {
+      const display = document.getElementById('kitDisplay');
+
+      if (kitInfo.error) {
+        display.innerHTML = `<div style="color: #f44336; padding: 10px;">⚠️ ${kitInfo.error}</div>`;
+        return;
+      }
+
+      let html = '<div style="font-family: monospace; font-size: 11px;">';
+      html += '<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 8px; border-bottom: 2px solid #667eea; padding-bottom: 4px;">🥁 KIT INFO</div>';
+
+      if (kitInfo.name) {
+        html += `<div style="padding: 3px;"><span style="color: #aaa;">Name:</span> <span style="color: #4caf50; font-weight: bold;">${kitInfo.name}</span></div>`;
+      }
+      if (kitInfo.path) {
+        html += `<div style="padding: 3px;"><span style="color: #aaa;">Path:</span> <span style="color: #667eea;">${kitInfo.path}</span></div>`;
+      }
+      html += `<div style="padding: 3px;"><span style="color: #aaa;">Drum Count:</span> <span style="color: #4caf50; font-weight: bold;">${kitInfo.drumCount}</span></div>`;
+      if (kitInfo.selectedDrumIndex !== undefined) {
+        html += `<div style="padding: 3px;"><span style="color: #aaa;">Selected Drum:</span> <span style="color: #764ba2; font-weight: bold;">${kitInfo.selectedDrumIndex}</span></div>`;
+      }
+
+      html += '</div>';
+      display.innerHTML = html;
+    }
+
+    function displayKitDrums(response) {
+      const display = document.getElementById('kitDisplay');
+
+      if (response.error) {
+        display.innerHTML = `<div style="color: #f44336; padding: 10px;">⚠️ ${response.error}</div>`;
+        return;
+      }
+
+      if (!response.drums || response.drums.length === 0) {
+        display.innerHTML = '<div style="color: #888;">No drums in kit</div>';
+        return;
+      }
+
+      let html = '<div style="font-family: monospace; font-size: 11px;">';
+      html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 8px; border-bottom: 2px solid #667eea; padding-bottom: 4px;">🥁 KIT DRUMS (${response.drums.length} total)</div>`;
+
+      response.drums.forEach(drumWrapper => {
+        // Handle both nested {"drum": {...}} and flat {...} structures
+        const drum = drumWrapper.drum || drumWrapper;
+
+        const typeColors = {audio: '#4caf50', synth: '#9c27b0', midi: '#2196f3', gate: '#ff9800'};
+        const typeColor = typeColors[drum.type] || '#667eea';
+
+        html += '<div style="margin-bottom: 10px; padding: 8px; background: #1a1a1a; border-radius: 4px; border-left: 3px solid ' + typeColor + ';">';
+        html += `<div style="margin-bottom: 4px;"><span style="color: #888;">Index:</span> <span style="color: ${typeColor}; font-weight: bold;">${drum.index}</span> `;
+        html += `<span style="color: #888;">Type:</span> <span style="background: ${typeColor}; color: #000; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;">${drum.type.toUpperCase()}</span></div>`;
+        html += `<div style="padding: 2px 0;"><span style="color: #666;">Name:</span> <span style="color: #fff;">${drum.name || '(unnamed)'}</span></div>`;
+
+        if (drum.midiNote !== undefined) {
+          html += `<div style="padding: 2px 0; font-size: 10px;"><span style="color: #666;">MIDI:</span> `;
+          html += `<span style="color: #667eea;">Ch ${drum.midiChannel} Note ${drum.midiNote}</span></div>`;
+        }
+
+        html += '</div>';
+      });
+
+      html += '</div>';
+      display.innerHTML = html;
+    }
+
+    function displayDrumInfo(drumInfo) {
+      const display = document.getElementById('kitDisplay');
+
+      if (drumInfo.error) {
+        display.innerHTML = `<div style="color: #f44336; padding: 10px;">⚠️ ${drumInfo.error}</div>`;
+        return;
+      }
+
+      const typeColors = {audio: '#4caf50', synth: '#9c27b0', midi: '#2196f3', gate: '#ff9800'};
+      const typeColor = typeColors[drumInfo.type] || '#667eea';
+
+      let html = '<div style="font-family: monospace; font-size: 11px;">';
+      html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 8px; border-bottom: 2px solid #667eea; padding-bottom: 4px;">🔍 DRUM INFO</div>`;
+      html += '<div style="padding: 10px; background: #1a1a1a; border-radius: 4px; border-left: 3px solid ' + typeColor + ';">';
+
+      html += `<div style="margin-bottom: 6px;"><span style="color: #888;">Index:</span> <span style="color: ${typeColor}; font-weight: bold; font-size: 14px;">${drumInfo.index}</span></div>`;
+      html += `<div style="margin-bottom: 6px;"><span style="color: #888;">Type:</span> <span style="background: ${typeColor}; color: #000; padding: 2px 8px; border-radius: 3px; font-weight: bold;">${drumInfo.type.toUpperCase()}</span></div>`;
+      html += `<div style="margin-bottom: 6px;"><span style="color: #888;">Name:</span> <span style="color: #fff; font-weight: bold;">${drumInfo.name}</span></div>`;
+
+      if (drumInfo.midiNote !== undefined) {
+        html += '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">';
+        html += '<div style="color: #764ba2; font-size: 11px; margin-bottom: 4px;">MIDI Input:</div>';
+        html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #666;">Note:</span> <span style="color: #667eea;">${drumInfo.midiNote}</span></div>`;
+        html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #666;">Channel:</span> <span style="color: #667eea;">${drumInfo.midiChannel}</span></div>`;
+        html += '</div>';
+      }
+
+      if (drumInfo.muteNote !== undefined) {
+        html += '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">';
+        html += '<div style="color: #764ba2; font-size: 11px; margin-bottom: 4px;">MIDI Mute:</div>';
+        html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #666;">Note:</span> <span style="color: #667eea;">${drumInfo.muteNote}</span></div>`;
+        html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #666;">Channel:</span> <span style="color: #667eea;">${drumInfo.muteChannel}</span></div>`;
+        html += '</div>';
+      }
+
+      html += '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">';
+      html += '<div style="color: #764ba2; font-size: 11px; margin-bottom: 4px;">Arpeggiator:</div>';
+      html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #666;">Mode:</span> <span style="color: #667eea;">${drumInfo.arpMode}</span></div>`;
+      html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #666;">Octaves:</span> <span style="color: #667eea;">${drumInfo.arpOctaves}</span></div>`;
+      html += '</div>';
+
+      html += '</div></div>';
+      display.innerHTML = html;
     }
 
     function log(message, type = 'info') {
