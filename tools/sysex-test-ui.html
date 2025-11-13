@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deluge SysEx Test & Validation UI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: #e0e0e0; padding: 20px; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+    h1 { font-size: 24px; margin-bottom: 10px; }
+    .status { display: flex; gap: 20px; align-items: center; }
+    .status-item { display: flex; align-items: center; gap: 8px; }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; background: #666; }
+    .status-dot.connected { background: #4caf50; box-shadow: 0 0 10px #4caf50; }
+    .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    @media (max-width: 1200px) { .main-grid { grid-template-columns: 1fr; } }
+    .panel { background: #2a2a2a; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .panel h2 { font-size: 18px; margin-bottom: 15px; color: #667eea; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+    .btn { background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; transition: all 0.3s; }
+    .btn:hover:not(:disabled) { background: #764ba2; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4); }
+    .btn:disabled { background: #444; cursor: not-allowed; opacity: 0.5; }
+    .btn-success { background: #4caf50; }
+    .btn-success:hover:not(:disabled) { background: #45a049; }
+    .btn-small { padding: 6px 12px; font-size: 12px; }
+    .button-group { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; font-size: 14px; color: #aaa; }
+    input, select, textarea { width: 100%; padding: 8px; background: #1a1a1a; border: 1px solid #444; border-radius: 5px; color: #e0e0e0; font-size: 14px; }
+    input:focus, select:focus { outline: none; border-color: #667eea; }
+    .log-container { background: #1a1a1a; border: 1px solid #444; border-radius: 5px; padding: 15px; max-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 13px; }
+    .log-entry { padding: 5px 0; border-bottom: 1px solid #333; }
+    .log-timestamp { color: #888; font-size: 11px; }
+    .log-sent { color: #4caf50; }
+    .log-received { color: #2196f3; }
+    .log-error { color: #f44336; }
+    .log-info { color: #ff9800; }
+    .log-success { color: #4caf50; }
+    .feature-status { display: grid; gap: 10px; margin-top: 10px; }
+    .feature-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #1a1a1a; border-radius: 5px; }
+    .feature-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .badge-working { background: #4caf50; color: white; }
+    .badge-not-implemented { background: #666; color: #aaa; }
+    .test-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #333; }
+    .test-pass { color: #4caf50; }
+    .test-fail { color: #f44336; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎹 Deluge SysEx Test UI</h1>
+      <div class="status">
+        <div class="status-item">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Not Connected</span>
+        </div>
+        <div class="status-item" id="fwVersionDisplay" style="display:none;">
+          <span>FW: <strong id="fwVersion" style="color: #667eea;">-</strong></span>
+        </div>
+        <div class="status-item"><span>Messages: <strong id="msgCount">0</strong></span></div>
+      </div>
+    </header>
+
+    <div class="main-grid">
+      <div class="panel">
+        <h2>📡 Connection</h2>
+        <div class="button-group">
+          <button class="btn btn-success" id="connectBtn">Connect</button>
+          <button class="btn" id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>✨ Features</h2>
+        <div class="feature-status" id="featureStatus">
+          <div class="feature-item"><span>File Operations</span><span class="feature-badge badge-working">WORKING</span></div>
+          <div class="feature-item"><span>Transport Control</span><span class="feature-badge badge-not-implemented" id="transportBadge">NOT TESTED</span></div>
+          <div class="feature-item"><span>Settings Control</span><span class="feature-badge badge-not-implemented" id="settingsBadge">NOT TESTED</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>🧪 Basic Tests</h2>
+        <div class="button-group">
+          <button class="btn" id="pingBtn" disabled>Ping</button>
+          <button class="btn" id="dirBtn" disabled>List Root Dir</button>
+          <button class="btn" id="runAllBtn" disabled>Run All Tests</button>
+        </div>
+        <div class="log-container" id="testResults" style="max-height: 200px;">
+          <div>Waiting for connection...</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>📁 File Browser</h2>
+        <div class="form-group">
+          <label>Path:</label>
+          <input type="text" id="filePath" value="/" placeholder="/SYNTHS/LEAD.XML">
+        </div>
+        <div class="button-group">
+          <button class="btn" id="dirListBtn" disabled>List Directory</button>
+          <button class="btn btn-small" id="openFileBtn" disabled>Open File</button>
+        </div>
+        <div id="fileResult" class="log-container" style="max-height: 200px; margin-top: 10px;">
+          <div style="color: #888;">File operations will appear here...</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>🚀 Firmware Upload</h2>
+        <div class="form-group">
+          <label>Select deluge.bin:</label>
+          <input type="file" id="firmwareFile" accept=".bin" style="margin: 10px 0;">
+        </div>
+        <div class="form-group">
+          <label>Transfer Speed:</label>
+          <select id="chunkSizeSelect" style="margin: 10px 0;">
+            <option value="128">Safe (128 bytes) - ~4 min</option>
+            <option value="256">Balanced (256 bytes) - ~2 min</option>
+            <option value="512">Fast (512 bytes) - ~1 min</option>
+            <option value="1024" selected>Fastest (1024 bytes) - ~30 sec</option>
+          </select>
+        </div>
+        <div class="button-group">
+          <button class="btn" id="uploadFirmwareBtn" disabled>📤 Upload to SD Card</button>
+          <button class="btn btn-small" id="testWriteBtn" disabled>🧪 Test Write</button>
+        </div>
+        <div id="uploadProgress" style="margin-top: 10px;">
+          <div id="progressBar" style="display:none; background: #333; border-radius: 4px; overflow: hidden; height: 30px;">
+            <div id="progressFill" style="background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;"></div>
+          </div>
+          <div id="uploadStatus" style="color: #888; margin-top: 8px;">Ready to upload firmware</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>⚙️ Settings Groups</h2>
+        <p style="color: #888; font-size: 12px; margin-bottom: 10px;">Get settings by category (matches Deluge menu structure)</p>
+        <div class="button-group">
+          <button class="btn btn-small" id="getCVBtn" disabled>CV (6)</button>
+          <button class="btn btn-small" id="getGateBtn" disabled>Gate (5)</button>
+          <button class="btn btn-small" id="getClockBtn" disabled>Clock (5)</button>
+          <button class="btn btn-small" id="getMidiBtn" disabled>MIDI (4)</button>
+        </div>
+        <div class="button-group">
+          <button class="btn btn-small" id="getDefaultsBtn" disabled>Defaults (11)</button>
+          <button class="btn btn-small" id="getPadsBtn" disabled>Pads (7)</button>
+          <button class="btn btn-small" id="getRecordingBtn" disabled>Recording (6)</button>
+          <button class="btn btn-small" id="getUIBtn" disabled>UI (17)</button>
+        </div>
+        <div class="button-group">
+          <button class="btn btn-small" id="getCommunityBtn" disabled>Community (22)</button>
+          <button class="btn" id="getAllSettingsBtn" disabled>🌟 Get ALL (68)</button>
+          <button class="btn btn-small" id="showJsonBtn" disabled>Show JSON</button>
+        </div>
+        <div class="form-group">
+          <label>Setting:</label>
+          <select id="settingName" disabled style="font-size: 12px;">
+            <optgroup label="MIDI">
+              <option value="mt">MIDI Thru (0/1)</option>
+              <option value="mc">MIDI Clock In (0/1)</option>
+            </optgroup>
+            <optgroup label="Defaults">
+              <option value="ds">Default Scale (0-11)</option>
+              <option value="dv">Default Velocity (0-127)</option>
+              <option value="dm">Default Magnitude (-3 to 3)</option>
+              <option value="br0">Bend Range Up (0-96)</option>
+              <option value="br1">Bend Range Down (0-96)</option>
+            </optgroup>
+            <optgroup label="UI/Display">
+              <option value="pb">Pad Brightness (1-25)</option>
+              <option value="kl">Keyboard Layout (0-3)</option>
+              <option value="sl">Session Layout (0-2)</option>
+              <option value="ht">Hold Time (0-255)</option>
+            </optgroup>
+            <optgroup label="Recording">
+              <option value="rq">Record Quantize (0-8)</option>
+              <option value="acm">Audio Clip Margins (0/1)</option>
+              <option value="sbp">Sample Preview (0-2)</option>
+            </optgroup>
+            <optgroup label="Metronome/Swing">
+              <option value="mv">Metronome Volume (0-127)</option>
+              <option value="si">Swing Interval (0-255)</option>
+            </optgroup>
+            <optgroup label="Automation">
+              <option value="ai">Auto Interpolate (0/1)</option>
+              <option value="aclr">Auto Clear (0/1)</option>
+              <option value="ash">Auto Shift (0/1)</option>
+              <option value="ann">Auto Nudge Note (0/1)</option>
+              <option value="adps">Disable Audition Shortcuts (0/1)</option>
+            </optgroup>
+            <optgroup label="Grid">
+              <option value="geu">Empty Pads Unarm (0/1)</option>
+              <option value="gecr">Empty Pads Create+Rec (0/1)</option>
+              <option value="gags">Allow Green Selection (0/1)</option>
+            </optgroup>
+            <optgroup label="Keyboard">
+              <option value="kvg">Velocity Glide (0/1)</option>
+              <option value="kmg">Modwheel Glide (0/1)</option>
+            </optgroup>
+            <optgroup label="Misc">
+              <option value="ac">Accessibility Shortcuts (0/1)</option>
+              <option value="cpu">CPU Indicator (0/1)</option>
+              <option value="sharp">Use Sharps (0/1)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Value:</label>
+          <input type="number" id="settingValue" value="0" min="0" max="255" disabled>
+        </div>
+        <div class="button-group">
+          <button class="btn" id="setSettingBtn" disabled>Set Setting</button>
+          <button class="btn btn-small" id="getSettingBtn" disabled>Get Value</button>
+        </div>
+        <div id="settingsDisplay" class="log-container" style="max-height: 200px; margin-top: 10px; font-size: 11px;">
+          <div style="color: #888;">Settings will appear here</div>
+        </div>
+        <div id="jsonViewer" style="display:none; margin-top: 10px;">
+          <h3 style="margin: 10px 0; color: #667eea;">📋 Raw JSON Response</h3>
+          <pre id="jsonContent" style="background: #1e1e1e; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; color: #d4d4d4;"></pre>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>⏯️ Transport</h2>
+        <div class="button-group">
+          <button class="btn" id="playBtn" disabled>▶ Play</button>
+          <button class="btn" id="stopBtn" disabled>■ Stop</button>
+          <button class="btn" id="recordBtn" disabled>● Record</button>
+          <button class="btn btn-small" id="restartBtn" disabled>⏮ Restart</button>
+        </div>
+        <div class="button-group">
+          <button class="btn btn-small" id="loopBtn" disabled>🔁 Loop</button>
+          <button class="btn btn-small" id="loopLayeringBtn" disabled>🔁+ Layering</button>
+          <button class="btn btn-small" id="fillBtn" disabled>📊 Fill</button>
+          <button class="btn" id="metronomeBtn" disabled>🔔 Metro: OFF</button>
+        </div>
+        <div class="button-group">
+          <button class="btn btn-small" id="undoBtn" disabled>↶ Undo</button>
+          <button class="btn btn-small" id="redoBtn" disabled>↷ Redo</button>
+        </div>
+        <div class="form-group">
+          <label>Tempo (BPM): <span id="tempoDisplay" style="color: #667eea; font-weight: bold;">120</span></label>
+          <input type="number" id="tempoInput" value="120" min="30" max="300" disabled>
+        </div>
+        <div class="button-group">
+          <button class="btn" id="setTempoBtn" disabled>Set Tempo</button>
+          <button class="btn btn-small" id="getTransportBtn" disabled>Get State</button>
+          <button class="btn btn-small" id="subscribeTransportBtn" disabled>Subscribe</button>
+        </div>
+      </div>
+
+      <div class="panel" style="grid-column: 1 / -1;">
+        <h2>📋 Message Log</h2>
+        <div style="margin-bottom: 10px;">
+          <button class="btn btn-small" id="clearLogBtn">Clear Log</button>
+        </div>
+        <div class="log-container" id="messageLog">
+          <div class="log-entry"><div class="log-timestamp">[00:00:00]</div><div class="log-info">Ready to connect...</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let midi, midiInput, midiOutput;
+    let messageCount = 0;
+    let connected = false;
+    let metronomeOn = false;
+
+    const elements = {
+      connectBtn: document.getElementById('connectBtn'),
+      disconnectBtn: document.getElementById('disconnectBtn'),
+      statusDot: document.getElementById('statusDot'),
+      statusText: document.getElementById('statusText'),
+      msgCount: document.getElementById('msgCount'),
+      messageLog: document.getElementById('messageLog'),
+      testResults: document.getElementById('testResults')
+    };
+
+    function setupEventListeners() {
+      elements.connectBtn.addEventListener('click', connectToDeluge);
+      elements.disconnectBtn.addEventListener('click', disconnect);
+      document.getElementById('clearLogBtn').addEventListener('click', clearLog);
+      document.getElementById('pingBtn').addEventListener('click', () => sendCommand({ping: {}}));
+      document.getElementById('dirBtn').addEventListener('click', () => sendCommand({dir: {path: "/"}}));
+      document.getElementById('runAllBtn').addEventListener('click', runAllTests);
+      
+      document.getElementById('dirListBtn').addEventListener('click', listDirectory);
+      document.getElementById('openFileBtn').addEventListener('click', openFile);
+      document.getElementById('uploadFirmwareBtn').addEventListener('click', uploadFirmware);
+      document.getElementById('testWriteBtn').addEventListener('click', testWrite);
+      
+      // Settings group buttons
+      document.getElementById('getCVBtn').addEventListener('click', () => sendCommand({getSettingsCV: {}}));
+      document.getElementById('getGateBtn').addEventListener('click', () => sendCommand({getSettingsGate: {}}));
+      document.getElementById('getClockBtn').addEventListener('click', () => sendCommand({getSettingsClock: {}}));
+      document.getElementById('getMidiBtn').addEventListener('click', () => sendCommand({getSettingsMidi: {}}));
+      document.getElementById('getDefaultsBtn').addEventListener('click', () => sendCommand({getSettingsDefaults: {}}));
+      document.getElementById('getPadsBtn').addEventListener('click', () => sendCommand({getSettingsPads: {}}));
+      document.getElementById('getRecordingBtn').addEventListener('click', () => sendCommand({getSettingsRecording: {}}));
+      document.getElementById('getUIBtn').addEventListener('click', () => sendCommand({getSettingsUI: {}}));
+      document.getElementById('getCommunityBtn').addEventListener('click', () => sendCommand({getSettingsCommunity: {}}));
+      document.getElementById('getAllSettingsBtn').addEventListener('click', () => sendCommand({getSettings: {}}));
+      document.getElementById('setSettingBtn').addEventListener('click', setSettingValue);
+      document.getElementById('getSettingBtn').addEventListener('click', getSingleSetting);
+      document.getElementById('showJsonBtn').addEventListener('click', toggleJsonViewer);
+      
+      // Basic transport
+      document.getElementById('playBtn').addEventListener('click', () => sendCommand({transport: {command: "play"}}));
+      document.getElementById('stopBtn').addEventListener('click', () => sendCommand({transport: {command: "stop"}}));
+      document.getElementById('recordBtn').addEventListener('click', () => sendCommand({transport: {command: "record"}}));
+      document.getElementById('restartBtn').addEventListener('click', () => sendCommand({transport: {command: "restart"}}));
+      document.getElementById('metronomeBtn').addEventListener('click', toggleMetronome);
+      
+      // Loop commands
+      document.getElementById('loopBtn').addEventListener('click', () => sendCommand({transport: {command: "loop"}}));
+      document.getElementById('loopLayeringBtn').addEventListener('click', () => sendCommand({transport: {command: "loopLayering"}}));
+      document.getElementById('fillBtn').addEventListener('click', () => sendCommand({transport: {command: "fill"}}));
+      
+      // Edit commands
+      document.getElementById('undoBtn').addEventListener('click', () => sendCommand({transport: {command: "undo"}}));
+      document.getElementById('redoBtn').addEventListener('click', () => sendCommand({transport: {command: "redo"}}));
+      document.getElementById('setTempoBtn').addEventListener('click', setTempo);
+      document.getElementById('getTransportBtn').addEventListener('click', () => sendCommand({getTransportState: {}}));
+      document.getElementById('subscribeTransportBtn').addEventListener('click', () => sendCommand({subscribeTransport: {}}));
+      document.getElementById('tempoInput').addEventListener('change', setTempo);
+    }
+
+    async function connectToDeluge() {
+      try {
+        log('Requesting MIDI access...', 'info');
+        midi = await navigator.requestMIDIAccess({ sysex: true });
+
+        // Find Deluge on port 3 (dedicated SysEx port)
+        const inputs = Array.from(midi.inputs.values());
+        const outputs = Array.from(midi.outputs.values());
+        
+        // Prefer port 3 for SysEx, fallback to any Deluge port
+        midiInput = inputs.find(port => port.name.toLowerCase().includes('deluge') && port.name.includes('3'))
+                 || inputs.find(port => port.name.toLowerCase().includes('deluge'))
+                 || null;
+        
+        midiOutput = outputs.find(port => port.name.toLowerCase().includes('deluge') && port.name.includes('3'))
+                  || outputs.find(port => port.name.toLowerCase().includes('deluge'))
+                  || null;
+
+        if (!midiInput || !midiOutput) {
+          log('✗ No Deluge MIDI device found', 'error');
+          log('Available inputs: ' + inputs.map(p => p.name).join(', '), 'info');
+          log('Available outputs: ' + outputs.map(p => p.name).join(', '), 'info');
+          throw new Error('Deluge not found');
+        }
+        
+        log(`✓ Connected to input: ${midiInput.name}`, 'success');
+        log(`✓ Connected to output: ${midiOutput.name}`, 'success');
+        
+        if (midiInput.name.includes('3')) {
+          log('✓ Using dedicated SysEx port (Port 3)', 'success');
+        } else {
+          log('⚠ Not on port 3 - file transfers may be slower', 'warning');
+        }
+        
+        midiInput.onmidimessage = handleMidiMessage;
+        connected = true;
+        updateConnectionStatus(true);
+        enableControls();
+        runInitialTests();
+      } catch (error) {
+        log(`✗ Connection failed: ${error.message}`, 'error');
+      }
+    }
+
+    function disconnect() {
+      if (midiInput) midiInput.onmidimessage = null;
+      midiInput = midiOutput = null;
+      connected = false;
+      updateConnectionStatus(false);
+      disableControls();
+      log('Disconnected', 'info');
+    }
+
+    function updateConnectionStatus(isConnected) {
+      if (isConnected) {
+        elements.statusDot.classList.add('connected');
+        elements.statusText.textContent = 'Connected';
+        elements.connectBtn.disabled = true;
+        elements.disconnectBtn.disabled = false;
+      } else {
+        elements.statusDot.classList.remove('connected');
+        elements.statusText.textContent = 'Not Connected';
+        elements.connectBtn.disabled = false;
+        elements.disconnectBtn.disabled = true;
+      }
+    }
+
+    function enableControls() {
+      document.getElementById('pingBtn').disabled = false;
+      document.getElementById('dirBtn').disabled = false;
+      document.getElementById('runAllBtn').disabled = false;
+      document.getElementById('dirListBtn').disabled = false;
+      document.getElementById('openFileBtn').disabled = false;
+      document.getElementById('uploadFirmwareBtn').disabled = false;
+      document.getElementById('testWriteBtn').disabled = false;
+      document.getElementById('getCVBtn').disabled = false;
+      document.getElementById('getGateBtn').disabled = false;
+      document.getElementById('getClockBtn').disabled = false;
+      document.getElementById('getMidiBtn').disabled = false;
+      document.getElementById('getDefaultsBtn').disabled = false;
+      document.getElementById('getPadsBtn').disabled = false;
+      document.getElementById('getRecordingBtn').disabled = false;
+      document.getElementById('getUIBtn').disabled = false;
+      document.getElementById('getCommunityBtn').disabled = false;
+      document.getElementById('getAllSettingsBtn').disabled = false;
+      document.getElementById('showJsonBtn').disabled = false;
+      document.getElementById('settingName').disabled = false;
+      document.getElementById('settingValue').disabled = false;
+      document.getElementById('setSettingBtn').disabled = false;
+      document.getElementById('getSettingBtn').disabled = false;
+      document.getElementById('playBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = false;
+      document.getElementById('recordBtn').disabled = false;
+      document.getElementById('restartBtn').disabled = false;
+      document.getElementById('metronomeBtn').disabled = false;
+      document.getElementById('loopBtn').disabled = false;
+      document.getElementById('loopLayeringBtn').disabled = false;
+      document.getElementById('fillBtn').disabled = false;
+      document.getElementById('undoBtn').disabled = false;
+      document.getElementById('redoBtn').disabled = false;
+      document.getElementById('tempoInput').disabled = false;
+      document.getElementById('setTempoBtn').disabled = false;
+      document.getElementById('getTransportBtn').disabled = false;
+      document.getElementById('subscribeTransportBtn').disabled = false;
+    }
+
+    function disableControls() {
+      document.querySelectorAll('.btn').forEach(btn => {
+        if (btn.id !== 'connectBtn' && btn.id !== 'clearLogBtn') btn.disabled = true;
+      });
+    }
+
+    function sendCommand(jsonObj) {
+      if (!connected || !midiOutput) {
+        log('✗ Not connected', 'error');
+        return;
+      }
+      try {
+        const jsonStr = JSON.stringify(jsonObj);
+        const bytes = new TextEncoder().encode(jsonStr);
+        const msg = new Uint8Array([0xF0, 0x00, 0x21, 0x7B, 0x01, 0x04, 0x01, ...bytes, 0xF7]);
+        midiOutput.send(msg);
+        messageCount++;
+        elements.msgCount.textContent = messageCount;
+        log(`➤ Sent: ${jsonStr}`, 'sent');
+      } catch (error) {
+        log(`✗ Send error: ${error.message}`, 'error');
+      }
+    }
+
+    function handleMidiMessage(event) {
+      if (event.data[0] !== 0xF0) return;
+      try {
+        const data = new Uint8Array(event.data);
+        
+        // Verify Deluge manufacturer ID
+        if (data[1] !== 0x00 || data[2] !== 0x21 || data[3] !== 0x7B || data[4] !== 0x01) {
+          return;
+        }
+        
+        // Check command byte
+        if (data[5] !== 0x05) {
+          console.log('Unexpected command byte:', data[5].toString(16));
+        }
+        
+        const payload = event.data.slice(7, -1);
+        const jsonStr = new TextDecoder().decode(payload);
+        
+        // DEBUG: Show corruption details
+        if (!jsonStr.startsWith('{')) {
+          const rawHex = Array.from(payload.slice(0, 30)).map(b => b.toString(16).padStart(2,'0')).join(' ');
+          log(`✗ CORRUPT! Hex: ${rawHex}`, 'error');
+          log(`✗ Text: "${jsonStr.substring(0, 50)}"`, 'error');
+          return;
+        }
+        
+        const response = JSON.parse(jsonStr);
+        log(`◀ Received: ${jsonStr}`, 'received');
+        handleResponse(response);
+      } catch (error) {
+        log(`✗ Parse error: ${error.message}`, 'error');
+      }
+    }
+
+    function handleResponse(response) {
+      if (response['^ping']) updateTestResult('Ping', true);
+      
+      if (response['^dir']) {
+        updateTestResult('Directory List', true);
+        displayFileList(response['^dir'].list);
+      }
+      
+      if (response['^open']) {
+        log(`✓ File opened: FID ${response['^open'].fid}, Size: ${response['^open'].size} bytes`, 'success');
+      }
+      
+      if (response['^transportState']) {
+        updateTestResult('Get Transport State', true);
+        document.getElementById('transportBadge').textContent = 'WORKING';
+        document.getElementById('transportBadge').className = 'feature-badge badge-working';
+        const s = response['^transportState'];
+        updateTempoDisplay(s.bpm);
+        metronomeOn = s.metronomeOn || false;
+        updateMetronomeButton();
+        log(`Transport: ${s.playing?'Playing':'Stopped'} @ ${s.bpm} BPM`, 'info');
+      }
+      
+      if (response['^tempoSet']) {
+        updateTestResult('Set Tempo', true);
+        updateTempoDisplay(response['^tempoSet'].bpm);
+      }
+      
+      if (response['^tempoChanged']) {
+        log(`🔄 Tempo changed: ${response['^tempoChanged'].bpm} BPM`, 'info');
+        updateTempoDisplay(response['^tempoChanged'].bpm);
+      }
+      
+      if (response['^transportChanged']) {
+        const s = response['^transportChanged'];
+        updateTempoDisplay(s.bpm);
+        if (s.metronomeOn !== undefined) {
+          metronomeOn = s.metronomeOn;
+          updateMetronomeButton();
+        }
+      }
+      
+      if (response['^metronomeSet']) {
+        metronomeOn = response['^metronomeSet'].enabled;
+        updateMetronomeButton();
+        log(`✓ Metronome: ${metronomeOn ? 'ON' : 'OFF'}`, 'success');
+      }
+      
+      if (response['^transportSubscribed']) {
+        log('✓ Subscribed to transport changes', 'success');
+      }
+      
+      // Handle all settings responses (grouped and full)
+      const settingsKeys = ['^settings', '^settingsCV', '^settingsGate', '^settingsClock', 
+                            '^settingsMidi', '^settingsDefaults', '^settingsPads', 
+                            '^settingsRecording', '^settingsCommunity', '^settingsUI'];
+      
+      for (const key of settingsKeys) {
+        if (response[key]) {
+          updateTestResult('Get Settings', true);
+          document.getElementById('settingsBadge').textContent = 'WORKING';
+          document.getElementById('settingsBadge').className = 'feature-badge badge-working';
+          displaySettings(response[key], key);
+          storeLatestJson(response);
+          break;
+        }
+      }
+      
+      if (response['^settingSet']) {
+        log(`✓ ${response['^settingSet'].name} = ${response['^settingSet'].value}`, 'success');
+      }
+      
+      if (response['^setting']) {
+        document.getElementById('settingValue').value = response['^setting'].value;
+        log(`✓ ${response['^setting'].name} = ${response['^setting'].value}`, 'info');
+      }
+      
+      if (response['^firmware']) {
+        const fw = response['^firmware'];
+        const versionStr = `${fw.type} ${fw.major}.${fw.minor}.${fw.patch}`;
+        document.getElementById('fwVersion').textContent = versionStr;
+        document.getElementById('fwVersionDisplay').style.display = 'flex';
+        log(`✓ Firmware: ${versionStr}`, 'success');
+      }
+      
+      if (response['^error']) {
+        log(`✗ Error: ${response['^error'].message}`, 'error');
+      }
+    }
+
+    function updateTestResult(name, passed) {
+      const results = elements.testResults;
+      const html = `<div class="test-item"><span>${name}</span><span class="${passed?'test-pass':'test-fail'}">${passed?'✓ PASS':'✗ FAIL'}</span></div>`;
+      results.innerHTML += html;
+    }
+
+    async function runInitialTests() {
+      await delay(100);
+      sendCommand({ping: {}});
+      await delay(200);
+      sendCommand({dir: {path: "/"}});
+      await delay(200);
+      sendCommand({getTransportState: {}});
+      await delay(200);
+      sendCommand({getFirmwareVersion: {}});
+    }
+
+    async function runAllTests() {
+      log('🧪 Running all tests...', 'info');
+      elements.testResults.innerHTML = '';
+      const tests = [
+        {name: 'Ping', cmd: {ping: {}}},
+        {name: 'List Root', cmd: {dir: {path: "/"}}},
+        {name: 'Get Transport', cmd: {getTransportState: {}}},
+        {name: 'Get Settings', cmd: {getSettings: {}}},
+      ];
+      for (const test of tests) {
+        sendCommand(test.cmd);
+        await delay(500);
+      }
+    }
+
+    function setTempo() {
+      const bpm = parseInt(document.getElementById('tempoInput').value);
+      sendCommand({setTempo: {bpm}});
+    }
+
+    function toggleMetronome() {
+      metronomeOn = !metronomeOn;
+      sendCommand({setMetronome: {enabled: metronomeOn ? 1 : 0}});
+    }
+
+    function updateTempoDisplay(bpm) {
+      document.getElementById('tempoInput').value = bpm;
+      document.getElementById('tempoDisplay').textContent = bpm;
+    }
+
+    function updateMetronomeButton() {
+      const btn = document.getElementById('metronomeBtn');
+      btn.textContent = metronomeOn ? '🔔 Metro: ON' : '🔔 Metro: OFF';
+      btn.style.background = metronomeOn ? '#4caf50' : '#667eea';
+    }
+
+    function setSettingValue() {
+      const name = document.getElementById('settingName').value;
+      const value = parseInt(document.getElementById('settingValue').value);
+      sendCommand({setSetting: {name, value}});
+    }
+
+    function getSingleSetting() {
+      const name = document.getElementById('settingName').value;
+      sendCommand({getSetting: {name}});
+    }
+
+    let latestJsonResponse = null;
+
+    function storeLatestJson(response) {
+      latestJsonResponse = response;
+    }
+
+    function toggleJsonViewer() {
+      const viewer = document.getElementById('jsonViewer');
+      const jsonContent = document.getElementById('jsonContent');
+      
+      if (viewer.style.display === 'none') {
+        if (latestJsonResponse) {
+          jsonContent.textContent = JSON.stringify(latestJsonResponse, null, 2);
+          viewer.style.display = 'block';
+          document.getElementById('showJsonBtn').textContent = 'Hide JSON';
+        } else {
+          log('✗ No JSON response available yet', 'error');
+        }
+      } else {
+        viewer.style.display = 'none';
+        document.getElementById('showJsonBtn').textContent = 'Show JSON';
+      }
+    }
+
+    const settingLabels = {
+      // CV
+      'cv1v': 'CV1 Volts/Oct',
+      'cv2v': 'CV2 Volts/Oct',
+      'cv1t': 'CV1 Transpose',
+      'cv2t': 'CV2 Transpose',
+      'cv1c': 'CV1 Cents',
+      'cv2c': 'CV2 Cents',
+      // Gate
+      'g0': 'Gate 1 Type',
+      'g1': 'Gate 2 Type',
+      'g2': 'Gate 3 Type',
+      'g3': 'Gate 4 Type',
+      'goff': 'Gate Off Time',
+      // Clock
+      'cas': 'Clock Auto Start',
+      'cip': 'Clock In PPQN',
+      'cop': 'Clock Out PPQN',
+      'mco': 'MIDI Clock Out',
+      'tmm': 'Tempo Mag Match',
+      // MIDI
+      'mt': 'MIDI Thru',
+      'mc': 'MIDI Clock In',
+      'mto': 'MIDI Takeover',
+      'mskr': 'MIDI Select Kit Row',
+      // Defaults
+      'ds': 'Default Scale',
+      'dv': 'Default Velocity',
+      'dm': 'Default Magnitude',
+      'br0': 'Bend Range Up',
+      'br1': 'Bend Range Down',
+      'mv': 'Metronome Volume',
+      'si': 'Swing Interval',
+      'ssm': 'Startup Song Mode',
+      'nct': 'New Clip Type',
+      'ulct': 'Use Last Clip Type',
+      'pcp': 'Patch Cable Polarity',
+      // Pads
+      'cact': 'Color Active',
+      'cstp': 'Color Stopped',
+      'cmut': 'Color Muted',
+      'csol': 'Color Solo',
+      'cfil': 'Color Fill',
+      'conc': 'Color Once',
+      'curs': 'Cursor Flash',
+      // Recording
+      'rq': 'Record Quantize',
+      'acm': 'Audio Clip Margins',
+      'cib': 'Count In Bars',
+      'mon': 'Monitor Mode',
+      'trm': 'Threshold Rec Mode',
+      'lrc': 'Loop Rec Command',
+      // UI
+      'pb': 'Pad Brightness',
+      'kl': 'Keyboard Layout',
+      'sl': 'Session Layout',
+      'ht': 'Hold Time',
+      'sbp': 'Sample Preview',
+      'sm': 'Slice Mode',
+      'gam': 'Grid Active Mode',
+      'fav': 'Favorites Layout',
+      'geu': 'Grid Empty Unarm',
+      'gecr': 'Grid Empty Create',
+      'gags': 'Grid Green Select',
+      'kvg': 'Keyboard Vel Glide',
+      'kmg': 'Keyboard Mod Glide',
+      'ac': 'Accessibility',
+      'amh': 'Menu Highlighting',
+      'cpu': 'CPU Indicator',
+      'sharp': 'Use Sharps',
+      // Community Features (auto-numbered cf0-cf21)
+      'cf0': 'Drum Randomizer',
+      'cf1': 'Quantize',
+      'cf2': 'Fine Tempo Knob',
+      'cf3': 'Catch Notes',
+      'cf4': 'Delete Unused Kit Rows',
+      'cf5': 'Alt Golden Knob Delay',
+      'cf6': 'Dev SysEx Allowed',
+      'cf7': 'Sync Scaling Action',
+      'cf8': 'Highlight Incoming',
+      'cf9': 'Display Norns Layout',
+      'cf10': 'Shift Sticky',
+      'cf11': 'Light Shift LED',
+      'cf12': 'DX7 Engine',
+      'cf13': 'Emulated Display',
+      'cf14': 'Keyboard View Exit',
+      'cf15': 'Launch Event Playhead',
+      'cf16': 'Chord Keyboard',
+      'cf17': 'Alt Playback Start',
+      'cf18': 'Grid Loop Pads',
+      'cf19': 'Alt Tap Tempo',
+      'cf20': 'Horizontal Menus',
+      'cf21': 'Trim Audio Clip Start'
+    };
+
+    function displaySettings(settings, category = '^settings') {
+      const display = document.getElementById('settingsDisplay');
+      const categoryName = category.replace('^settings', '').replace('^', '') || 'All';
+      
+      let html = '<div style="font-family: monospace; font-size: 11px;">';
+      html += `<div style="color: #667eea; margin-bottom: 8px; border-bottom: 2px solid #667eea; padding-bottom: 4px; font-weight: bold;">`;
+      html += `✓ ${categoryName} Settings (${Object.keys(settings).length} total)</div>`;
+      
+      Object.entries(settings).sort().forEach(([key, value]) => {
+        const label = settingLabels[key] || key;
+        const color = typeof value === 'boolean' || (typeof value === 'number' && (value === 0 || value === 1))
+          ? (value ? '#4caf50' : '#f44336') 
+          : '#667eea';
+        html += `<div style="padding: 3px; border-bottom: 1px solid #333;">`;
+        html += `<span style="color: #aaa;">${label} (${key}):</span> `;
+        html += `<span style="color: ${color}; font-weight: bold;">${value}</span></div>`;
+      });
+      html += '</div>';
+      display.innerHTML = html;
+    }
+
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<div class="log-timestamp">[${timestamp}]</div><div class="log-${type}">${message}</div>`;
+      elements.messageLog.insertBefore(entry, elements.messageLog.firstChild);
+      while (elements.messageLog.children.length > 100) {
+        elements.messageLog.removeChild(elements.messageLog.lastChild);
+      }
+    }
+
+    function clearLog() {
+      elements.messageLog.innerHTML = '';
+      log('Log cleared', 'info');
+    }
+
+    function listDirectory() {
+      const path = document.getElementById('filePath').value || '/';
+      sendCommand({dir: {path: path}});
+    }
+
+    function openFile() {
+      const path = document.getElementById('filePath').value;
+      if (!path || path === '/') {
+        log('✗ Please enter a file path', 'error');
+        return;
+      }
+      sendCommand({open: {path: path, write: 0}});
+    }
+
+    function displayFileList(files) {
+      const fileResult = document.getElementById('fileResult');
+      if (!files || files.length === 0) {
+        fileResult.innerHTML = '<div style="color: #888;">Empty directory</div>';
+        return;
+      }
+      let html = '<div style="font-family: monospace; font-size: 12px;">';
+      files.forEach(file => {
+        const isDir = file.attr & 0x10;
+        const icon = isDir ? '📁' : '📄';
+        const size = isDir ? '' : ` (${file.size} bytes)`;
+        html += `<div style="padding: 4px;">${icon} ${file.name}${size}</div>`;
+      });
+      html += '</div>';
+      fileResult.innerHTML = html;
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Test write operation
+    async function testWrite() {
+      if (!midiOutput || !midiInput) {
+        log('✗ Please connect to Deluge first', 'error');
+        return;
+      }
+
+      log(`📍 Connected to: ${midiInput.name}`, 'info');
+      log(`📍 Output: ${midiOutput.name}`, 'info');
+      
+      if (!midiInput.name.includes('3')) {
+        log('⚠ WARNING: Not using Port 3! Switch to Port 3 for SysEx operations.', 'warning');
+      }
+
+      try {
+        const testFile = '/test.txt';
+        const testData = 'Hello Deluge!';
+        
+        log('🧪 Testing write operation...', 'info');
+        
+        // Try to open for write
+        log(`→ Opening ${testFile} for write...`, 'info');
+        const openCmd = {open: {path: testFile, write: 1}};
+        const openResp = await sendCommandWithResponse(openCmd, 10000);
+        log(`← Open response: ${JSON.stringify(openResp)}`, 'info');
+        
+        if (openResp['^error']) {
+          throw new Error('Open failed: ' + openResp['^error'].message);
+        }
+        
+        if (!openResp['^open'] || openResp['^open'].fid === 0) {
+          throw new Error('Failed to get file ID');
+        }
+        
+        const fid = openResp['^open'].fid;
+        log(`✓ File opened with FID ${fid}`, 'success');
+        
+        // Write test data
+        const encoded = encode7to8(new TextEncoder().encode(testData));
+        const writeJson = JSON.stringify({write: {fid: fid, addr: 0, size: testData.length}});
+        const seq = getNextSeqNum();
+        const header = [0xF0, 0x00, 0x21, 0x7B, 0x01, 0x04, seq]; // 0x04 = SYSEX_CMD_JSON
+        const jsonBytes = Array.from(writeJson).map(c => c.charCodeAt(0));
+        const msg = [...header, ...jsonBytes, 0x00, ...encoded, 0xF7];
+        
+        log(`→ Writing ${testData.length} bytes...`, 'info');
+        
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Write timeout')), 10000);
+          const handler = (e) => {
+            const data = Array.from(e.data);
+            if (data[0] === 0xF0 && data[5] === 0x05 && data[6] === seq) {
+              clearTimeout(timeout);
+              midiInput.removeEventListener('midimessage', handler);
+              resolve();
+            }
+          };
+          midiInput.addEventListener('midimessage', handler);
+          midiOutput.send(msg);
+        });
+        
+        log(`✓ Write successful`, 'success');
+        
+        // Close
+        const closeCmd = {close: {fid: fid}};
+        await sendCommandWithResponse(closeCmd, 5000);
+        
+        log('✅ Write test PASSED! Firmware upload should work.', 'success');
+        
+      } catch (error) {
+        log(`✗ Write test FAILED: ${error.message}`, 'error');
+        log('This means file uploads won\'t work. Check:', 'error');
+        log('1. Is SD card inserted?', 'error');
+        log('2. Is card write-protected?', 'error');
+        log('3. Connected to Port 3?', 'error');
+      }
+    }
+
+    // Firmware Upload Functions
+    let seqNum = 1;
+    
+    function getNextSeqNum() {
+      seqNum = (seqNum % 127) + 1;
+      return seqNum;
+    }
+
+    function encode7to8(data) {
+      const result = [];
+      for (let i = 0; i < data.length; i += 7) {
+        const chunk = data.slice(i, Math.min(i + 7, data.length));
+        let hiBits = 0;
+        const encoded = [0]; // placeholder for hiBits
+        
+        for (let j = 0; j < chunk.length; j++) {
+          const byte = chunk[j];
+          encoded.push(byte & 0x7F);
+          if (byte & 0x80) {
+            hiBits |= (1 << j);
+          }
+        }
+        encoded[0] = hiBits;
+        result.push(...encoded);
+      }
+      return new Uint8Array(result);
+    }
+
+    async function uploadFirmware() {
+      if (!midiOutput || !midiInput) {
+        log('✗ Please connect to Deluge first', 'error');
+        return;
+      }
+
+      const fileInput = document.getElementById('firmwareFile');
+      const file = fileInput.files[0];
+      
+      if (!file) {
+        log('✗ Please select a firmware file', 'error');
+        return;
+      }
+
+      if (!file.name.endsWith('.bin')) {
+        log('✗ Please select a .bin file', 'error');
+        return;
+      }
+
+      const progressBar = document.getElementById('progressBar');
+      const progressFill = document.getElementById('progressFill');
+      const uploadStatus = document.getElementById('uploadStatus');
+      
+      try {
+        // Read file
+        const arrayBuffer = await file.arrayBuffer();
+        const fileData = new Uint8Array(arrayBuffer);
+        const fileName = '/deluge.bin';
+        
+        log(`📤 Uploading ${file.name} (${fileData.length} bytes)...`, 'info');
+        progressBar.style.display = 'block';
+        uploadStatus.textContent = 'Deleting old firmware...';
+
+        // Step 1: Delete existing file if present
+        try {
+          log(`Attempting to delete ${fileName}...`, 'info');
+          const deleteCmd = {delete: {path: fileName}};
+          const deleteResponse = await sendCommandWithResponse(deleteCmd, 5000);
+          log(`Delete response: ${JSON.stringify(deleteResponse)}`, 'info');
+          log(`✓ Old firmware deleted`, 'success');
+          await delay(500); // Wait for filesystem to settle
+        } catch (e) {
+          log(`⚠ No old firmware to delete: ${e.message}`, 'info');
+        }
+
+        uploadStatus.textContent = 'Opening file...';
+
+        // Step 2: Open file for writing
+        uploadStatus.textContent = 'Opening file for writing...';
+        const openCmd = {open: {path: fileName, write: 1}};
+        log(`Attempting to open ${fileName} for writing...`, 'info');
+        const openResponse = await sendCommandWithResponse(openCmd, 15000); // 15 second timeout
+        
+        log(`Open response: ${JSON.stringify(openResponse)}`, 'info');
+        
+        if (openResponse['^error']) {
+          throw new Error(openResponse['^error'].message || 'Failed to open file');
+        }
+        
+        if (!openResponse['^open']) {
+          throw new Error('No ^open response received: ' + JSON.stringify(openResponse));
+        }
+        
+        const fid = openResponse['^open'].fid;
+        const err = openResponse['^open'].err;
+        
+        if (err && err !== 0) {
+          throw new Error(`File open error code: ${err}`);
+        }
+        
+        log(`✓ File opened (FID: ${fid})`, 'success');
+
+        // Step 3: Write file in chunks
+        const chunkSize = parseInt(document.getElementById('chunkSizeSelect').value) || 1024;
+        const totalChunks = Math.ceil(fileData.length / chunkSize);
+        
+        log(`Using chunk size: ${chunkSize} bytes (${totalChunks} chunks total)`, 'info');
+        
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, fileData.length);
+          const chunk = fileData.slice(start, end);
+          
+          // Encode chunk
+          const encoded = encode7to8(chunk);
+          
+          // Send write command with binary payload
+          const writeCmd = {write: {fid: fid, addr: start, size: chunk.length}};
+          const writeResp = await sendCommandWithResponse(writeCmd, 10000, encoded);
+          
+          // Check for write errors
+          if (writeResp['^write'] && writeResp['^write'].err !== 0) {
+            const errCode = writeResp['^write'].err;
+            let errMsg = `Write error code: ${errCode}`;
+            if (errCode === 9) errMsg = 'SD card not detected or write-protected';
+            else if (errCode === 2) errMsg = 'File not found or permission denied';
+            else if (errCode === 5) errMsg = 'SD card full';
+            throw new Error(errMsg);
+          }
+          
+          // Update progress
+          const progress = ((i + 1) / totalChunks * 100).toFixed(1);
+          progressFill.style.width = `${progress}%`;
+          progressFill.textContent = `${progress}%`;
+          uploadStatus.textContent = `Writing... ${(i + 1)} / ${totalChunks} chunks (${(end / 1024).toFixed(1)} KB)`;
+        }
+
+        log(`✓ All ${totalChunks} chunks written`, 'success');
+
+        // Step 4: Close file
+        await delay(100);
+        const closeCmd = {close: {fid: fid}};
+        await sendCommandWithResponse(closeCmd);
+        
+        log(`✅ Firmware uploaded successfully! Power cycle Deluge with SHIFT+SELECT to flash.`, 'success');
+        uploadStatus.textContent = '✅ Upload complete! Ready to flash firmware.';
+        uploadStatus.style.color = '#4caf50';
+        
+        setTimeout(() => {
+          progressBar.style.display = 'none';
+          uploadStatus.textContent = 'Ready to upload firmware';
+          uploadStatus.style.color = '#888';
+        }, 5000);
+        
+      } catch (error) {
+        log(`✗ Upload failed: ${error.message}`, 'error');
+        uploadStatus.textContent = `✗ Error: ${error.message}`;
+        uploadStatus.style.color = '#f44336';
+        setTimeout(() => {
+          progressBar.style.display = 'none';
+          uploadStatus.textContent = 'Ready to upload firmware';
+          uploadStatus.style.color = '#888';
+        }, 5000);
+      }
+    }
+
+    function sendCommandWithResponse(cmd, timeoutMs = 10000, binaryPayload = null) {
+      return new Promise((resolve, reject) => {
+        const json = JSON.stringify(cmd);
+        const seq = getNextSeqNum();
+        const header = [0xF0, 0x00, 0x21, 0x7B, 0x01, 0x04, seq]; // 0x04 = SYSEX_CMD_JSON
+        const jsonBytes = Array.from(json).map(c => c.charCodeAt(0));
+        
+        let msg;
+        if (binaryPayload) {
+          // Write command with binary data
+          const separator = [0x00];
+          msg = [...header, ...jsonBytes, ...separator, ...binaryPayload, 0xF7];
+        } else {
+          msg = [...header, ...jsonBytes, 0xF7];
+        }
+        
+        log(`→ ${json}`, 'info');
+        
+        const timeout = setTimeout(() => {
+          midiInput.removeEventListener('midimessage', handler);
+          reject(new Error(`Command timeout (${timeoutMs}ms): ${JSON.stringify(cmd).substring(0, 50)}`));
+        }, timeoutMs);
+        
+        const handler = (e) => {
+          const data = Array.from(e.data);
+          // Check for SYSEX_CMD_JSON_REPLY (0x05) and matching seq
+          if (data[0] === 0xF0 && data[5] === 0x05 && data[6] === seq) {
+            clearTimeout(timeout);
+            midiInput.removeEventListener('midimessage', handler);
+            
+            const jsonEnd = data.indexOf(0xF7);
+            const jsonBytes = data.slice(7, jsonEnd);
+            const jsonStr = String.fromCharCode(...jsonBytes);
+            log(`← ${jsonStr}`, 'info');
+            
+            try {
+              const response = JSON.parse(jsonStr);
+              resolve(response);
+            } catch (err) {
+              reject(new Error(`Invalid JSON response: ${jsonStr.substring(0, 50)}`));
+            }
+          }
+        };
+        
+        midiInput.addEventListener('midimessage', handler);
+        midiOutput.send(msg);
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setupEventListeners();
+      log('UI initialized. Click Connect to begin.', 'info');
+    });
+  </script>
+</body>
+</html>
+
