@@ -34,6 +34,7 @@
 #include "hid/matrix/matrix_driver.h"
 #include "io/midi/device_specific/specific_midi_device.h"
 #include "io/midi/midi_engine.h"
+#include "io/midi/sysex/transport_sysex.h"
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
 #include "model/clip/audio_clip.h"
@@ -3032,6 +3033,9 @@ void Song::setBPM(float tempoBPM, bool shouldLogAction) {
 	int32_t pos = -1; // means use the live position
 	tempoParam->autoParam->setCurrentValueInResponseToUserInput(intTempo, tempoParam, shouldLogAction, pos);
 	setBPMInner(tempoBPM, shouldLogAction);
+
+	// Notify SysEx subscribers of tempo change
+	TransportSysex::notifyTempoChanged((int32_t)tempoBPM);
 }
 
 void Song::clearTempoAutomation() {

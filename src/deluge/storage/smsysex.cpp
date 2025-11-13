@@ -11,6 +11,8 @@
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/sysex.h"
+#include "io/midi/sysex/settings_sysex.h"
+#include "io/midi/sysex/transport_sysex.h"
 #include "memory/general_memory_allocator.h"
 #include "processing/engines/audio_engine.h"
 #include "scheduler_api.h"
@@ -755,6 +757,33 @@ void smSysex::doPing(MIDICable& cable, JsonDeserializer& reader) {
 	sendMsg(cable, jWriter);
 }
 
+void smSysex::showPopup(MIDICable& cable, JsonDeserializer& reader) {
+	String message;
+	char const* tagName;
+	reader.match('{');
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "message") || !strcmp(tagName, "text")) {
+			reader.readTagOrAttributeValueString(&message);
+		}
+		else {
+			reader.exitTag();
+		}
+	}
+	reader.match('}');
+
+	if (message.isEmpty()) {
+		message.set("SysEx OK");
+	}
+
+	display->displayPopup(message.get());
+
+	startReply(jWriter, reader);
+	jWriter.writeOpeningTag("^popup", false, true);
+	jWriter.writeAttribute("message", message.get());
+	jWriter.closeTag(true);
+	sendMsg(cable, jWriter);
+}
+
 uint32_t smSysex::decodeDataFromReader(JsonDeserializer& reader, uint8_t* dest, uint32_t destMax) {
 	char zip = 0;
 	if (!reader.readChar(&zip) || zip) // skip separator, fail if not there.
@@ -840,6 +869,90 @@ void smSysex::handleNextSysEx() {
 		}
 		else if (!strcmp(tagName, "ping")) {
 			doPing(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "popup")) {
+			showPopup(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "transport")) {
+			TransportSysex::transportControl(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setTempo")) {
+			TransportSysex::setTempo(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getTransportState")) {
+			TransportSysex::getTransportState(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setSwing")) {
+			TransportSysex::setSwing(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setMetronome")) {
+			TransportSysex::setMetronome(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "subscribeTransport")) {
+			TransportSysex::subscribeTransport(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "unsubscribeTransport")) {
+			TransportSysex::unsubscribeTransport(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettings")) {
+			SettingsSysex::getAllSettings(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsCV")) {
+			SettingsSysex::getSettingsCV(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsGate")) {
+			SettingsSysex::getSettingsGate(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsClock")) {
+			SettingsSysex::getSettingsClock(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsMidi")) {
+			SettingsSysex::getSettingsMidi(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsDefaults")) {
+			SettingsSysex::getSettingsDefaults(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsPads")) {
+			SettingsSysex::getSettingsPads(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsRecording")) {
+			SettingsSysex::getSettingsRecording(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsUI")) {
+			SettingsSysex::getSettingsUI(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSettingsCommunity")) {
+			SettingsSysex::getSettingsCommunity(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setSetting")) {
+			SettingsSysex::setSetting(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSetting")) {
+			SettingsSysex::getSetting(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getFirmwareVersion")) {
+			SettingsSysex::getFirmwareVersion(de.cable, parser);
 			goto done;
 		}
 		parser.exitTag();
