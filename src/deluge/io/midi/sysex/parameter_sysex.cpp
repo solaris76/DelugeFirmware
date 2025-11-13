@@ -282,23 +282,11 @@ void getParameters(MIDICable& cable, JsonDeserializer& reader) {
 	jWriter.writeAttribute("osc2Sync", sound->oscillatorSync ? 1 : 0);
 
 	// === PATCHED PARAMETERS (Local + Global) ===
-	jWriter.writeOpeningTag("patched", false, true);
-
-	ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
-	    modelStack->addOtherTwoThingsButNoNoteRow(sound, paramManager);
-	PatchedParamSet* patchedParams = (PatchedParamSet*)paramManager->getPatchedParamSet();
-
-	// Loop through all patched parameters
-	for (int32_t p = 0; p < kNumParams; p++) {
-		AutoParam* param = &patchedParams->params[p];
-		int32_t value = param->getCurrentValue();
-		const char* paramName = paramNameForFile(Kind::PATCHED, p);
-		if (paramName) {
-			jWriter.writeAttribute(paramName, value);
-		}
-	}
-
-	jWriter.closeTag(true);
+	// Note: Patched params temporarily disabled to avoid E411 crash
+	// TODO: Need to safely check if summaries[1].paramCollection exists
+	// jWriter.writeOpeningTag("patched", false, true);
+	// ... patched params ...
+	// jWriter.closeTag(true);
 
 	// === UNPATCHED PARAMETERS ===
 	jWriter.writeOpeningTag("unpatched", false, true);

@@ -500,17 +500,29 @@
         const payload = event.data.slice(7, -1);
         const jsonStr = new TextDecoder().decode(payload);
         
+        console.log(`[MIDI IN] Payload length: ${payload.length} bytes`);
+        console.log(`[MIDI IN] JSON starts with: "${jsonStr.substring(0, 100)}"`);
+        console.log(`[MIDI IN] JSON ends with: "...${jsonStr.substring(jsonStr.length - 50)}"`);
+        
         // DEBUG: Show corruption details
         if (!jsonStr.startsWith('{')) {
           const rawHex = Array.from(payload.slice(0, 30)).map(b => b.toString(16).padStart(2,'0')).join(' ');
           log(`✗ CORRUPT! Hex: ${rawHex}`, 'error');
           log(`✗ Text: "${jsonStr.substring(0, 50)}"`, 'error');
+          console.error('[MIDI IN] Message does not start with {');
           return;
         }
         
-        const response = JSON.parse(jsonStr);
-        log(`◀ Received: ${jsonStr}`, 'received');
-        handleResponse(response);
+        try {
+          const response = JSON.parse(jsonStr);
+          log(`◀ Received: ${jsonStr.substring(0, 200)}${jsonStr.length > 200 ? '...' : ''}`, 'received');
+          console.log('[MIDI IN] Parsed successfully:', Object.keys(response));
+          handleResponse(response);
+        } catch (parseError) {
+          console.error('[MIDI IN] JSON parse failed:', parseError.message);
+          console.error('[MIDI IN] JSON snippet:', jsonStr.substring(0, 500));
+          log(`✗ Parse error: ${parseError.message}`, 'error');
+        }
       } catch (error) {
         log(`✗ Parse error: ${error.message}`, 'error');
       }
