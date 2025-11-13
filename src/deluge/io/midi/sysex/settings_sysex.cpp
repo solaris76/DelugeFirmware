@@ -9,6 +9,7 @@
 #include "storage/flash_storage.h"
 #include "storage/smsysex.h"
 #include "version.h"
+#include <cstdlib>
 #include <cstring>
 
 extern JsonSerializer jWriter;
@@ -395,6 +396,150 @@ void setSetting(MIDICable& cable, JsonDeserializer& reader) {
 	}
 	else if (!strcmp(name, "sharp")) {
 		FlashStorage::defaultUseSharps = (value != 0);
+	}
+	// Extended MIDI
+	else if (!strcmp(name, "mto")) {
+		midiEngine.midiTakeover = static_cast<decltype(midiEngine.midiTakeover)>(value);
+	}
+	else if (!strcmp(name, "mskr")) {
+		midiEngine.midiSelectKitRow = (value != 0);
+	}
+	// Global MIDI Commands
+	else if (!strncmp(name, "gmc", 3) && strlen(name) >= 5) {
+		// Parse gmc#c or gmc#n format
+		int cmdIdx = atoi(name + 3); // Get number after "gmc"
+		if (cmdIdx >= 0 && cmdIdx < kNumGlobalMIDICommands) {
+			char suffix = name[strlen(name) - 1]; // Last char: 'c' or 'n'
+			if (suffix == 'c') {
+				midiEngine.globalMIDICommands[cmdIdx].channelOrZone = value;
+			}
+			else if (suffix == 'n') {
+				midiEngine.globalMIDICommands[cmdIdx].noteOrCC = value;
+			}
+		}
+	}
+	// CV Settings
+	else if (!strcmp(name, "cv1v")) {
+		cvEngine.cvChannels[0].voltsPerOctave = value;
+	}
+	else if (!strcmp(name, "cv2v")) {
+		cvEngine.cvChannels[1].voltsPerOctave = value;
+	}
+	else if (!strcmp(name, "cv1t")) {
+		cvEngine.cvChannels[0].transpose = value;
+	}
+	else if (!strcmp(name, "cv2t")) {
+		cvEngine.cvChannels[1].transpose = value;
+	}
+	else if (!strcmp(name, "cv1c")) {
+		cvEngine.cvChannels[0].cents = value;
+	}
+	else if (!strcmp(name, "cv2c")) {
+		cvEngine.cvChannels[1].cents = value;
+	}
+	// Gate Settings
+	else if (!strcmp(name, "g0")) {
+		cvEngine.gateChannels[0].mode = static_cast<GateType>(value);
+	}
+	else if (!strcmp(name, "g1")) {
+		cvEngine.gateChannels[1].mode = static_cast<GateType>(value);
+	}
+	else if (!strcmp(name, "g2")) {
+		cvEngine.gateChannels[2].mode = static_cast<GateType>(value);
+	}
+	else if (!strcmp(name, "g3")) {
+		cvEngine.gateChannels[3].mode = static_cast<GateType>(value);
+	}
+	else if (!strcmp(name, "goff")) {
+		cvEngine.minGateOffTime = value;
+	}
+	// Clock Settings
+	else if (!strcmp(name, "cas")) {
+		playbackHandler.analogClockInputAutoStart = (value != 0);
+	}
+	else if (!strcmp(name, "cip")) {
+		playbackHandler.analogInTicksPPQN = static_cast<decltype(playbackHandler.analogInTicksPPQN)>(value);
+	}
+	else if (!strcmp(name, "cop")) {
+		playbackHandler.analogOutTicksPPQN = static_cast<decltype(playbackHandler.analogOutTicksPPQN)>(value);
+	}
+	else if (!strcmp(name, "mco")) {
+		playbackHandler.midiOutClockEnabled = (value != 0);
+	}
+	else if (!strcmp(name, "tmm")) {
+		playbackHandler.tempoMagnitudeMatchingEnabled = (value != 0);
+	}
+	// Pad Colors
+	else if (!strcmp(name, "cact")) {
+		activeColourMenu.value = static_cast<decltype(activeColourMenu.value)>(value);
+	}
+	else if (!strcmp(name, "cstp")) {
+		stoppedColourMenu.value = static_cast<decltype(stoppedColourMenu.value)>(value);
+	}
+	else if (!strcmp(name, "cmut")) {
+		mutedColourMenu.value = static_cast<decltype(mutedColourMenu.value)>(value);
+	}
+	else if (!strcmp(name, "csol")) {
+		soloColourMenu.value = static_cast<decltype(soloColourMenu.value)>(value);
+	}
+	else if (!strcmp(name, "cfil")) {
+		fillColourMenu.value = static_cast<decltype(fillColourMenu.value)>(value);
+	}
+	else if (!strcmp(name, "conc")) {
+		onceColourMenu.value = static_cast<decltype(onceColourMenu.value)>(value);
+	}
+	else if (!strcmp(name, "curs")) {
+		PadLEDs::flashCursor = (value != 0);
+	}
+	// Extended Recording Settings
+	else if (!strcmp(name, "cib")) {
+		playbackHandler.countInBars = value;
+	}
+	else if (!strcmp(name, "mon")) {
+		AudioEngine::inputMonitoringMode = static_cast<decltype(AudioEngine::inputMonitoringMode)>(value);
+	}
+	else if (!strcmp(name, "trm")) {
+		FlashStorage::defaultThresholdRecordingMode =
+		    static_cast<decltype(FlashStorage::defaultThresholdRecordingMode)>(value);
+	}
+	else if (!strcmp(name, "lrc")) {
+		FlashStorage::defaultLoopRecordingCommand =
+		    static_cast<decltype(FlashStorage::defaultLoopRecordingCommand)>(value);
+	}
+	// Extended Defaults
+	else if (!strcmp(name, "ssm")) {
+		FlashStorage::defaultStartupSongMode = static_cast<decltype(FlashStorage::defaultStartupSongMode)>(value);
+	}
+	else if (!strcmp(name, "nct")) {
+		FlashStorage::defaultNewClipType = static_cast<decltype(FlashStorage::defaultNewClipType)>(value);
+	}
+	else if (!strcmp(name, "ulct")) {
+		FlashStorage::defaultUseLastClipType = (value != 0);
+	}
+	else if (!strcmp(name, "pcp")) {
+		FlashStorage::defaultPatchCablePolarity = static_cast<decltype(FlashStorage::defaultPatchCablePolarity)>(value);
+	}
+	// Extended UI Settings
+	else if (!strcmp(name, "sm")) {
+		FlashStorage::defaultSliceMode = static_cast<decltype(FlashStorage::defaultSliceMode)>(value);
+	}
+	else if (!strcmp(name, "gam")) {
+		FlashStorage::defaultGridActiveMode = static_cast<decltype(FlashStorage::defaultGridActiveMode)>(value);
+	}
+	else if (!strcmp(name, "fav")) {
+		FlashStorage::defaultFavouritesLayout = static_cast<decltype(FlashStorage::defaultFavouritesLayout)>(value);
+	}
+	else if (!strcmp(name, "amh")) {
+		FlashStorage::accessibilityMenuHighlighting =
+		    static_cast<decltype(FlashStorage::accessibilityMenuHighlighting)>(value);
+	}
+	// Community Features (cf0-cf21+)
+	else if (!strncmp(name, "cf", 2) && strlen(name) >= 3) {
+		int featureIdx = atoi(name + 2); // Get number after "cf"
+		if (featureIdx >= 0 && featureIdx < RuntimeFeatureSettingType::MaxElement) {
+			RuntimeFeatureSettingType type = static_cast<RuntimeFeatureSettingType>(featureIdx);
+			runtimeFeatureSettings.set(type, (RuntimeFeatureStateToggle)value);
+		}
 	}
 	else {
 		success = false;

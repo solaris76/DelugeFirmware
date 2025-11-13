@@ -187,58 +187,139 @@
         </div>
         <div class="button-group">
           <button class="btn btn-small" id="getCommunityBtn" disabled>Community (22)</button>
-          <button class="btn" id="getAllSettingsBtn" disabled>🌟 Get ALL (68)</button>
+          <button class="btn" id="getAllSettingsBtn" disabled>🌟 Get ALL Groups (100+)</button>
           <button class="btn btn-small" id="showJsonBtn" disabled>Show JSON</button>
         </div>
         <div class="form-group">
           <label>Setting:</label>
           <select id="settingName" disabled style="font-size: 12px;">
-            <optgroup label="MIDI">
+            <optgroup label="🎹 MIDI">
               <option value="mt">MIDI Thru (0/1)</option>
               <option value="mc">MIDI Clock In (0/1)</option>
+              <option value="mto">MIDI Takeover Mode (0-2)</option>
+              <option value="mskr">MIDI Select Kit Row (0/1)</option>
+              <option value="gmc0c">Global MIDI Cmd 0 Channel (0-15)</option>
+              <option value="gmc0n">Global MIDI Cmd 0 Note (0-127)</option>
+              <option value="gmc1c">Global MIDI Cmd 1 Channel (0-15)</option>
+              <option value="gmc1n">Global MIDI Cmd 1 Note (0-127)</option>
+              <option value="gmc2c">Global MIDI Cmd 2 Channel (0-15)</option>
+              <option value="gmc2n">Global MIDI Cmd 2 Note (0-127)</option>
+              <option value="gmc3c">Global MIDI Cmd 3 Channel (0-15)</option>
+              <option value="gmc3n">Global MIDI Cmd 3 Note (0-127)</option>
+              <option value="gmc4c">Global MIDI Cmd 4 Channel (0-15)</option>
+              <option value="gmc4n">Global MIDI Cmd 4 Note (0-127)</option>
+              <option value="gmc5c">Global MIDI Cmd 5 Channel (0-15)</option>
+              <option value="gmc5n">Global MIDI Cmd 5 Note (0-127)</option>
+              <option value="gmc6c">Global MIDI Cmd 6 Channel (0-15)</option>
+              <option value="gmc6n">Global MIDI Cmd 6 Note (0-127)</option>
+              <option value="gmc7c">Global MIDI Cmd 7 Channel (0-15)</option>
+              <option value="gmc7n">Global MIDI Cmd 7 Note (0-127)</option>
+              <option value="gmc8c">Global MIDI Cmd 8 Channel (0-15)</option>
+              <option value="gmc8n">Global MIDI Cmd 8 Note (0-127)</option>
+              <option value="gmc9c">Global MIDI Cmd 9 Channel (0-15)</option>
+              <option value="gmc9n">Global MIDI Cmd 9 Note (0-127)</option>
+              <option value="gmc10c">Global MIDI Cmd 10 Channel (0-15)</option>
+              <option value="gmc10n">Global MIDI Cmd 10 Note (0-127)</option>
             </optgroup>
-            <optgroup label="Defaults">
+            <optgroup label="🔌 CV/Gate">
+              <option value="cv1v">CV1 Volts/Octave (0-2)</option>
+              <option value="cv2v">CV2 Volts/Octave (0-2)</option>
+              <option value="cv1t">CV1 Transpose (-96 to +96)</option>
+              <option value="cv2t">CV2 Transpose (-96 to +96)</option>
+              <option value="cv1c">CV1 Cents (-100 to +100)</option>
+              <option value="cv2c">CV2 Cents (-100 to +100)</option>
+              <option value="g0">Gate 1 Mode (0-4)</option>
+              <option value="g1">Gate 2 Mode (0-4)</option>
+              <option value="g2">Gate 3 Mode (0-4)</option>
+              <option value="g3">Gate 4 Mode (0-4)</option>
+              <option value="goff">Gate Off Time (0-255)</option>
+            </optgroup>
+            <optgroup label="⏱️ Clock/Tempo">
+              <option value="cas">Clock Auto Start (0/1)</option>
+              <option value="cip">Clock In PPQN (0-4)</option>
+              <option value="cop">Clock Out PPQN (0-4)</option>
+              <option value="mco">MIDI Clock Out (0/1)</option>
+              <option value="tmm">Tempo Magnitude Matching (0/1)</option>
+            </optgroup>
+            <optgroup label="🎨 Pad Colors">
+              <option value="cact">Active Color (0-7)</option>
+              <option value="cstp">Stopped Color (0-7)</option>
+              <option value="cmut">Muted Color (0-7)</option>
+              <option value="csol">Solo Color (0-7)</option>
+              <option value="cfil">Fill Color (0-7)</option>
+              <option value="conc">Once Color (0-7)</option>
+              <option value="curs">Flash Cursor (0/1)</option>
+            </optgroup>
+            <optgroup label="🔴 Recording">
+              <option value="rq">Record Quantize (0-8)</option>
+              <option value="acm">Audio Clip Margins (0/1)</option>
+              <option value="cib">Count In Bars (0-4)</option>
+              <option value="mon">Input Monitoring (0-2)</option>
+              <option value="trm">Threshold Recording Mode (0-2)</option>
+              <option value="lrc">Loop Recording Command (0-1)</option>
+            </optgroup>
+            <optgroup label="📋 Defaults">
               <option value="ds">Default Scale (0-11)</option>
-              <option value="dv">Default Velocity (0-127)</option>
+              <option value="dv">Default Velocity (1-127)</option>
               <option value="dm">Default Magnitude (-3 to 3)</option>
               <option value="br0">Bend Range Up (0-96)</option>
               <option value="br1">Bend Range Down (0-96)</option>
+              <option value="mv">Metronome Volume (0-127)</option>
+              <option value="si">Swing Interval (0-255)</option>
+              <option value="ssm">Startup Song Mode (0-2)</option>
+              <option value="nct">New Clip Type (0-1)</option>
+              <option value="ulct">Use Last Clip Type (0/1)</option>
+              <option value="pcp">Patch Cable Polarity (0-1)</option>
             </optgroup>
-            <optgroup label="UI/Display">
+            <optgroup label="🖥️ UI/Display">
               <option value="pb">Pad Brightness (1-25)</option>
               <option value="kl">Keyboard Layout (0-3)</option>
               <option value="sl">Session Layout (0-2)</option>
               <option value="ht">Hold Time (0-255)</option>
+              <option value="sbp">Sample Browser Preview (0-2)</option>
+              <option value="sm">Slice Mode (0-1)</option>
+              <option value="gam">Grid Active Mode (0-1)</option>
+              <option value="fav">Favourites Layout (0-1)</option>
+              <option value="geu">Grid Empty Pads Unarm (0/1)</option>
+              <option value="gecr">Grid Empty Pads Create+Rec (0/1)</option>
+              <option value="gags">Grid Allow Green Selection (0/1)</option>
+              <option value="kvg">Keyboard Velocity Glide (0/1)</option>
+              <option value="kmg">Keyboard Modwheel Glide (0/1)</option>
+              <option value="ac">Accessibility Shortcuts (0/1)</option>
+              <option value="amh">Accessibility Menu Highlight (0-1)</option>
+              <option value="cpu">CPU Indicator (0/1)</option>
+              <option value="sharp">Use Sharps (0/1)</option>
             </optgroup>
-            <optgroup label="Recording">
-              <option value="rq">Record Quantize (0-8)</option>
-              <option value="acm">Audio Clip Margins (0/1)</option>
-              <option value="sbp">Sample Preview (0-2)</option>
-            </optgroup>
-            <optgroup label="Metronome/Swing">
-              <option value="mv">Metronome Volume (0-127)</option>
-              <option value="si">Swing Interval (0-255)</option>
-            </optgroup>
-            <optgroup label="Automation">
+            <optgroup label="🤖 Automation">
               <option value="ai">Auto Interpolate (0/1)</option>
               <option value="aclr">Auto Clear (0/1)</option>
               <option value="ash">Auto Shift (0/1)</option>
               <option value="ann">Auto Nudge Note (0/1)</option>
-              <option value="adps">Disable Audition Shortcuts (0/1)</option>
+              <option value="adps">Disable Audition Pad Shortcuts (0/1)</option>
             </optgroup>
-            <optgroup label="Grid">
-              <option value="geu">Empty Pads Unarm (0/1)</option>
-              <option value="gecr">Empty Pads Create+Rec (0/1)</option>
-              <option value="gags">Allow Green Selection (0/1)</option>
-            </optgroup>
-            <optgroup label="Keyboard">
-              <option value="kvg">Velocity Glide (0/1)</option>
-              <option value="kmg">Modwheel Glide (0/1)</option>
-            </optgroup>
-            <optgroup label="Misc">
-              <option value="ac">Accessibility Shortcuts (0/1)</option>
-              <option value="cpu">CPU Indicator (0/1)</option>
-              <option value="sharp">Use Sharps (0/1)</option>
+            <optgroup label="✨ Community Features">
+              <option value="cf0">Emulated Display (0/1)</option>
+              <option value="cf1">Fine Tempo Knob (0/1)</option>
+              <option value="cf2">Quantize (0/1)</option>
+              <option value="cf3">Mod Encoders (0/1)</option>
+              <option value="cf4">Dev SysEx (0/1)</option>
+              <option value="cf5">Alt Golden Encoder (0/1)</option>
+              <option value="cf6">Quantized Stutter (0/1)</option>
+              <option value="cf7">Auto Scroll (0/1)</option>
+              <option value="cf8">Sticky Shift (0/1)</option>
+              <option value="cf9">Light Shift LED (0/1)</option>
+              <option value="cf10">Display Norns Layout (0/1)</option>
+              <option value="cf11">Enable Catchup (0/1)</option>
+              <option value="cf12">Allow Insecure Develop (0/1)</option>
+              <option value="cf13">Sync Scaling Action (0/1)</option>
+              <option value="cf14">Highlight Incoming Notes (0/1)</option>
+              <option value="cf15">Display Volume (0/1)</option>
+              <option value="cf16">Shortcuts (0/1)</option>
+              <option value="cf17">Shortcuts Version (0-1)</option>
+              <option value="cf18">Drum Randomizer (0/1)</option>
+              <option value="cf19">Alt Tap Tempo (0/1)</option>
+              <option value="cf20">Horizontal Menus (0/1)</option>
+              <option value="cf21">Trim Audio Clip Start (0/1)</option>
             </optgroup>
           </select>
         </div>
@@ -482,7 +563,7 @@
       document.getElementById('getRecordingBtn').addEventListener('click', () => sendCommand({getSettingsRecording: {}}));
       document.getElementById('getUIBtn').addEventListener('click', () => sendCommand({getSettingsUI: {}}));
       document.getElementById('getCommunityBtn').addEventListener('click', () => sendCommand({getSettingsCommunity: {}}));
-      document.getElementById('getAllSettingsBtn').addEventListener('click', () => sendCommand({getSettings: {}}));
+      document.getElementById('getAllSettingsBtn').addEventListener('click', getAllSettingsSequentially);
       document.getElementById('setSettingBtn').addEventListener('click', setSettingValue);
       document.getElementById('getSettingBtn').addEventListener('click', getSingleSetting);
       document.getElementById('showJsonBtn').addEventListener('click', toggleJsonViewer);
@@ -762,7 +843,22 @@
           updateTestResult('Get Settings', true);
           document.getElementById('settingsBadge').textContent = 'WORKING';
           document.getElementById('settingsBadge').className = 'feature-badge badge-working';
-          displaySettings(response[key], key);
+
+          // If we're accumulating (Get ALL clicked), store this group
+          if (settingsGroupsExpected > 0) {
+            accumulatedSettings[key] = response[key];
+            settingsGroupsReceived++;
+
+            // Display accumulated settings when all groups received
+            if (settingsGroupsReceived >= settingsGroupsExpected) {
+              displayAllSettingsGroups(accumulatedSettings);
+              settingsGroupsExpected = 0; // Reset
+            }
+          } else {
+            // Single group request, display immediately
+            displaySettings(response[key], key);
+          }
+
           storeLatestJson(response);
           break;
         }
@@ -896,6 +992,43 @@
     function getSingleSetting() {
       const name = document.getElementById('settingName').value;
       sendCommand({getSetting: {name}});
+    }
+
+    // Storage for accumulated settings when fetching all groups
+    let accumulatedSettings = {};
+    let settingsGroupsExpected = 0;
+    let settingsGroupsReceived = 0;
+
+    async function getAllSettingsSequentially() {
+      log('📥 Fetching ALL settings from all groups...', 'info');
+
+      // Reset accumulator
+      accumulatedSettings = {};
+      settingsGroupsReceived = 0;
+
+      // Call all settings group getters sequentially
+      const settingsGroups = [
+        {getSettings: {}},           // Basic settings
+        {getSettingsCV: {}},         // CV channel settings
+        {getSettingsGate: {}},       // Gate settings
+        {getSettingsClock: {}},      // Clock/tempo settings
+        {getSettingsMidi: {}},       // MIDI + global MIDI commands
+        {getSettingsDefaults: {}},   // Default values
+        {getSettingsPads: {}},       // Pad color settings
+        {getSettingsRecording: {}},  // Recording settings
+        {getSettingsUI: {}},         // UI settings
+        {getSettingsCommunity: {}}   // Community features
+      ];
+
+      settingsGroupsExpected = settingsGroups.length;
+
+      for (const cmd of settingsGroups) {
+        sendCommand(cmd);
+        // Small delay between requests to avoid overwhelming the device
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      log('✓ All settings groups requested', 'success');
     }
 
     function setParameterValue() {
@@ -1061,6 +1194,42 @@
       'cf20': 'Horizontal Menus',
       'cf21': 'Trim Audio Clip Start'
     };
+
+    function displayAllSettingsGroups(allSettings) {
+      const display = document.getElementById('settingsDisplay');
+
+      let totalCount = 0;
+      Object.values(allSettings).forEach(settings => {
+        totalCount += Object.keys(settings).length;
+      });
+
+      let html = '<div style="font-family: monospace; font-size: 11px;">';
+      html += `<div style="color: #667eea; margin-bottom: 12px; border-bottom: 3px solid #667eea; padding-bottom: 6px; font-weight: bold; font-size: 13px;">`;
+      html += `✓ ALL Settings (${totalCount} total from ${Object.keys(allSettings).length} groups)</div>`;
+
+      // Display each category
+      Object.entries(allSettings).forEach(([category, settings]) => {
+        const categoryName = category.replace('^settings', '').replace('^', '') || 'Basic';
+        html += `<div style="margin-bottom: 15px; background: #1a1a1a; padding: 8px; border-radius: 4px;">`;
+        html += `<div style="color: #764ba2; margin-bottom: 6px; font-weight: bold; font-size: 12px;">`;
+        html += `📁 ${categoryName} (${Object.keys(settings).length})</div>`;
+
+        Object.entries(settings).sort().forEach(([key, value]) => {
+          const label = settingLabels[key] || key;
+          const color = typeof value === 'boolean' || (typeof value === 'number' && (value === 0 || value === 1))
+            ? (value ? '#4caf50' : '#f44336')
+            : '#667eea';
+          html += `<div style="padding: 2px 0; padding-left: 8px; border-bottom: 1px solid #333;">`;
+          html += `<span style="color: #888; font-size: 10px;">${label} (${key}):</span> `;
+          html += `<span style="color: ${color}; font-weight: bold;">${value}</span></div>`;
+        });
+
+        html += '</div>';
+      });
+
+      html += '</div>';
+      display.innerHTML = html;
+    }
 
     function displaySettings(settings, category = '^settings') {
       const display = document.getElementById('settingsDisplay');
