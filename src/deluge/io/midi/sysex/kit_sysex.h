@@ -42,6 +42,19 @@ void removeDrum(MIDICable& cable, JsonDeserializer& reader);
 // Set drum properties (name, MIDI input, etc.)
 void setDrumProperty(MIDICable& cable, JsonDeserializer& reader);
 
+// Set sample file for a SoundDrum
+void setDrumSample(MIDICable& cable, JsonDeserializer& reader);
+
+// Get all parameters for a drum
+void getDrumParameters(MIDICable& cable, JsonDeserializer& reader);
+
+// Set a parameter for a drum
+void setDrumParameter(MIDICable& cable, JsonDeserializer& reader);
+
+// Subscribe / unsubscribe to drum parameter changes
+void subscribeDrumParameters(MIDICable& cable, JsonDeserializer& reader);
+void unsubscribeDrumParameters(MIDICable& cable, JsonDeserializer& reader);
+
 // Create a new empty kit
 void createKit(MIDICable& cable, JsonDeserializer& reader);
 
@@ -62,5 +75,6 @@ void notifyDrumAdded(int32_t drumIndex);
 void notifyDrumRemoved(int32_t drumIndex);
 void notifyDrumChanged(int32_t drumIndex);
 void notifyKitChanged();
+void notifyDrumParameterChanged(int32_t drumIndex, char const* paramName, int32_t value);
 
 } // namespace KitSysex

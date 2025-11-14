@@ -25,11 +25,23 @@
 #include "model/instrument/kit.h"
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
+#include "model/sample/sample.h"
 #include "model/song/song.h"
+#include "modulation/params/param.h"
+#include "modulation/params/param_collection.h"
 #include "modulation/params/param_manager.h"
+#include "modulation/params/param_set.h"
+#include "processing/sound/sound.h"
 #include "processing/sound/sound_drum.h"
+#include "storage/audio/audio_file.h"
+#include "storage/audio/audio_file_holder.h"
+#include "storage/multi_range/multi_range.h"
 #include "storage/smsysex.h"
+#include <algorithm>
 #include <cstring>
+#include <new>
+
+using namespace deluge::modulation::params;
 
 extern JsonSerializer jWriter;
 extern Song* currentSong;
@@ -41,6 +53,12 @@ static bool kitSubscribed = false;
 
 // Separate JsonSerializer for async notifications to avoid reentrancy
 static JsonSerializer kitNotifyWriter;
+static JsonSerializer drumParamNotifyWriter;
+
+// Drum parameter subscription tracking
+const uint32_t MAX_DRUM_PARAM_SUBSCRIBERS = 4;
+static MIDICable* drumParamSubscribers[MAX_DRUM_PARAM_SUBSCRIBERS] = {nullptr};
+static uint32_t drumParamSubscriberCount = 0;
 
 // Helper to get the current kit from the active clip
 static Kit* getCurrentKit() {
@@ -355,14 +373,17 @@ void addDrum(MIDICable& cable, JsonDeserializer& reader) {
 	kit->addDrum(newDrum);
 
 	// Setup ParamManager for SoundDrums
+	ParamManagerForTimeline initialSoundParamManager;
+	ParamManager* paramManagerForNewNoteRow = nullptr;
+
 	if (drumType == DrumType::SOUND) {
-		ParamManagerForTimeline paramManager;
-		Error error = paramManager.setupWithPatching();
+		Error error = initialSoundParamManager.setupWithPatching();
 		if (error == Error::NONE) {
-			Sound::initParams(&paramManager);
+			Sound::initParams(&initialSoundParamManager);
 			SoundDrum* soundDrum = (SoundDrum*)newDrum;
-			soundDrum->setupAsBlankSynth(&paramManager);
-			currentSong->backUpParamManager(soundDrum, currentSong->getCurrentClip(), &paramManager, true);
+			soundDrum->setupAsBlankSynth(&initialSoundParamManager);
+			currentSong->backUpParamManager(soundDrum, currentSong->getCurrentClip(), &initialSoundParamManager, true);
+			paramManagerForNewNoteRow = &initialSoundParamManager;
 		}
 	}
 
@@ -382,8 +403,11 @@ void addDrum(MIDICable& cable, JsonDeserializer& reader) {
 			ModelStackWithNoteRow* modelStackWithNoteRow = modelStack->addNoteRow(newNoteRowIndex, newNoteRow);
 
 			// Associate drum with note row (using backed up param manager for SoundDrums)
-			ParamManager emptyParamManager;
-			newNoteRow->setDrum(newDrum, kit, modelStackWithNoteRow, nullptr, &emptyParamManager);
+			ParamManager* startingParamManager =
+			    (paramManagerForNewNoteRow && paramManagerForNewNoteRow->containsAnyMainParamCollections())
+			        ? paramManagerForNewNoteRow
+			        : nullptr;
+			newNoteRow->setDrum(newDrum, kit, modelStackWithNoteRow, nullptr, startingParamManager);
 		}
 	}
 
@@ -590,6 +614,430 @@ void setDrumProperty(MIDICable& cable, JsonDeserializer& reader) {
 	smSysex::sendMsg(cable, jWriter);
 }
 
+// Set sample file for a SoundDrum
+void setDrumSample(MIDICable& cable, JsonDeserializer& reader) {
+	jWriter.reset();
+	jWriter.setMemoryBased();
+
+	smSysex::startReply(jWriter, reader);
+	jWriter.writeOpeningTag("^drumSampleSet", false, true);
+
+	Kit* kit = getCurrentKit();
+	if (!kit) {
+		jWriter.writeAttribute("error", "No kit loaded");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	// Parse parameters
+	int32_t drumIndex = -1;
+	String filePath;
+
+	char const* tagName;
+	reader.match('{');
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "index")) {
+			drumIndex = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "path")) {
+			reader.readTagOrAttributeValueString(&filePath);
+		}
+		else {
+			reader.exitTag();
+		}
+	}
+	reader.match('}');
+
+	if (drumIndex < 0 || filePath.isEmpty()) {
+		jWriter.writeAttribute("error", "Missing parameters");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	Drum* drum = kit->getDrumFromIndex(drumIndex);
+	if (!drum || drum->type != DrumType::SOUND) {
+		jWriter.writeAttribute("error", "Drum not found or not a SoundDrum");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	SoundDrum* soundDrum = (SoundDrum*)drum;
+
+	// Get the current clip to find the NoteRow
+	Clip* clip = currentSong->getCurrentClip();
+	if (!clip || clip->type != ClipType::INSTRUMENT) {
+		jWriter.writeAttribute("error", "No instrument clip selected");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	InstrumentClip* instrumentClip = (InstrumentClip*)clip;
+	NoteRow* noteRow = instrumentClip->getNoteRowForDrum(drum);
+	if (!noteRow) {
+		jWriter.writeAttribute("error", "Drum has no NoteRow");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	// Setup as sample if not already
+	if (soundDrum->sources[0].oscType != OscType::SAMPLE) {
+		ParamManagerForTimeline* paramManager = &noteRow->paramManager;
+		if (!paramManager->containsAnyMainParamCollections()) {
+			Error error = paramManager->setupWithPatching();
+			if (error != Error::NONE) {
+				jWriter.writeAttribute("error", "Failed to setup ParamManager");
+				jWriter.closeTag(true);
+				smSysex::sendMsg(cable, jWriter);
+				return;
+			}
+			Sound::initParams(paramManager);
+		}
+		soundDrum->setupAsSample(paramManager);
+		currentSong->backUpParamManager(soundDrum, clip, paramManager, true);
+	}
+
+	// Get source and range
+	Source* source = &soundDrum->sources[0];
+	MultiRange* range = source->getOrCreateFirstRange();
+	if (!range) {
+		jWriter.writeAttribute("error", "Failed to create range");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	// Set the file path and load
+	AudioFileHolder* holder = range->getAudioFileHolder();
+	holder->setAudioFile(nullptr);
+	holder->filePath.set(&filePath);
+
+	Error loadError = holder->loadFile(false, true, true, CLUSTER_ENQUEUE, nullptr, false);
+	if (loadError != Error::NONE) {
+		jWriter.writeAttribute("error", "Failed to load sample file");
+		jWriter.writeAttribute("loadError", (int32_t)loadError);
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	// Update drum name from filename
+	const char* pathStr = filePath.get();
+	const char* fileName = strrchr(pathStr, '/');
+	if (!fileName) {
+		fileName = pathStr;
+	}
+	else {
+		fileName++; // Skip the '/'
+	}
+
+	String newName;
+	newName.set(fileName);
+	// Remove extension
+	char* dot = strrchr(newName.get(), '.');
+	if (dot) {
+		*dot = '\0';
+		newName.shorten((uint32_t)dot - (uint32_t)newName.get());
+	}
+
+	if (!newName.isEmpty()) {
+		// Make name unique if needed
+		if (kit->getDrumFromName(newName.get())) {
+			kit->makeDrumNameUnique(&newName, 2);
+		}
+		soundDrum->name.set(&newName);
+	}
+
+	// Set repeat mode based on sample length
+	if (holder->audioFile) {
+		Sample* sample = (Sample*)holder->audioFile;
+		source->repeatMode = (sample->getLengthInMSec() < 2002) ? SampleRepeatMode::ONCE : SampleRepeatMode::CUT;
+	}
+
+	kit->beenEdited();
+
+	jWriter.writeAttribute("success", 1);
+	jWriter.writeAttribute("index", drumIndex);
+	jWriter.writeAttribute("path", filePath.get());
+	if (!newName.isEmpty()) {
+		jWriter.writeAttribute("name", newName.get());
+	}
+
+	// Trigger UI refresh
+	renderingNeededRegardlessOfUI(0, 0xFFFFFFFF);
+
+	// Notify subscribers
+	if (kitSubscribed) {
+		notifyDrumChanged(drumIndex);
+	}
+
+	jWriter.closeTag(true);
+	smSysex::sendMsg(cable, jWriter);
+}
+
+// Get all parameters for a drum
+void getDrumParameters(MIDICable& cable, JsonDeserializer& reader) {
+	jWriter.reset();
+	jWriter.setMemoryBased();
+
+	smSysex::startReply(jWriter, reader);
+	jWriter.writeOpeningTag("^drumParameters", false, true);
+
+	Kit* kit = getCurrentKit();
+	if (!kit) {
+		jWriter.writeAttribute("error", "No kit loaded");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	// Parse drum index from request
+	int32_t drumIndex = -1;
+	char const* tagName;
+	reader.match('{');
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "index")) {
+			drumIndex = reader.readTagOrAttributeValueInt();
+		}
+		else {
+			reader.exitTag();
+		}
+	}
+	reader.match('}');
+
+	if (drumIndex < 0) {
+		jWriter.writeAttribute("error", "Invalid drum index");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	Drum* drum = kit->getDrumFromIndex(drumIndex);
+	if (!drum || drum->type != DrumType::SOUND) {
+		jWriter.writeAttribute("error", "Drum not found or not a SoundDrum");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	SoundDrum* soundDrum = (SoundDrum*)drum;
+
+	// Get the NoteRow for this drum to access its ParamManager
+	Clip* clip = currentSong->getCurrentClip();
+	if (!clip || clip->type != ClipType::INSTRUMENT) {
+		jWriter.writeAttribute("error", "No instrument clip selected");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	InstrumentClip* instrumentClip = (InstrumentClip*)clip;
+	int32_t noteRowIndex;
+	NoteRow* noteRow = instrumentClip->getNoteRowForDrum(drum, &noteRowIndex);
+	if (!noteRow) {
+		jWriter.writeAttribute("error", "Drum has no NoteRow");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	ParamManagerForTimeline* paramManager = &noteRow->paramManager;
+
+	// Setup model stack
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+	ModelStackWithNoteRow* modelStackWithNoteRow =
+	    modelStack->addNoteRow(instrumentClip->getNoteRowId(noteRow, noteRowIndex), noteRow);
+	ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+	    modelStackWithNoteRow->addOtherTwoThings(soundDrum, paramManager);
+
+	jWriter.writeAttribute("index", drumIndex);
+
+	// === UNPATCHED PARAMETERS ===
+	if (paramManager->summaries[0].paramCollection) {
+		UnpatchedParamSet* unpatchedParams = (UnpatchedParamSet*)paramManager->summaries[0].paramCollection;
+
+		for (int32_t p = 0; p < UNPATCHED_SOUND_MAX_NUM; p++) {
+			int32_t value = unpatchedParams->getValue(p);
+			const char* paramName = paramNameForFile(Kind::UNPATCHED_SOUND, p + UNPATCHED_START);
+			// Skip invalid params (nullptr or "none")
+			if (paramName && strcmp(paramName, "none") != 0) {
+				jWriter.writeAttribute(paramName, value);
+			}
+		}
+	}
+
+	// === PATCHED PARAMETERS ===
+	if (paramManager->summaries[1].paramCollection) {
+		PatchedParamSet* patchedParams = (PatchedParamSet*)paramManager->summaries[1].paramCollection;
+
+		for (int32_t p = 0; p < kNumParams; p++) {
+			AutoParam* param = &patchedParams->params[p];
+			int32_t value = param->getCurrentValue();
+			const char* paramName = paramNameForFile(Kind::PATCHED, p);
+			// Skip invalid params (nullptr or "none")
+			if (paramName && strcmp(paramName, "none") != 0) {
+				jWriter.writeAttribute(paramName, value);
+			}
+		}
+	}
+
+	jWriter.closeTag(true);
+	smSysex::sendMsg(cable, jWriter);
+}
+
+// Set a parameter for a drum
+void setDrumParameter(MIDICable& cable, JsonDeserializer& reader) {
+	jWriter.reset();
+	jWriter.setMemoryBased();
+
+	smSysex::startReply(jWriter, reader);
+	jWriter.writeOpeningTag("^drumParameterSet", false, true);
+
+	Kit* kit = getCurrentKit();
+	if (!kit) {
+		jWriter.writeAttribute("error", "No kit loaded");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	// Parse parameters
+	int32_t drumIndex = -1;
+	String paramName;
+	int32_t intValue = 0;
+
+	char const* tagName;
+	reader.match('{');
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "index")) {
+			drumIndex = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "name")) {
+			reader.readTagOrAttributeValueString(&paramName);
+		}
+		else if (!strcmp(tagName, "value")) {
+			intValue = reader.readTagOrAttributeValueInt();
+		}
+		else {
+			reader.exitTag();
+		}
+	}
+	reader.match('}');
+
+	if (drumIndex < 0 || paramName.isEmpty()) {
+		jWriter.writeAttribute("error", "Missing parameters");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	Drum* drum = kit->getDrumFromIndex(drumIndex);
+	if (!drum || drum->type != DrumType::SOUND) {
+		jWriter.writeAttribute("error", "Drum not found or not a SoundDrum");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	SoundDrum* soundDrum = (SoundDrum*)drum;
+
+	// Get the NoteRow for this drum
+	Clip* clip = currentSong->getCurrentClip();
+	if (!clip || clip->type != ClipType::INSTRUMENT) {
+		jWriter.writeAttribute("error", "No instrument clip selected");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	InstrumentClip* instrumentClip = (InstrumentClip*)clip;
+	int32_t noteRowIndex;
+	NoteRow* noteRow = instrumentClip->getNoteRowForDrum(drum, &noteRowIndex);
+	if (!noteRow) {
+		jWriter.writeAttribute("error", "Drum has no NoteRow");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	ParamManagerForTimeline* paramManager = &noteRow->paramManager;
+
+	// Setup model stack
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+	ModelStackWithNoteRow* modelStackWithNoteRow =
+	    modelStack->addNoteRow(instrumentClip->getNoteRowId(noteRow, noteRowIndex), noteRow);
+	ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+	    modelStackWithNoteRow->addOtherTwoThings(soundDrum, paramManager);
+
+	const char* name = paramName.get();
+	bool success = false;
+	const char* errorMsg = "Unknown parameter";
+
+	// Try unpatched params first
+	if (paramManager->summaries[0].paramCollection) {
+		UnpatchedParamSet* unpatchedParams = (UnpatchedParamSet*)paramManager->summaries[0].paramCollection;
+		ParamCollection* unpatchedParamCollection = paramManager->summaries[0].paramCollection;
+
+		for (int32_t p = 0; p < UNPATCHED_SOUND_MAX_NUM; p++) {
+			const char* checkName = paramNameForFile(Kind::UNPATCHED_SOUND, p + UNPATCHED_START);
+			if (checkName && !strcmp(name, checkName)) {
+				AutoParam* param = &unpatchedParams->params[p];
+				ModelStackWithAutoParam* modelStackWithParam = modelStackWithThreeMainThings->addParam(
+				    unpatchedParamCollection, &paramManager->summaries[0], p, param);
+				param->setCurrentValueInResponseToUserInput(intValue, modelStackWithParam);
+				success = true;
+				break;
+			}
+		}
+	}
+
+	// Try patched params if not found
+	if (!success && paramManager->summaries[1].paramCollection) {
+		PatchedParamSet* patchedParams = (PatchedParamSet*)paramManager->summaries[1].paramCollection;
+		ParamCollection* patchedParamCollection = paramManager->summaries[1].paramCollection;
+
+		for (int32_t p = 0; p < kNumParams; p++) {
+			const char* checkName = paramNameForFile(Kind::PATCHED, p);
+			if (checkName && !strcmp(name, checkName)) {
+				AutoParam* param = &patchedParams->params[p];
+				ModelStackWithAutoParam* modelStackWithParam = modelStackWithThreeMainThings->addParam(
+				    patchedParamCollection, &paramManager->summaries[1], p, param);
+				param->setCurrentValueInResponseToUserInput(intValue, modelStackWithParam);
+				success = true;
+				break;
+			}
+		}
+	}
+
+	if (success) {
+		jWriter.writeAttribute("name", name);
+		jWriter.writeAttribute("value", intValue);
+		jWriter.writeAttribute("success", 1);
+		jWriter.writeAttribute("index", drumIndex);
+
+		// Trigger UI refresh
+		uiNeedsRendering(getCurrentUI());
+
+		// Notify subscribers
+		if (kitSubscribed) {
+			notifyDrumChanged(drumIndex);
+		}
+	}
+	else {
+		jWriter.writeAttribute("error", errorMsg);
+		jWriter.writeAttribute("name", name);
+	}
+
+	jWriter.closeTag(true);
+	smSysex::sendMsg(cable, jWriter);
+}
+
 // Create a new empty kit
 void createKit(MIDICable& cable, JsonDeserializer& reader) {
 	jWriter.reset();
@@ -663,6 +1111,69 @@ void unsubscribeKit(MIDICable& cable, JsonDeserializer& reader) {
 	smSysex::sendMsg(cable, jWriter);
 }
 
+// Subscribe to drum parameter changes
+void subscribeDrumParameters(MIDICable& cable, JsonDeserializer& reader) {
+	jWriter.reset();
+	jWriter.setMemoryBased();
+
+	for (uint32_t i = 0; i < drumParamSubscriberCount; i++) {
+		if (drumParamSubscribers[i] == &cable) {
+			smSysex::startReply(jWriter, reader);
+			jWriter.writeOpeningTag("^drumParametersSubscribed", false, true);
+			jWriter.writeAttribute("status", "already");
+			jWriter.closeTag(true);
+			smSysex::sendMsg(cable, jWriter);
+			return;
+		}
+	}
+
+	if (drumParamSubscriberCount < MAX_DRUM_PARAM_SUBSCRIBERS) {
+		drumParamSubscribers[drumParamSubscriberCount++] = &cable;
+		smSysex::startReply(jWriter, reader);
+		jWriter.writeOpeningTag("^drumParametersSubscribed", false, true);
+		jWriter.writeAttribute("status", "success");
+		jWriter.writeAttribute("count", drumParamSubscriberCount);
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+	}
+	else {
+		smSysex::startReply(jWriter, reader);
+		jWriter.writeOpeningTag("^error", false, true);
+		jWriter.writeAttribute("message", "Max drum parameter subscribers reached");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+	}
+}
+
+// Unsubscribe from drum parameter changes
+void unsubscribeDrumParameters(MIDICable& cable, JsonDeserializer& reader) {
+	jWriter.reset();
+	jWriter.setMemoryBased();
+
+	for (uint32_t i = 0; i < drumParamSubscriberCount; i++) {
+		if (drumParamSubscribers[i] == &cable) {
+			for (uint32_t j = i; j < drumParamSubscriberCount - 1; j++) {
+				drumParamSubscribers[j] = drumParamSubscribers[j + 1];
+			}
+			drumParamSubscribers[drumParamSubscriberCount - 1] = nullptr;
+			drumParamSubscriberCount--;
+
+			smSysex::startReply(jWriter, reader);
+			jWriter.writeOpeningTag("^drumParametersUnsubscribed", false, true);
+			jWriter.writeAttribute("status", "success");
+			jWriter.closeTag(true);
+			smSysex::sendMsg(cable, jWriter);
+			return;
+		}
+	}
+
+	smSysex::startReply(jWriter, reader);
+	jWriter.writeOpeningTag("^drumParametersUnsubscribed", false, true);
+	jWriter.writeAttribute("status", "not_subscribed");
+	jWriter.closeTag(true);
+	smSysex::sendMsg(cable, jWriter);
+}
+
 // Notify subscribers when a drum is added
 void notifyDrumAdded(int32_t drumIndex) {
 	if (!kitSubscribed) {
@@ -725,6 +1236,28 @@ void notifyKitChanged() {
 	kitNotifyWriter.closeTag(true);
 
 	// TODO: Send via MIDI SysEx - need cable reference
+}
+
+void notifyDrumParameterChanged(int32_t drumIndex, char const* paramName, int32_t value) {
+	if (drumParamSubscriberCount == 0 || !paramName) {
+		return;
+	}
+
+	for (uint32_t i = 0; i < drumParamSubscriberCount; i++) {
+		if (!drumParamSubscribers[i]) {
+			continue;
+		}
+
+		drumParamNotifyWriter.reset();
+		drumParamNotifyWriter.setMemoryBased();
+		smSysex::startDirect(drumParamNotifyWriter);
+		drumParamNotifyWriter.writeOpeningTag("^drumParameterChanged", false, true);
+		drumParamNotifyWriter.writeAttribute("index", drumIndex);
+		drumParamNotifyWriter.writeAttribute("name", paramName);
+		drumParamNotifyWriter.writeAttribute("value", value);
+		drumParamNotifyWriter.closeTag(true);
+		smSysex::sendMsg(*drumParamSubscribers[i], drumParamNotifyWriter);
+	}
 }
 
 } // namespace KitSysex

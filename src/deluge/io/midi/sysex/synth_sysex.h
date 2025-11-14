@@ -22,7 +22,7 @@
 class JsonDeserializer;
 class MIDICable;
 
-namespace ParameterSysex {
+namespace SynthSysex {
 
 // Get all parameters for the currently selected sound/clip
 void getParameters(MIDICable& cable, JsonDeserializer& reader);
@@ -46,6 +46,6 @@ void subscribeParameters(MIDICable& cable, JsonDeserializer& reader);
 void unsubscribeParameters(MIDICable& cable, JsonDeserializer& reader);
 
 // Notify subscribers of parameter change (called internally)
-void notifyParameterChanged(int32_t paramKind, int32_t paramId, int32_t value);
+void notifyParameterChanged(int32_t paramKind, int32_t paramId, const char* paramName, int32_t value);
 
-} // namespace ParameterSysex
+} // namespace SynthSysex

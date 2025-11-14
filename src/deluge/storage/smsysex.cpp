@@ -12,8 +12,8 @@
 #include "io/midi/midi_engine.h"
 #include "io/midi/sysex.h"
 #include "io/midi/sysex/kit_sysex.h"
-#include "io/midi/sysex/parameter_sysex.h"
 #include "io/midi/sysex/settings_sysex.h"
+#include "io/midi/sysex/synth_sysex.h"
 #include "io/midi/sysex/transport_sysex.h"
 #include "memory/general_memory_allocator.h"
 #include "processing/engines/audio_engine.h"
@@ -958,31 +958,31 @@ void smSysex::handleNextSysEx() {
 			goto done;
 		}
 		else if (!strcmp(tagName, "getParameters")) {
-			ParameterSysex::getParameters(de.cable, parser);
+			SynthSysex::getParameters(de.cable, parser);
 			goto done;
 		}
 		else if (!strcmp(tagName, "setParameter")) {
-			ParameterSysex::setParameter(de.cable, parser);
+			SynthSysex::setParameter(de.cable, parser);
 			goto done;
 		}
 		else if (!strcmp(tagName, "getParameter")) {
-			ParameterSysex::getParameter(de.cable, parser);
+			SynthSysex::getParameter(de.cable, parser);
 			goto done;
 		}
 		else if (!strcmp(tagName, "getPatchCables")) {
-			ParameterSysex::getPatchCables(de.cable, parser);
+			SynthSysex::getPatchCables(de.cable, parser);
 			goto done;
 		}
 		else if (!strcmp(tagName, "setPatchCable")) {
-			ParameterSysex::setPatchCable(de.cable, parser);
+			SynthSysex::setPatchCable(de.cable, parser);
 			goto done;
 		}
 		else if (!strcmp(tagName, "subscribeParameters")) {
-			ParameterSysex::subscribeParameters(de.cable, parser);
+			SynthSysex::subscribeParameters(de.cable, parser);
 			goto done;
 		}
 		else if (!strcmp(tagName, "unsubscribeParameters")) {
-			ParameterSysex::unsubscribeParameters(de.cable, parser);
+			SynthSysex::unsubscribeParameters(de.cable, parser);
 			goto done;
 		}
 		// Kit commands
@@ -1008,6 +1008,26 @@ void smSysex::handleNextSysEx() {
 		}
 		else if (!strcmp(tagName, "setDrumProperty")) {
 			KitSysex::setDrumProperty(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setDrumSample")) {
+			KitSysex::setDrumSample(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getDrumParameters")) {
+			KitSysex::getDrumParameters(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setDrumParameter")) {
+			KitSysex::setDrumParameter(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "subscribeDrumParameters")) {
+			KitSysex::subscribeDrumParameters(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "unsubscribeDrumParameters")) {
+			KitSysex::unsubscribeDrumParameters(de.cable, parser);
 			goto done;
 		}
 		else if (!strcmp(tagName, "createKit")) {

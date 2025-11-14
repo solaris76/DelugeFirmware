@@ -15,7 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "io/midi/sysex/parameter_sysex.h"
+#include "io/midi/sysex/synth_sysex.h"
 #include "gui/ui/ui.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
@@ -40,10 +40,12 @@ extern Song* currentSong;
 
 using namespace deluge::modulation::params;
 
-namespace ParameterSysex {
+namespace SynthSysex {
 
 // Track subscription state
-static bool parametersSubscribed = false;
+constexpr uint32_t MAX_PARAMETER_SUBSCRIBERS = 4;
+static MIDICable* parameterSubscribers[MAX_PARAMETER_SUBSCRIBERS] = {nullptr};
+static uint32_t parameterSubscriberCount = 0;
 
 // Separate JsonSerializer for async notifications to avoid reentrancy
 static JsonSerializer paramNotifyWriter;
@@ -572,11 +574,6 @@ void setParameter(MIDICable& cable, JsonDeserializer& reader) {
 
 		// Trigger UI refresh to show the new value
 		uiNeedsRendering(getCurrentUI());
-
-		// Notify subscribers if enabled
-		if (parametersSubscribed) {
-			notifyParameterChanged(0, 0, intValue); // TODO: pass proper kind/id
-		}
 	}
 	else {
 		jWriter.writeAttribute("error", errorMsg);
@@ -658,13 +655,33 @@ void subscribeParameters(MIDICable& cable, JsonDeserializer& reader) {
 	jWriter.reset();
 	jWriter.setMemoryBased();
 
-	parametersSubscribed = true;
-
 	smSysex::startReply(jWriter, reader);
 	jWriter.writeOpeningTag("^parametersSubscribed", false, true);
-	jWriter.writeAttribute("subscribed", 1);
-	jWriter.closeTag(true);
-	smSysex::sendMsg(cable, jWriter);
+
+	for (uint32_t i = 0; i < parameterSubscriberCount; i++) {
+		if (parameterSubscribers[i] == &cable) {
+			jWriter.writeAttribute("status", "already");
+			jWriter.writeAttribute("subscribed", (int32_t)1);
+			jWriter.closeTag(true);
+			smSysex::sendMsg(cable, jWriter);
+			return;
+		}
+	}
+
+	if (parameterSubscriberCount < MAX_PARAMETER_SUBSCRIBERS) {
+		parameterSubscribers[parameterSubscriberCount++] = &cable;
+		jWriter.writeAttribute("status", "success");
+		jWriter.writeAttribute("subscribed", (int32_t)1);
+		jWriter.writeAttribute("count", parameterSubscriberCount);
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+	}
+	else {
+		jWriter.writeAttribute("status", "error");
+		jWriter.writeAttribute("message", "Max subscribers reached");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+	}
 }
 
 // Unsubscribe from parameter changes
@@ -672,33 +689,53 @@ void unsubscribeParameters(MIDICable& cable, JsonDeserializer& reader) {
 	jWriter.reset();
 	jWriter.setMemoryBased();
 
-	parametersSubscribed = false;
-
 	smSysex::startReply(jWriter, reader);
 	jWriter.writeOpeningTag("^parametersUnsubscribed", false, true);
-	jWriter.writeAttribute("subscribed", false);
+
+	for (uint32_t i = 0; i < parameterSubscriberCount; i++) {
+		if (parameterSubscribers[i] == &cable) {
+			for (uint32_t j = i; j < parameterSubscriberCount - 1; j++) {
+				parameterSubscribers[j] = parameterSubscribers[j + 1];
+			}
+			parameterSubscribers[parameterSubscriberCount - 1] = nullptr;
+			parameterSubscriberCount--;
+
+			jWriter.writeAttribute("status", "success");
+			jWriter.writeAttribute("subscribed", (int32_t)0);
+			jWriter.closeTag(true);
+			smSysex::sendMsg(cable, jWriter);
+			return;
+		}
+	}
+
+	jWriter.writeAttribute("status", "not_subscribed");
+	jWriter.writeAttribute("subscribed", (int32_t)0);
 	jWriter.closeTag(true);
 	smSysex::sendMsg(cable, jWriter);
 }
 
 // Notify subscribers of parameter change
-void notifyParameterChanged(int32_t paramKind, int32_t paramId, int32_t value) {
-	if (!parametersSubscribed) {
+void notifyParameterChanged(int32_t paramKind, int32_t paramId, const char* paramName, int32_t value) {
+	if (parameterSubscriberCount == 0 || !paramName) {
 		return;
 	}
 
-	paramNotifyWriter.reset();
-	paramNotifyWriter.setMemoryBased();
+	for (uint32_t i = 0; i < parameterSubscriberCount; i++) {
+		if (!parameterSubscribers[i]) {
+			continue;
+		}
 
-	paramNotifyWriter.writeOpeningTag("^parameterChanged", false, true);
-	paramNotifyWriter.writeAttribute("kind", paramKind);
-	paramNotifyWriter.writeAttribute("id", paramId);
-	paramNotifyWriter.writeAttribute("value", value);
-	paramNotifyWriter.closeTag(true);
-
-	// Send via MIDI SysEx
-	// TODO: Need to get cable reference - for now disabled
-	// midiEngine.sendSysex(paramNotifyWriter.buffer, paramNotifyWriter.size);
+		paramNotifyWriter.reset();
+		paramNotifyWriter.setMemoryBased();
+		smSysex::startDirect(paramNotifyWriter);
+		paramNotifyWriter.writeOpeningTag("^parameterChanged", false, true);
+		paramNotifyWriter.writeAttribute("kind", paramKind);
+		paramNotifyWriter.writeAttribute("id", paramId);
+		paramNotifyWriter.writeAttribute("name", paramName);
+		paramNotifyWriter.writeAttribute("value", value);
+		paramNotifyWriter.closeTag(true);
+		smSysex::sendMsg(*parameterSubscribers[i], paramNotifyWriter);
+	}
 }
 
-} // namespace ParameterSysex
+} // namespace SynthSysex

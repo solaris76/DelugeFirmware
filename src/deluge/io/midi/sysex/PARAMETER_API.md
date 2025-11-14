@@ -6,7 +6,7 @@ Comprehensive parameter access for Deluge synth sounds via SysEx.
 
 ✅ **Implemented:**
 - `getParameters` - Retrieve all parameters from currently selected synth sound
-- SysEx command dispatching 
+- SysEx command dispatching
 - JSON serialization for all parameter types
 
 🚧 **In Progress:**
@@ -97,7 +97,7 @@ Comprehensive parameter access for Deluge synth sounds via SysEx.
       "env1Release": int32,
       "env2Release": int32,
       "env3Release": int32,
-      
+
       // Global params (whole sound):
       "volumePostFX": int32,
       "volumePostReverbSend": int32,
@@ -201,8 +201,8 @@ All patched parameters use **32-bit signed integer** values:
 - **Port 3**: Use Deluge USB Port 3 for SysEx communication
 
 ### File Locations
-- `src/deluge/io/midi/sysex/parameter_sysex.h` - API declarations
-- `src/deluge/io/midi/sysex/parameter_sysex.cpp` - Implementation
+- `src/deluge/io/midi/sysex/synth_sysex.h` - API declarations
+- `src/deluge/io/midi/sysex/synth_sysex.cpp` - Implementation
 - `src/deluge/storage/smsysex.cpp` - Command dispatcher integration
 
 ### Error Handling
@@ -255,7 +255,7 @@ delugeOut.send(msg);
 
 ---
 
-**Status:** Alpha - Core retrieval working, write operations in development  
-**Firmware Branch:** `sysex`  
+**Status:** Alpha - Core retrieval working, write operations in development
+**Firmware Branch:** `sysex`
 **Last Updated:** 2025-11-13
 

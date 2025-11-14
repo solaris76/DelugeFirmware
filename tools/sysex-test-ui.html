@@ -569,6 +569,52 @@
             <button class="btn btn-small" id="removeDrumBtn" disabled style="margin-left: 10px;">Remove Drum</button>
           </div>
         </div>
+        <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 8px; font-size: 12px;">🎧 Set Drum Sample</div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Drum Index:</label>
+            <input type="number" id="drumSampleIndexInput" min="0" max="127" value="0" style="width: 100px; font-size: 11px;" disabled>
+          </div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Sample Path (e.g. SAMPLES/KICK.WAV):</label>
+            <input type="text" id="drumSamplePathInput" placeholder="Enter SD card path" style="width: 100%; font-size: 11px;" disabled>
+          </div>
+          <div>
+            <button class="btn btn-small" id="setDrumSampleBtn" disabled>Load Sample</button>
+          </div>
+        </div>
+        <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 8px; font-size: 12px;">📊 Drum Parameters</div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Drum Index:</label>
+            <input type="number" id="drumParamIndexInput" min="0" max="127" value="0" style="width: 100px; font-size: 11px;" disabled>
+            <button class="btn btn-small" id="getDrumParametersBtn" disabled style="margin-left: 10px;">Get Parameters</button>
+          </div>
+          <div id="drumParametersDisplay" class="log-container" style="max-height: 250px; font-size: 11px;">
+            <div style="color: #888;">Drum parameters will appear here</div>
+          </div>
+        </div>
+        <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 8px; font-size: 12px;">✏️ Set Drum Parameter</div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Drum Index:</label>
+            <input type="number" id="drumParamSetIndexInput" min="0" max="127" value="0" style="width: 100px; font-size: 11px;" disabled>
+          </div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Parameter Name (e.g. oscAWavetablePosition):</label>
+            <input type="text" id="drumParamNameInput" placeholder="Enter parameter name" style="width: 100%; font-size: 11px;" disabled>
+          </div>
+          <div class="form-group">
+            <label style="font-size: 11px;">Value (decimal or 0x hex):</label>
+            <input type="text" id="drumParamValueInput" placeholder="Enter value" style="width: 100%; font-size: 11px;" disabled>
+          </div>
+          <div>
+            <button class="btn btn-small" id="setDrumParamBtn" disabled>Set Drum Parameter</button>
+          </div>
+        </div>
+        <div style="margin-bottom: 12px; text-align: right;">
+          <button class="btn btn-small" id="subscribeDrumParamsBtn" disabled>Subscribe Drum Params</button>
+        </div>
         <div id="kitDisplay" class="log-container" style="max-height: 400px; margin-top: 10px; font-size: 11px;">
           <div style="color: #888;">Kit/Drum info will appear here</div>
         </div>
@@ -597,6 +643,7 @@
     let messageCount = 0;
     let connected = false;
     let metronomeOn = false;
+    let drumParamSubscriptionActive = false;
 
     const elements = {
       connectBtn: document.getElementById('connectBtn'),
@@ -670,6 +717,10 @@
       document.getElementById('addDrumBtn').addEventListener('click', addDrum);
       document.getElementById('setDrumPropertyBtn').addEventListener('click', setDrumProperty);
       document.getElementById('removeDrumBtn').addEventListener('click', removeDrum);
+      document.getElementById('setDrumSampleBtn').addEventListener('click', setDrumSample);
+      document.getElementById('getDrumParametersBtn').addEventListener('click', getDrumParameters);
+      document.getElementById('setDrumParamBtn').addEventListener('click', setDrumParameter);
+      document.getElementById('subscribeDrumParamsBtn').addEventListener('click', toggleDrumParamSubscription);
     }
 
     async function connectToDeluge() {
@@ -796,12 +847,25 @@
       document.getElementById('setDrumPropertyBtn').disabled = false;
       document.getElementById('removeDrumIndexInput').disabled = false;
       document.getElementById('removeDrumBtn').disabled = false;
+      document.getElementById('drumSampleIndexInput').disabled = false;
+      document.getElementById('drumSamplePathInput').disabled = false;
+      document.getElementById('setDrumSampleBtn').disabled = false;
+      document.getElementById('drumParamIndexInput').disabled = false;
+      document.getElementById('getDrumParametersBtn').disabled = false;
+      document.getElementById('drumParamSetIndexInput').disabled = false;
+      document.getElementById('drumParamNameInput').disabled = false;
+      document.getElementById('drumParamValueInput').disabled = false;
+      document.getElementById('setDrumParamBtn').disabled = false;
+      document.getElementById('subscribeDrumParamsBtn').disabled = false;
+      updateDrumParamSubscribeButton();
     }
 
     function disableControls() {
       document.querySelectorAll('.btn').forEach(btn => {
         if (btn.id !== 'connectBtn' && btn.id !== 'clearLogBtn') btn.disabled = true;
       });
+      drumParamSubscriptionActive = false;
+      updateDrumParamSubscribeButton();
     }
 
     function sendCommand(jsonObj) {
@@ -1063,6 +1127,53 @@
         }
       }
 
+      if (response['^drumSampleSet']) {
+        const r = response['^drumSampleSet'];
+        if (r.success) {
+          log(`✓ Loaded sample for drum ${r.index}: ${r.path}`, 'success');
+          sendCommand({getDrumInfo: {index: r.index}});
+        } else if (r.error) {
+          log(`✗ Sample load failed: ${r.error}`, 'error');
+        }
+      }
+
+      if (response['^drumParameters']) {
+        displayDrumParameters(response['^drumParameters']);
+        storeLatestJson(response);
+      }
+
+      if (response['^drumParameterSet']) {
+        const r = response['^drumParameterSet'];
+        if (r.success) {
+          log(`✓ Drum ${r.index}: ${r.name} = ${r.value}`, 'success');
+          sendCommand({getDrumParameters: {index: r.index}});
+        } else if (r.error) {
+          log(`✗ Drum parameter set failed: ${r.error}`, 'error');
+        }
+      }
+
+      if (response['^drumParametersSubscribed']) {
+        const status = response['^drumParametersSubscribed'].status || 'success';
+        drumParamSubscriptionActive = (status === 'success' || status === 'already');
+        updateDrumParamSubscribeButton();
+        log(status === 'already' ? 'ℹ️ Drum parameter subscription already active' : '✓ Subscribed to drum parameters', 'success');
+      }
+
+      if (response['^drumParametersUnsubscribed']) {
+        const status = response['^drumParametersUnsubscribed'].status || 'success';
+        drumParamSubscriptionActive = false;
+        updateDrumParamSubscribeButton();
+        log(status === 'success' ? '✓ Unsubscribed from drum parameters' : 'ℹ️ Drum parameter subscription not active', 'info');
+      }
+
+      if (response['^drumParameterChanged']) {
+        const change = response['^drumParameterChanged'];
+        log(`🔄 Drum ${change.index}: ${change.name} = ${change.value}`, 'info');
+        if (typeof change.index === 'number') {
+          sendCommand({getDrumParameters: {index: change.index}});
+        }
+      }
+
       if (response['^kitSubscribed']) {
         log('✓ Subscribed to kit changes', 'success');
       }
@@ -1256,6 +1367,78 @@
       if (confirm(`Are you sure you want to remove drum ${index}?`)) {
         sendCommand({removeDrum: {index}});
       }
+    }
+
+    function setDrumSample() {
+      const index = parseInt(document.getElementById('drumSampleIndexInput').value);
+      const path = (document.getElementById('drumSamplePathInput').value || '').trim();
+
+      if (Number.isNaN(index)) {
+        log('✗ Please enter a drum index', 'error');
+        return;
+      }
+      if (!path) {
+        log('✗ Please enter a sample path (e.g. SAMPLES/KICK.WAV)', 'error');
+        return;
+      }
+
+      sendCommand({setDrumSample: {index, path}});
+    }
+
+    function getDrumParameters() {
+      const index = parseInt(document.getElementById('drumParamIndexInput').value);
+      if (Number.isNaN(index)) {
+        log('✗ Please enter a drum index for parameter dump', 'error');
+        return;
+      }
+      sendCommand({getDrumParameters: {index}});
+    }
+
+    function setDrumParameter() {
+      const index = parseInt(document.getElementById('drumParamSetIndexInput').value);
+      const name = (document.getElementById('drumParamNameInput').value || '').trim();
+      const valueStr = (document.getElementById('drumParamValueInput').value || '').trim();
+
+      if (Number.isNaN(index)) {
+        log('✗ Please enter a drum index for parameter write', 'error');
+        return;
+      }
+      if (!name) {
+        log('✗ Please enter a parameter name (e.g. oscAWavetablePosition)', 'error');
+        return;
+      }
+      if (!valueStr) {
+        log('✗ Please enter a parameter value', 'error');
+        return;
+      }
+
+      let value;
+      if (valueStr.toLowerCase().startsWith('0x')) {
+        value = parseInt(valueStr, 16);
+      } else {
+        value = parseInt(valueStr, 10);
+      }
+
+      if (Number.isNaN(value)) {
+        log('✗ Invalid value - use integer or 0x hex', 'error');
+        return;
+      }
+
+      sendCommand({setDrumParameter: {index, name, value}});
+    }
+
+    function toggleDrumParamSubscription() {
+      if (drumParamSubscriptionActive) {
+        sendCommand({unsubscribeDrumParameters: {}});
+      } else {
+        sendCommand({subscribeDrumParameters: {}});
+      }
+    }
+
+    function updateDrumParamSubscribeButton() {
+      const btn = document.getElementById('subscribeDrumParamsBtn');
+      if (!btn) return;
+      btn.textContent = drumParamSubscriptionActive ? 'Unsubscribe Drum Params' : 'Subscribe Drum Params';
     }
 
     let latestJsonResponse = null;
@@ -1787,6 +1970,36 @@
       html += '</div>';
 
       html += '</div></div>';
+      display.innerHTML = html;
+    }
+
+    function displayDrumParameters(params) {
+      const display = document.getElementById('drumParametersDisplay');
+
+      if (params.error) {
+        display.innerHTML = `<div style="color: #f44336; padding: 10px;">⚠️ ${params.error}</div>`;
+        return;
+      }
+
+      const index = params.index ?? '?';
+      const entries = Object.entries(params)
+        .filter(([key]) => key !== 'index')
+        .sort(([a], [b]) => a.localeCompare(b));
+
+      let html = '<div style="font-family: monospace; font-size: 11px;">';
+      html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 8px;">📊 DRUM PARAMETERS (Drum ${index})</div>`;
+
+      if (entries.length === 0) {
+        html += '<div style="color: #888;">No parameters returned</div>';
+      } else {
+        html += '<div style="max-height: 220px; overflow-y: auto; border: 1px solid #222; border-radius: 4px;">';
+        entries.forEach(([key, value]) => {
+          html += `<div style="padding: 4px 8px; border-bottom: 1px solid #111;"><span style="color: #999;">${key}:</span> <span style="color: #fff;">${value}</span></div>`;
+        });
+        html += '</div>';
+      }
+
+      html += '</div>';
       display.innerHTML = html;
     }
 

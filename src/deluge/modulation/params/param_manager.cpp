@@ -18,6 +18,7 @@
 #include "modulation/params/param_manager.h"
 #include "definitions_cxx.hpp"
 #include "gui/views/view.h"
+#include "io/midi/sysex/param_stream.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
 #include "model/model_stack.h"
@@ -457,6 +458,7 @@ void ParamManager::notifyParamModifiedInSomeWay(ModelStackWithAutoParam const* m
 
 	if (currentValueChanged) {
 		view.notifyParamAutomationOccurred(this);
+		SysexParamStream::handleParamChange(modelStack);
 	}
 }
 
