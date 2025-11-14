@@ -82,6 +82,26 @@
     </header>
 
     <div class="main-grid">
+      <div class="accordion" id="messageLogAccordion" style="grid-column: 1 / -1;">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
+          <h2>📋 Message Log</h2>
+          <span class="accordion-icon open">▼</span>
+        </div>
+        <div class="accordion-content open">
+          <div class="floating-controls">
+            <button class="btn btn-small" id="clearLogBtn">Clear Log</button>
+            <button class="btn btn-small" id="toggleLogFloatBtn">Pop Out Log</button>
+            <span class="drag-handle" id="logDragHandle" title="Drag when popped out">⠿</span>
+          </div>
+          <div class="log-container" id="messageLog">
+            <div class="log-entry">
+              <div class="log-timestamp">[00:00:00]</div>
+              <div class="log-info">Ready to connect...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="accordion">
         <div class="accordion-header" onclick="toggleAccordion(this)">
           <h2>🎛️ Session Clips</h2>
@@ -222,18 +242,9 @@
           <button class="btn btn-success" id="connectBtn">Connect</button>
           <button class="btn" id="disconnectBtn" disabled>Disconnect</button>
         </div>
+        </div>
       </div>
 
-      <div class="panel">
-        <h2>✨ Features</h2>
-        <div class="feature-status" id="featureStatus">
-          <div class="feature-item"><span>File Operations</span><span class="feature-badge badge-working">WORKING</span></div>
-          <div class="feature-item"><span>Transport Control</span><span class="feature-badge badge-not-implemented" id="transportBadge">NOT TESTED</span></div>
-          <div class="feature-item"><span>Settings Control</span><span class="feature-badge badge-not-implemented" id="settingsBadge">NOT TESTED</span></div>
-          <div class="feature-item"><span>Parameter Control</span><span class="feature-badge badge-not-implemented" id="parameterBadge">NOT TESTED</span></div>
-        </div>
-        </div>
-      </div>
 
       <div class="accordion">
         <div class="accordion-header" onclick="toggleAccordion(this)">
@@ -510,6 +521,49 @@
           <button class="btn btn-small" id="getTransportBtn" disabled>Get State</button>
           <button class="btn btn-small" id="subscribeTransportBtn" disabled>Subscribe</button>
         </div>
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #444;">
+          <div style="color: #667eea; font-weight: bold; margin-bottom: 10px; font-size: 14px;">🎵 Song Scale & Root</div>
+          <div class="form-group">
+            <label>Root Note (0-127):</label>
+            <input type="number" id="rootNoteInput" value="60" min="0" max="127" disabled>
+          </div>
+          <div class="form-group">
+            <label>Scale:</label>
+            <select id="scaleSelect" disabled>
+              <option value="">-- Select Scale --</option>
+              <optgroup label="7-note scales">
+                <option value="0">MAJOR</option>
+                <option value="1">MINOR</option>
+                <option value="2">DORIAN</option>
+                <option value="3">PHRYGIAN</option>
+                <option value="4">LYDIAN</option>
+                <option value="5">MIXOLYDIAN</option>
+                <option value="6">LOCRIAN</option>
+                <option value="7">MELODIC MINOR</option>
+                <option value="8">HARMONIC MINOR</option>
+                <option value="9">HUNGARIAN MINOR</option>
+                <option value="10">MARVA</option>
+                <option value="11">ARABIAN</option>
+              </optgroup>
+              <optgroup label="6-note scales">
+                <option value="12">WHOLE TONE</option>
+                <option value="13">BLUES</option>
+              </optgroup>
+              <optgroup label="5-note scales">
+                <option value="14">PENTATONIC MINOR</option>
+                <option value="15">HIRAJOSHI</option>
+              </optgroup>
+              <option value="16">USER</option>
+            </select>
+          </div>
+          <div class="button-group">
+            <button class="btn" id="setSongScaleBtn" disabled>Set Scale & Root</button>
+            <button class="btn btn-small" id="getSongScaleBtn" disabled>Get Scale</button>
+          </div>
+          <div id="scaleDisplay" style="margin-top: 10px; padding: 10px; background: #1a1a1a; border-radius: 4px; font-size: 12px; color: #888;">
+            Scale info will appear here
+          </div>
+        </div>
         </div>
       </div>
 
@@ -759,22 +813,6 @@
         </div>
       </div>
 
-      <div class="accordion" id="messageLogAccordion" style="grid-column: 1 / -1;">
-        <div class="accordion-header" onclick="toggleAccordion(this)">
-        <h2>📋 Message Log</h2>
-          <span class="accordion-icon open">▼</span>
-        </div>
-        <div class="accordion-content open">
-        <div class="floating-controls">
-          <button class="btn btn-small" id="clearLogBtn">Clear Log</button>
-          <button class="btn btn-small" id="toggleLogFloatBtn">Pop Out Log</button>
-          <span class="drag-handle" id="logDragHandle" title="Drag when popped out">⠿</span>
-        </div>
-        <div class="log-container" id="messageLog">
-          <div class="log-entry"><div class="log-timestamp">[00:00:00]</div><div class="log-info">Ready to connect...</div></div>
-        </div>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -786,6 +824,26 @@
     let drumParamSubscriptionActive = false;
     let accordionDragInProgress = false;
     let logFloating = false;
+    const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const SCALE_NAME_LOOKUP = {
+      0: 'MAJOR',
+      1: 'MINOR',
+      2: 'DORIAN',
+      3: 'PHRYGIAN',
+      4: 'LYDIAN',
+      5: 'MIXOLYDIAN',
+      6: 'LOCRIAN',
+      7: 'MELODIC MINOR',
+      8: 'HARMONIC MINOR',
+      9: 'HUNGARIAN MINOR',
+      10: 'MARVA',
+      11: 'ARABIAN',
+      12: 'WHOLE TONE',
+      13: 'BLUES',
+      14: 'PENTATONIC MINOR',
+      15: 'HIRAJOSHI',
+      16: 'USER'
+    };
 
     const elements = {
       connectBtn: document.getElementById('connectBtn'),
@@ -856,6 +914,8 @@
       document.getElementById('getTransportBtn').addEventListener('click', () => sendCommand({getTransportState: {}}));
       document.getElementById('subscribeTransportBtn').addEventListener('click', () => sendCommand({subscribeTransport: {}}));
       document.getElementById('tempoInput').addEventListener('change', setTempo);
+      document.getElementById('setSongScaleBtn').addEventListener('click', setSongScaleCommand);
+      document.getElementById('getSongScaleBtn').addEventListener('click', getSongScaleCommand);
 
       // Kit/Drum controls
       document.getElementById('getKitInfoBtn').addEventListener('click', () => sendCommand({getKitInfo: {}}));
@@ -993,6 +1053,10 @@
       document.getElementById('setTempoBtn').disabled = false;
       document.getElementById('getTransportBtn').disabled = false;
       document.getElementById('subscribeTransportBtn').disabled = false;
+      document.getElementById('rootNoteInput').disabled = false;
+      document.getElementById('scaleSelect').disabled = false;
+      document.getElementById('setSongScaleBtn').disabled = false;
+      document.getElementById('getSongScaleBtn').disabled = false;
       document.getElementById('getParametersBtn').disabled = false;
       document.getElementById('paramNameSelect').disabled = false;
       document.getElementById('paramValueInput').disabled = false;
@@ -1071,6 +1135,10 @@
       document.querySelectorAll('.btn').forEach(btn => {
         if (btn.id !== 'connectBtn' && btn.id !== 'clearLogBtn') btn.disabled = true;
       });
+      const rootField = document.getElementById('rootNoteInput');
+      const scaleField = document.getElementById('scaleSelect');
+      if (rootField) rootField.disabled = true;
+      if (scaleField) scaleField.disabled = true;
       drumParamSubscriptionActive = false;
       updateDrumParamSubscribeButton();
     }
@@ -1184,6 +1252,26 @@
           metronomeOn = s.metronomeOn;
           updateMetronomeButton();
         }
+      }
+
+      if (response['^songScale']) {
+        const r = response['^songScale'];
+        updateScaleDisplay(r, 'Current song scale');
+        storeLatestJson(response);
+        const label = r.scaleName || scaleIndexToLabel(r.scale);
+        const rootLabel = typeof r.rootNote === 'number' ? `${r.rootNote} (${midiNoteToName(r.rootNote)})` : 'unknown';
+        log(`🎼 Song scale: ${label || 'unknown'} | Root ${rootLabel}`, 'info');
+      }
+
+      if (response['^songScaleSet']) {
+        const r = response['^songScaleSet'];
+        updateScaleDisplay(r, 'Scale updated');
+        storeLatestJson(response);
+        const label = r.scaleName || scaleIndexToLabel(r.scale);
+        const rootLabel = typeof r.rootNote === 'number' ? `${r.rootNote} (${midiNoteToName(r.rootNote)})` : 'unknown';
+        const success = (r.status ?? 'success').toLowerCase() === 'success';
+        const prefix = success ? '✓' : '✗';
+        log(`${prefix} Scale update → ${label || 'unknown'} / Root ${rootLabel}`, success ? 'success' : 'error');
       }
 
       if (response['^metronomeSet']) {
@@ -1558,6 +1646,8 @@
       sendCommand({getTransportState: {}});
       await delay(200);
       sendCommand({getFirmwareVersion: {}});
+      await delay(200);
+      sendCommand({getSongScale: {}});
     }
 
     async function runAllTests() {
@@ -1594,6 +1684,95 @@
       const btn = document.getElementById('metronomeBtn');
       btn.textContent = metronomeOn ? '🔔 Metro: ON' : '🔔 Metro: OFF';
       btn.style.background = metronomeOn ? '#4caf50' : '#667eea';
+    }
+
+    function midiNoteToName(noteValue) {
+      const value = Number(noteValue);
+      if (!Number.isFinite(value)) {
+        return '-';
+      }
+      const wrapped = ((value % 12) + 12) % 12;
+      const octave = Math.floor(value / 12) - 2;
+      return `${NOTE_NAMES[wrapped]}${octave}`;
+    }
+
+    function scaleIndexToLabel(index) {
+      const value = Number(index);
+      if (!Number.isFinite(value)) {
+        return '';
+      }
+      return SCALE_NAME_LOOKUP[value] || `Scale ${value}`;
+    }
+
+    function updateScaleDisplay(info, context = 'Song scale') {
+      if (!info) return;
+      const display = document.getElementById('scaleDisplay');
+      const rootField = document.getElementById('rootNoteInput');
+      const scaleField = document.getElementById('scaleSelect');
+
+      const rootNote = typeof info.rootNote === 'number' ? info.rootNote : null;
+      const scaleIndex = typeof info.scale === 'number' ? info.scale : null;
+      const scaleName = info.scaleName || (scaleIndex !== null ? scaleIndexToLabel(scaleIndex) : '');
+
+      if (rootNote !== null && rootField) {
+        rootField.value = rootNote;
+      }
+      if (scaleField) {
+        if (scaleIndex !== null && scaleField.querySelector(`option[value="${scaleIndex}"]`)) {
+          scaleField.value = scaleIndex.toString();
+        } else if (scaleName && scaleName.toUpperCase() === 'USER') {
+          scaleField.value = '16';
+        }
+      }
+
+      if (display) {
+        const parts = [];
+        parts.push(`<strong>${context}</strong>`);
+        if (rootNote !== null) {
+          parts.push(`Root: ${rootNote} (${midiNoteToName(rootNote)})`);
+        }
+        if (scaleName) {
+          parts.push(`Scale: ${scaleName}`);
+        }
+        if (info.status && info.status.toLowerCase() !== 'success') {
+          parts.push(`Status: ${info.status}`);
+        }
+        if (info.message) {
+          parts.push(`Message: ${info.message}`);
+        }
+        display.innerHTML = parts.join('<br>');
+      }
+    }
+
+    function setSongScaleCommand() {
+      const rootField = document.getElementById('rootNoteInput');
+      const scaleField = document.getElementById('scaleSelect');
+      const payload = {};
+
+      if (rootField && rootField.value !== '') {
+        const rootValue = parseInt(rootField.value, 10);
+        if (Number.isNaN(rootValue) || rootValue < 0 || rootValue > 127) {
+          log('✗ Root note must be between 0 and 127', 'error');
+          return;
+        }
+        payload.rootNote = rootValue;
+      }
+
+      if (scaleField && scaleField.value !== '') {
+        const scaleValue = parseInt(scaleField.value, 10);
+        payload.scale = scaleValue;
+      }
+
+      if (!('rootNote' in payload) && !('scale' in payload)) {
+        log('✗ Provide a root note, scale, or both', 'error');
+        return;
+      }
+
+      sendCommand({setSongScale: payload});
+    }
+
+    function getSongScaleCommand() {
+      sendCommand({getSongScale: {}});
     }
 
     function setSettingValue() {

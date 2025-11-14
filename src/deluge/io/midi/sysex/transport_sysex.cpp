@@ -1,5 +1,6 @@
 #include "io/midi/sysex/transport_sysex.h"
 #include "model/action/action_logger.h"
+#include "model/scale/preset_scales.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "storage/smsysex.h"
@@ -327,6 +328,151 @@ void notifyTransportChanged() {
 			smSysex::sendMsg(*subscribers[i], notifyWriter);
 		}
 	}
+}
+
+void setSongScale(MIDICable& cable, JsonDeserializer& reader) {
+	if (!currentSong) {
+		smSysex::startReply(jWriter, reader);
+		jWriter.writeOpeningTag("^error", false, true);
+		jWriter.writeAttribute("message", "No song loaded");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	int32_t rootNote = -1;
+	int32_t scaleIndex = -1;
+	String scaleName;
+	char const* tagName;
+	reader.match('{');
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "rootNote") || !strcmp(tagName, "root")) {
+			rootNote = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "scale") || !strcmp(tagName, "scaleIndex")) {
+			scaleIndex = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "scaleName")) {
+			reader.readTagOrAttributeValueString(&scaleName);
+		}
+		else {
+			reader.exitTag();
+		}
+	}
+	reader.match('}');
+
+	bool success = true;
+	const char* errorMessage = nullptr;
+
+	// Set root note if provided
+	if (rootNote >= 0 && rootNote < 128) {
+		currentSong->setRootNote(rootNote);
+	}
+	else if (rootNote >= 128) {
+		success = false;
+		errorMessage = "Root note must be 0-127";
+	}
+
+	// Set scale if provided
+	if (success && scaleIndex >= 0) {
+		if (scaleIndex >= 0 && scaleIndex < NUM_PRESET_SCALES) {
+			Scale result = currentSong->setScale(static_cast<Scale>(scaleIndex));
+			if (result == NO_SCALE) {
+				success = false;
+				errorMessage = "Failed to set scale: scale incompatible with existing notes";
+			}
+		}
+		else if (scaleIndex == NUM_PRESET_SCALES) {
+			// User scale
+			if (!currentSong->hasUserScale()) {
+				success = false;
+				errorMessage = "No user scale available";
+			}
+			else {
+				Scale result = currentSong->setScale(USER_SCALE);
+				if (result == NO_SCALE) {
+					success = false;
+					errorMessage = "Failed to set user scale";
+				}
+			}
+		}
+		else {
+			success = false;
+			errorMessage = "Invalid scale index";
+		}
+	}
+	else if (success && scaleName.get() && scaleName.get()[0]) {
+		// Look up scale by name
+		Scale foundScale = NO_SCALE;
+		const char* scaleNameStr = scaleName.get();
+		for (int32_t i = 0; i < NUM_PRESET_SCALES; i++) {
+			const char* name = getScaleName(static_cast<Scale>(i));
+			if (name && !strcmp(name, scaleNameStr)) {
+				foundScale = static_cast<Scale>(i);
+				break;
+			}
+		}
+		// Check for USER_SCALE
+		if (foundScale == NO_SCALE && !strcmp(scaleNameStr, "USER")) {
+			foundScale = USER_SCALE;
+		}
+
+		if (foundScale != NO_SCALE) {
+			if (foundScale == USER_SCALE && !currentSong->hasUserScale()) {
+				success = false;
+				errorMessage = "No user scale available";
+			}
+			else {
+				Scale result = currentSong->setScale(foundScale);
+				if (result == NO_SCALE) {
+					success = false;
+					errorMessage = "Failed to set scale: scale incompatible with existing notes";
+				}
+			}
+		}
+		else {
+			success = false;
+			errorMessage = "Scale name not found";
+		}
+	}
+
+	smSysex::startReply(jWriter, reader);
+	if (success) {
+		jWriter.writeOpeningTag("^songScaleSet", false, true);
+		jWriter.writeAttribute("status", "success");
+		jWriter.writeAttribute("rootNote", currentSong->key.rootNote);
+		Scale currentScale = currentSong->getCurrentScale();
+		jWriter.writeAttribute("scale", (int32_t)currentScale);
+		jWriter.writeAttribute("scaleName", getScaleName(currentScale));
+		jWriter.closeTag(true);
+	}
+	else {
+		const char* message = errorMessage ? errorMessage : "Unknown error";
+		jWriter.writeOpeningTag("^error", false, true);
+		jWriter.writeAttribute("message", message);
+		jWriter.closeTag(true);
+	}
+	smSysex::sendMsg(cable, jWriter);
+}
+
+void getSongScale(MIDICable& cable, JsonDeserializer& reader) {
+	if (!currentSong) {
+		smSysex::startReply(jWriter, reader);
+		jWriter.writeOpeningTag("^error", false, true);
+		jWriter.writeAttribute("message", "No song loaded");
+		jWriter.closeTag(true);
+		smSysex::sendMsg(cable, jWriter);
+		return;
+	}
+
+	smSysex::startReply(jWriter, reader);
+	jWriter.writeOpeningTag("^songScale", false, true);
+	jWriter.writeAttribute("rootNote", currentSong->key.rootNote);
+	Scale currentScale = currentSong->getCurrentScale();
+	jWriter.writeAttribute("scale", (int32_t)currentScale);
+	jWriter.writeAttribute("scaleName", getScaleName(currentScale));
+	jWriter.closeTag(true);
+	smSysex::sendMsg(cable, jWriter);
 }
 
 } // namespace TransportSysex

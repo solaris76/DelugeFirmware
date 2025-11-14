@@ -898,6 +898,14 @@ void smSysex::handleNextSysEx() {
 			TransportSysex::setMetronome(de.cable, parser);
 			goto done;
 		}
+		else if (!strcmp(tagName, "setSongScale")) {
+			TransportSysex::setSongScale(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getSongScale")) {
+			TransportSysex::getSongScale(de.cable, parser);
+			goto done;
+		}
 		else if (!strcmp(tagName, "subscribeTransport")) {
 			TransportSysex::subscribeTransport(de.cable, parser);
 			goto done;

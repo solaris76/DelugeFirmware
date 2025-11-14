@@ -39,6 +39,12 @@ Upcoming work will add `clip_sysex` and `note_sysex` modules. Recommended plan:
 4. **Automation**
    - Reuse `SysexParamStream` to stream envelope/automation lane edits.
 
+### Song Scale & Root
+
+- ✅ Added `getSongScale` / `setSongScale` commands (Transport namespace) so hosts can mirror Deluge’s song-level key.
+- `setSongScale` accepts `rootNote` (0–127) and a preset `scale` index (or `scaleName`, including the special `USER` scale); replies include `status`, `rootNote`, `scale`, and `scaleName`.
+- Both commands share the existing `SysexCommon` helpers and mirror the behaviour of `Song::setRootNote` / `Song::setScale`, keeping hardware and remote controllers in sync.
+
 ### Shared Conventions
 
 - Use `SysexCommon::startResponse`, `writeStatus`, `sendResponse` for every reply.

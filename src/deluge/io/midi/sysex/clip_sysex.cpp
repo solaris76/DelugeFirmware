@@ -1069,10 +1069,8 @@ void getNotes(MIDICable& cable, JsonDeserializer& reader) {
 	jWriter.writeAttribute("clipId", (int32_t)getClipId(clip));
 	jWriter.writeAttribute("length", (int32_t)clip->loopLength);
 	jWriter.writeAttribute("scaleMode", instrumentClip->isScaleModeClip() ? 1 : 0);
-
-	if (instrumentClip->isScaleModeClip()) {
-		jWriter.writeAttribute("scaleType", (int32_t)instrumentClip->getScaleType());
-	}
+	jWriter.writeAttribute("scaleType", (int32_t)instrumentClip->getScaleType());
+	jWriter.writeAttribute("rootNote", (int32_t)currentSong->key.rootNote);
 
 	jWriter.writeArrayStart("notes");
 
@@ -1130,30 +1128,35 @@ void setNotes(MIDICable& cable, JsonDeserializer& reader) {
 	bool hasNoteOps = false;
 
 	Clip* clip = nullptr;
-	if (clipId) {
-		clip = findClipById(clipId);
-	}
-	if (!clip && clipIndex >= 0 && clipIndex < currentSong->sessionClips.getNumElements()) {
-		clip = currentSong->sessionClips.getClipAtIndex(clipIndex);
-	}
-
-	if (!clip) {
-		writeErrorAndSend(cable, "error", "Clip not found");
-		return;
-	}
-
-	if (clip->type != ClipType::INSTRUMENT) {
-		writeErrorAndSend(cable, "error", "Clip is not an instrument clip");
-		return;
-	}
-
-	InstrumentClip* instrumentClip = (InstrumentClip*)clip;
-
+	InstrumentClip* instrumentClip = nullptr;
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];
-	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
-	modelStack->setTimelineCounter(clip);
+	ModelStackWithTimelineCounter* modelStack = nullptr;
+	Action* action = nullptr;
 
-	Action* action = actionLogger.getNewAction(ActionType::NOTE_EDIT, ActionAddition::ALLOWED);
+	auto ensureClipReady = [&]() -> bool {
+		if (instrumentClip) {
+			return true;
+		}
+		if (clipId) {
+			clip = findClipById(clipId);
+		}
+		if (!clip && clipIndex >= 0 && clipIndex < currentSong->sessionClips.getNumElements()) {
+			clip = currentSong->sessionClips.getClipAtIndex(clipIndex);
+		}
+		if (!clip) {
+			writeErrorAndSend(cable, "error", "Clip not found");
+			return false;
+		}
+		if (clip->type != ClipType::INSTRUMENT) {
+			writeErrorAndSend(cable, "error", "Clip is not an instrument clip");
+			return false;
+		}
+		instrumentClip = (InstrumentClip*)clip;
+		modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+		modelStack->setTimelineCounter(clip);
+		action = actionLogger.getNewAction(ActionType::NOTE_EDIT, ActionAddition::ALLOWED);
+		return true;
+	};
 
 	int32_t successCount = 0;
 	int32_t errorCount = 0;
@@ -1162,12 +1165,22 @@ void setNotes(MIDICable& cable, JsonDeserializer& reader) {
 	while (*(tagName = reader.readNextTagOrAttributeName())) {
 		if (!strcmp(tagName, "clipId")) {
 			clipId = (uint32_t)reader.readTagOrAttributeValueInt();
+			// Refresh clip pointer if possible
+			if (!instrumentClip) {
+				ensureClipReady();
+			}
 		}
 		else if (!strcmp(tagName, "clipIndex") || !strcmp(tagName, "index")) {
 			clipIndex = reader.readTagOrAttributeValueInt();
+			if (!instrumentClip) {
+				ensureClipReady();
+			}
 		}
 		else if (!strcmp(tagName, "notes")) {
 			hasNoteOps = true;
+			if (!ensureClipReady()) {
+				return;
+			}
 			reader.match('[');
 			while (reader.match('{')) {
 				char const* noteTagName;
@@ -1270,10 +1283,6 @@ void setNotes(MIDICable& cable, JsonDeserializer& reader) {
 							if (velocity >= 1 && velocity <= 127) {
 								note->setVelocity(velocity);
 							}
-							if (action) {
-								action->recordNoteChange(instrumentClip, rowId, note, note->getLength(),
-								                         note->getVelocity(), note->getProbability());
-							}
 							successCount++;
 						}
 						else {
@@ -1301,6 +1310,11 @@ void setNotes(MIDICable& cable, JsonDeserializer& reader) {
 		}
 	}
 	reader.match('}');
+
+	if (!instrumentClip) {
+		writeErrorAndSend(cable, "error", "Clip not found");
+		return;
+	}
 
 	if (hasNoteOps && !parsedNotes) {
 		errorCount++;
