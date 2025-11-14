@@ -64,6 +64,50 @@ void JsonSerializer::reset() {
 	firstItemHasBeenWritten = false;
 }
 
+void JsonSerializer::writeEscapedString(char const* value) {
+	if (!value) {
+		return;
+	}
+
+	while (*value) {
+		unsigned char ch = static_cast<unsigned char>(*value);
+		switch (ch) {
+		case '\"':
+			write("\\\"");
+			break;
+		case '\\':
+			write("\\\\");
+			break;
+		case '\b':
+			write("\\b");
+			break;
+		case '\f':
+			write("\\f");
+			break;
+		case '\n':
+			write("\\n");
+			break;
+		case '\r':
+			write("\\r");
+			break;
+		case '\t':
+			write("\\t");
+			break;
+		default:
+			if (ch < 0x20) {
+				char unicodeBuffer[7] = {'\\', 'u', '0', '0', '0', '0', 0};
+				intToHex(ch, &unicodeBuffer[4], 2);
+				write(unicodeBuffer);
+			}
+			else {
+				writeByte(static_cast<int8_t>(ch));
+			}
+			break;
+		}
+		value++;
+	}
+}
+
 void JsonSerializer::write(char const* output) {
 
 	writeChars(output);
@@ -82,13 +126,15 @@ void JsonSerializer::writeTag(char const* tag, char const* contents, bool box, b
 	if (box)
 		write("{");
 	write("\"");
-	write(tag);
+	writeEscapedString(tag ? tag : "");
 	write("\": ");
-	if (quote)
+	if (quote) {
+		writeEscapedString(contents ? contents : "");
 		write("\"");
-	write(contents);
-	if (quote)
-		write("\"");
+	}
+	else {
+		write(contents ? contents : "");
+	}
 	if (box)
 		write("}");
 	firstItemHasBeenWritten = true;
@@ -110,7 +156,7 @@ void JsonSerializer::writeAttribute(char const* name, int32_t number, bool onNew
 		write(" ");
 	}
 	write("\"");
-	write(name);
+	writeEscapedString(name ? name : "");
 	write("\": ");
 	write(buffer);
 
@@ -139,8 +185,9 @@ void JsonSerializer::writeAttributeHexBytes(char const* name, uint8_t* data, int
 	else {
 		write(" ");
 	}
-	write(name);
-	write(":\"");
+	write("\"");
+	writeEscapedString(name ? name : "");
+	write("\": \"");
 
 	char buffer[3];
 	for (int i = 0; i < numBytes; i++) {
@@ -162,16 +209,16 @@ void JsonSerializer::writeAttribute(char const* name, char const* value, bool on
 		write(" ");
 	}
 	write("\"");
-	write(name);
+	writeEscapedString(name ? name : "");
 	write("\": \"");
-	write(value);
+	writeEscapedString(value ? value : "");
 	write("\"");
 	firstItemHasBeenWritten = true;
 }
 
 void JsonSerializer::writeTagNameAndSeperator(char const* tag) {
 	write("\"");
-	write(tag);
+	writeEscapedString(tag ? tag : "");
 	write("\":");
 }
 
@@ -191,7 +238,7 @@ void JsonSerializer::writeOpeningTagBeginning(char const* tag, bool box, bool ne
 	}
 	if (tag) {
 		write("\"");
-		write(tag);
+		writeEscapedString(tag);
 		write("\": {");
 	}
 	indentAmount++;
@@ -238,7 +285,7 @@ void JsonSerializer::writeArrayStart(char const* tag, bool startNewLineAfter, bo
 	if (box)
 		write("{");
 	write("\"");
-	write(tag);
+	writeEscapedString(tag ? tag : "");
 	write("\": [");
 	indentAmount++;
 	firstItemHasBeenWritten = false;

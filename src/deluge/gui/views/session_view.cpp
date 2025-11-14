@@ -1878,6 +1878,107 @@ Clip* SessionView::getClipOnScreen(int32_t yDisplay) {
 	return currentSong->sessionClips.getClipAtIndex(index);
 }
 
+Clip* SessionView::getClipByIndex(int32_t index) {
+	if (!currentSong) {
+		return nullptr;
+	}
+
+	if (index < 0 || index >= currentSong->sessionClips.getNumElements()) {
+		return nullptr;
+	}
+
+	return currentSong->sessionClips.getClipAtIndex(index);
+}
+
+Clip* SessionView::createClipAtIndex(OutputType outputType, int32_t insertIndex) {
+	if (!currentSong) {
+		return nullptr;
+	}
+
+	int32_t numClips = currentSong->sessionClips.getNumElements();
+	if (insertIndex < 0) {
+		insertIndex = 0;
+	}
+	if (insertIndex > numClips) {
+		insertIndex = numClips;
+	}
+
+	int32_t yDisplay = insertIndex - currentSong->songViewYScroll;
+
+	Clip* newClip = nullptr;
+	if (outputType == OutputType::AUDIO) {
+		newClip = createNewAudioClip(yDisplay);
+	}
+	else {
+		newClip = createNewInstrumentClip(outputType, yDisplay);
+	}
+
+	if (newClip) {
+		redrawClipsOnScreen();
+	}
+
+	return newClip;
+}
+
+Clip* SessionView::duplicateClipToIndex(int32_t sourceIndex, int32_t targetIndex) {
+	if (!currentSong) {
+		return nullptr;
+	}
+
+	if (sourceIndex < 0 || sourceIndex >= currentSong->sessionClips.getNumElements()) {
+		return nullptr;
+	}
+
+	int32_t numClips = currentSong->sessionClips.getNumElements();
+	if (targetIndex < 0) {
+		targetIndex = 0;
+	}
+	if (targetIndex > numClips) {
+		targetIndex = numClips;
+	}
+
+	int32_t sourceYDisplay = sourceIndex - currentSong->songViewYScroll;
+	int32_t targetYDisplay = targetIndex - currentSong->songViewYScroll;
+
+	return cloneClip(sourceYDisplay, targetYDisplay);
+}
+
+bool SessionView::deleteClipAtIndex(int32_t index) {
+	Clip* clip = getClipByIndex(index);
+	if (!clip) {
+		return false;
+	}
+
+	removeClip(clip);
+	return true;
+}
+
+bool SessionView::setClipColour(int32_t index, int32_t colourOffsetValue) {
+	Clip* clip = getClipByIndex(index);
+	if (!clip) {
+		return false;
+	}
+
+	int32_t normalised = colourOffsetValue % 72;
+	if (normalised < 0) {
+		normalised += 72;
+	}
+
+	clip->colourOffset = normalised;
+	redrawClipsOnScreen();
+	return true;
+}
+
+bool SessionView::enterClipAtIndex(int32_t index) {
+	Clip* clip = getClipByIndex(index);
+	if (!clip) {
+		return false;
+	}
+
+	transitionToViewForClip(clip);
+	return true;
+}
+
 void SessionView::redrawClipsOnScreen(bool doRender) {
 	if (doRender) {
 		// use root UI in case this is called from performance view
@@ -2129,23 +2230,23 @@ uint32_t SessionView::getMaxZoom() {
 	return currentSong->getLongestClip(true, false)->getMaxZoom();
 }
 
-void SessionView::cloneClip(uint8_t yDisplayFrom, uint8_t yDisplayTo) {
+Clip* SessionView::cloneClip(int32_t yDisplayFrom, int32_t yDisplayTo) {
 	Clip* clipToClone = getClipOnScreen(yDisplayFrom);
 	if (!clipToClone) {
-		return;
+		return nullptr;
 	}
 
 	// Just don't allow cloning of Clips which are linearly recording
 	if (clipToClone->getCurrentlyRecordingLinearly()) {
 		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_RECORDING_IN_PROGRESS));
-		return;
+		return nullptr;
 	}
 
 	bool enoughSpace = currentSong->sessionClips.ensureEnoughSpaceAllocated(1);
 	if (!enoughSpace) {
 ramError:
 		display->displayError(Error::INSUFFICIENT_RAM);
-		return;
+		return nullptr;
 	}
 
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];
@@ -2180,6 +2281,8 @@ ramError:
 	                                            newIndex); // Can't fail - we ensured enough space in advance
 
 	redrawClipsOnScreen();
+
+	return newClip;
 }
 
 void SessionView::graphicsRoutine() {

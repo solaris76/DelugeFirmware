@@ -17,6 +17,7 @@
 
 #include "io/midi/sysex/kit_sysex.h"
 #include "gui/ui/ui.h"
+#include "io/midi/sysex/sound_sysex_helpers.h"
 #include "io/midi/sysex/sysex_common.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
@@ -847,35 +848,11 @@ void getDrumParameters(MIDICable& cable, JsonDeserializer& reader) {
 	    modelStackWithNoteRow->addOtherTwoThings(soundDrum, paramManager);
 
 	jWriter.writeAttribute("index", drumIndex);
-
-	// === UNPATCHED PARAMETERS ===
-	if (paramManager->summaries[0].paramCollection) {
-		UnpatchedParamSet* unpatchedParams = (UnpatchedParamSet*)paramManager->summaries[0].paramCollection;
-
-		for (int32_t p = 0; p < UNPATCHED_SOUND_MAX_NUM; p++) {
-			int32_t value = unpatchedParams->getValue(p);
-			const char* paramName = paramNameForFile(Kind::UNPATCHED_SOUND, p + UNPATCHED_START);
-			// Skip invalid params (nullptr or "none")
-			if (paramName && strcmp(paramName, "none") != 0) {
-				jWriter.writeAttribute(paramName, value);
-			}
-		}
+	if (!soundDrum->name.isEmpty()) {
+		jWriter.writeAttribute("name", soundDrum->name.get());
 	}
 
-	// === PATCHED PARAMETERS ===
-	if (paramManager->summaries[1].paramCollection) {
-		PatchedParamSet* patchedParams = (PatchedParamSet*)paramManager->summaries[1].paramCollection;
-
-		for (int32_t p = 0; p < kNumParams; p++) {
-			AutoParam* param = &patchedParams->params[p];
-			int32_t value = param->getCurrentValue();
-			const char* paramName = paramNameForFile(Kind::PATCHED, p);
-			// Skip invalid params (nullptr or "none")
-			if (paramName && strcmp(paramName, "none") != 0) {
-				jWriter.writeAttribute(paramName, value);
-			}
-		}
-	}
+	SoundSysex::writeSoundParameterSnapshot(jWriter, soundDrum, paramManager);
 
 	jWriter.closeTag(true);
 	smSysex::sendMsg(cable, jWriter);

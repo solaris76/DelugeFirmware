@@ -48,6 +48,7 @@
 
     /* Accordion Styles */
     .accordion { background: #2a2a2a; border-radius: 10px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .accordion.dragging { opacity: 0.5; }
     .accordion-header { background: #333; padding: 15px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; transition: background 0.2s; }
     .accordion-header:hover { background: #3a3a3a; }
     .accordion-header h2 { font-size: 16px; color: #667eea; border: none; padding: 0; margin: 0; }
@@ -55,6 +56,13 @@
     .accordion-icon.open { transform: rotate(180deg); }
     .accordion-content { padding: 20px; display: none; }
     .accordion-content.open { display: block; }
+    .floating-log { position: fixed; right: 20px; bottom: 20px; width: 380px; max-height: 70vh; z-index: 1000; }
+    .floating-log .accordion-content { display: block; max-height: calc(70vh - 60px); overflow: hidden; }
+    .floating-log .log-container { max-height: calc(70vh - 140px); }
+    .floating-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    .floating-controls .drag-handle { font-size: 18px; cursor: grab; opacity: 0.3; pointer-events: none; transition: opacity 0.2s; }
+    .floating-log .floating-controls .drag-handle { opacity: 0.9; pointer-events: auto; }
+    .floating-log .floating-controls .drag-handle:active { cursor: grabbing; }
   </style>
 </head>
 <body>
@@ -74,6 +82,101 @@
     </header>
 
     <div class="main-grid">
+      <div class="accordion">
+        <div class="accordion-header" onclick="toggleAccordion(this)">
+          <h2>🎛️ Session Clips</h2>
+          <span class="accordion-icon">▼</span>
+        </div>
+        <div class="accordion-content">
+          <div class="button-group">
+            <button class="btn btn-small" id="getClipsBtn" disabled>Get Clips</button>
+            <button class="btn btn-small" id="getTracksBtn" disabled>Get Tracks</button>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+            <div style="background:#1a1a1a; padding:10px; border-radius:6px;">
+              <div style="color:#667eea; font-weight:bold; font-size:12px; margin-bottom:6px;">➕ Create Clip</div>
+              <label style="font-size:11px;">Type</label>
+              <select id="clipTypeSelect" style="font-size:11px;" disabled>
+                <option value="synth">Synth</option>
+                <option value="kit">Kit</option>
+                <option value="midi">MIDI</option>
+                <option value="cv">CV</option>
+                <option value="audio">Audio</option>
+              </select>
+              <label style="font-size:11px; margin-top:6px;">Position</label>
+              <input type="number" id="clipPositionInput" value="-1" style="font-size:11px;" disabled>
+              <label style="font-size:11px; margin-top:6px;">Preset Path (optional)</label>
+              <input type="text" id="clipPresetPathInput" placeholder="/SYNTHS/COLD_PAD.XML" style="font-size:11px;" disabled>
+              <label style="font-size:11px; margin-top:6px;">Kit Drum Index (optional)</label>
+              <input type="number" id="clipDrumIndexInput" value="-1" style="font-size:11px;" disabled>
+              <button class="btn btn-small" id="createClipBtn" style="margin-top:8px;" disabled>Create</button>
+            </div>
+            <div style="background:#1a1a1a; padding:10px; border-radius:6px;">
+              <div style="color:#667eea; font-weight:bold; font-size:12px; margin-bottom:6px;">🎨 Set Row Colour</div>
+              <label style="font-size:11px;">Clip Index</label>
+              <input type="number" id="clipColourIndexInput" value="0" style="font-size:11px;" disabled>
+              <label style="font-size:11px; margin-top:6px;">Colour Offset (0-71)</label>
+              <input type="number" id="clipColourValueInput" value="0" style="font-size:11px;" disabled>
+              <button class="btn btn-small" id="setClipColourBtn" style="margin-top:8px;" disabled>Set Colour</button>
+              <label style="font-size:11px; margin-top:12px;">Track Hue (0-191)</label>
+              <input type="number" id="trackColourValueInput" value="0" style="font-size:11px;" disabled>
+              <button class="btn btn-small" id="setTrackColourBtn" style="margin-top:8px;" disabled>Set Grid Colour</button>
+            </div>
+            <div style="background:#1a1a1a; padding:10px; border-radius:6px;">
+              <div style="color:#667eea; font-weight:bold; font-size:12px; margin-bottom:6px;">🚪 Enter Clip</div>
+              <label style="font-size:11px;">Clip Index</label>
+              <input type="number" id="enterClipIndexInput" value="0" style="font-size:11px;" disabled>
+              <button class="btn btn-small" id="enterClipBtn" style="margin-top:8px;" disabled>Enter Clip</button>
+               <button class="btn btn-small" id="exitClipBtn" style="margin-top:8px;" disabled>Back to Session</button>
+              <div style="color:#667eea; font-weight:bold; font-size:12px; margin:12px 0 6px;">🗑️ Delete Clip</div>
+              <label style="font-size:11px;">Clip Index</label>
+              <input type="number" id="deleteClipIndexInput" value="0" style="font-size:11px;" disabled>
+              <button class="btn btn-small" id="deleteClipBtn" style="margin-top:8px;" disabled>Delete</button>
+            </div>
+          </div>
+          <div id="clipDisplay" class="log-container" style="max-height:300px; margin-top:12px;">
+            <div style="color:#888;">Clip list will appear here</div>
+          </div>
+          <div style="margin-top:12px; background:#1a1a1a; padding:10px; border-radius:6px;">
+            <div style="color:#667eea; font-weight:bold; font-size:12px; margin-bottom:6px;">🔁 Duplicate Clip</div>
+            <label style="font-size:11px;">Source Clip ID</label>
+            <input type="text" id="dupClipIdInput" placeholder="clipId (preferred)" style="font-size:11px;" disabled>
+            <label style="font-size:11px; margin-top:6px;">or Source Index</label>
+            <input type="number" id="dupClipIndexInput" value="-1" style="font-size:11px;" disabled>
+            <label style="font-size:11px; margin-top:6px;">Insert Position (optional)</label>
+            <input type="number" id="dupPositionInput" value="-1" style="font-size:11px;" disabled>
+            <label style="font-size:11px; margin-top:6px;">Target Track ID (optional)</label>
+            <input type="text" id="dupTrackIdInput" placeholder="trackId" style="font-size:11px;" disabled>
+            <label style="font-size:11px; margin-top:6px;">Section (optional)</label>
+            <input type="number" id="dupSectionInput" value="-1" style="font-size:11px;" disabled>
+            <button class="btn btn-small" id="duplicateClipBtn" style="margin-top:8px;" disabled>Duplicate</button>
+          </div>
+          <div style="margin-top:12px; background:#1a1a1a; padding:10px; border-radius:6px;">
+            <div style="color:#667eea; font-weight:bold; font-size:12px; margin-bottom:6px;">📦 Move Clip</div>
+            <label style="font-size:11px;">Clip ID</label>
+            <input type="text" id="moveClipIdInput" placeholder="clipId (preferred)" style="font-size:11px;" disabled>
+            <label style="font-size:11px; margin-top:6px;">or Clip Index</label>
+            <input type="number" id="moveClipIndexInput" value="-1" style="font-size:11px;" disabled>
+            <label style="font-size:11px; margin-top:6px;">New Position</label>
+            <input type="number" id="movePositionInput" value="-1" style="font-size:11px;" disabled>
+            <label style="font-size:11px; margin-top:6px;">Target Track ID (optional)</label>
+            <input type="text" id="moveTrackIdInput" placeholder="trackId" style="font-size:11px;" disabled>
+            <label style="font-size:11px; margin-top:6px;">Section (optional)</label>
+            <input type="number" id="moveSectionInput" value="-1" style="font-size:11px;" disabled>
+            <button class="btn btn-small" id="moveClipBtn" style="margin-top:8px;" disabled>Move</button>
+          </div>
+          <div style="margin-top:12px; background:#1a1a1a; padding:10px; border-radius:6px;">
+            <div style="color:#667eea; font-weight:bold; font-size:12px; margin-bottom:6px;">🎬 Launch Section</div>
+            <label style="font-size:11px;">Section Index</label>
+            <input type="number" id="launchSectionInput" value="0" style="font-size:11px;" disabled>
+            <button class="btn btn-small" id="launchSectionBtn" style="margin-top:8px;" disabled>Launch</button>
+          </div>
+          <div id="trackDisplay" class="log-container" style="max-height:300px; margin-top:12px;">
+            <div style="color:#888;">Track info will appear here</div>
+          </div>
+        </div>
+      </div>
+
       <div class="accordion">
         <div class="accordion-header" onclick="toggleAccordion(this)">
         <h2>📡 Connection</h2>
@@ -621,14 +724,16 @@
         </div>
       </div>
 
-      <div class="accordion" style="grid-column: 1 / -1;">
+      <div class="accordion" id="messageLogAccordion" style="grid-column: 1 / -1;">
         <div class="accordion-header" onclick="toggleAccordion(this)">
         <h2>📋 Message Log</h2>
           <span class="accordion-icon open">▼</span>
         </div>
         <div class="accordion-content open">
-        <div style="margin-bottom: 10px;">
+        <div class="floating-controls">
           <button class="btn btn-small" id="clearLogBtn">Clear Log</button>
+          <button class="btn btn-small" id="toggleLogFloatBtn">Pop Out Log</button>
+          <span class="drag-handle" id="logDragHandle" title="Drag when popped out">⠿</span>
         </div>
         <div class="log-container" id="messageLog">
           <div class="log-entry"><div class="log-timestamp">[00:00:00]</div><div class="log-info">Ready to connect...</div></div>
@@ -644,6 +749,8 @@
     let connected = false;
     let metronomeOn = false;
     let drumParamSubscriptionActive = false;
+    let accordionDragInProgress = false;
+    let logFloating = false;
 
     const elements = {
       connectBtn: document.getElementById('connectBtn'),
@@ -652,6 +759,9 @@
       statusText: document.getElementById('statusText'),
       msgCount: document.getElementById('msgCount'),
       messageLog: document.getElementById('messageLog'),
+      messageLogAccordion: document.getElementById('messageLogAccordion'),
+      toggleLogFloatBtn: document.getElementById('toggleLogFloatBtn'),
+      logDragHandle: document.getElementById('logDragHandle'),
       testResults: document.getElementById('testResults')
     };
 
@@ -659,6 +769,9 @@
       elements.connectBtn.addEventListener('click', connectToDeluge);
       elements.disconnectBtn.addEventListener('click', disconnect);
       document.getElementById('clearLogBtn').addEventListener('click', clearLog);
+      if (elements.toggleLogFloatBtn) {
+        elements.toggleLogFloatBtn.addEventListener('click', toggleLogFloating);
+      }
       document.getElementById('pingBtn').addEventListener('click', () => sendCommand({ping: {}}));
       document.getElementById('dirBtn').addEventListener('click', () => sendCommand({dir: {path: "/"}}));
       document.getElementById('runAllBtn').addEventListener('click', runAllTests);
@@ -721,6 +834,19 @@
       document.getElementById('getDrumParametersBtn').addEventListener('click', getDrumParameters);
       document.getElementById('setDrumParamBtn').addEventListener('click', setDrumParameter);
       document.getElementById('subscribeDrumParamsBtn').addEventListener('click', toggleDrumParamSubscription);
+
+      // Clip controls
+      document.getElementById('getClipsBtn').addEventListener('click', () => sendCommand({getClips: {}}));
+      document.getElementById('getTracksBtn').addEventListener('click', () => sendCommand({getTracks: {}}));
+      document.getElementById('createClipBtn').addEventListener('click', createClipCommand);
+      document.getElementById('duplicateClipBtn').addEventListener('click', duplicateClipCommand);
+      document.getElementById('moveClipBtn').addEventListener('click', moveClipCommand);
+      document.getElementById('launchSectionBtn').addEventListener('click', launchSectionCommand);
+      document.getElementById('setClipColourBtn').addEventListener('click', setClipColourCommand);
+      document.getElementById('enterClipBtn').addEventListener('click', enterClipCommand);
+       document.getElementById('exitClipBtn').addEventListener('click', exitClipCommand);
+      document.getElementById('deleteClipBtn').addEventListener('click', deleteClipCommand);
+       document.getElementById('setTrackColourBtn').addEventListener('click', setTrackColourCommand);
     }
 
     async function connectToDeluge() {
@@ -858,6 +984,39 @@
       document.getElementById('setDrumParamBtn').disabled = false;
       document.getElementById('subscribeDrumParamsBtn').disabled = false;
       updateDrumParamSubscribeButton();
+
+      // Clip controls
+      document.getElementById('getClipsBtn').disabled = false;
+      document.getElementById('getTracksBtn').disabled = false;
+      document.getElementById('clipTypeSelect').disabled = false;
+      document.getElementById('clipPositionInput').disabled = false;
+      document.getElementById('clipPresetPathInput').disabled = false;
+      document.getElementById('clipDrumIndexInput').disabled = false;
+      document.getElementById('createClipBtn').disabled = false;
+      document.getElementById('duplicateClipBtn').disabled = false;
+      document.getElementById('dupClipIdInput').disabled = false;
+      document.getElementById('dupClipIndexInput').disabled = false;
+      document.getElementById('dupPositionInput').disabled = false;
+      document.getElementById('dupTrackIdInput').disabled = false;
+      document.getElementById('dupSectionInput').disabled = false;
+      document.getElementById('moveClipBtn').disabled = false;
+      document.getElementById('moveClipIdInput').disabled = false;
+      document.getElementById('moveClipIndexInput').disabled = false;
+      document.getElementById('movePositionInput').disabled = false;
+      document.getElementById('moveTrackIdInput').disabled = false;
+      document.getElementById('moveSectionInput').disabled = false;
+      document.getElementById('launchSectionInput').disabled = false;
+      document.getElementById('launchSectionBtn').disabled = false;
+      document.getElementById('clipColourIndexInput').disabled = false;
+      document.getElementById('clipColourValueInput').disabled = false;
+      document.getElementById('setClipColourBtn').disabled = false;
+       document.getElementById('trackColourValueInput').disabled = false;
+       document.getElementById('setTrackColourBtn').disabled = false;
+      document.getElementById('enterClipIndexInput').disabled = false;
+      document.getElementById('enterClipBtn').disabled = false;
+       document.getElementById('exitClipBtn').disabled = false;
+      document.getElementById('deleteClipIndexInput').disabled = false;
+      document.getElementById('deleteClipBtn').disabled = false;
     }
 
     function disableControls() {
@@ -1076,9 +1235,132 @@
 
       if (response['^parameterChanged']) {
         const pc = response['^parameterChanged'];
-        log(`🔄 Parameter changed: kind=${pc.kind} id=${pc.id} value=${pc.value}`, 'info');
+        const paramLabel = pc.name ? pc.name : `kind=${pc.kind} id=${pc.id}`;
+        log(`🔄 Parameter changed: ${paramLabel} = ${pc.value}`, 'info');
         // Refresh display when subscribed parameter changes
         sendCommand({getParameters: {}});
+      }
+
+      // Clip responses
+      if (response['^clips']) {
+        displayClips(response['^clips']);
+        storeLatestJson(response);
+      }
+      if (response['^tracks']) {
+        displayTracks(response['^tracks']);
+        storeLatestJson(response);
+        const trackCount = response['^tracks'].count ?? (response['^tracks'].tracks ? response['^tracks'].tracks.length : 0);
+        log(`🧵 Tracks received: ${trackCount}`, 'success');
+      }
+
+      if (response['^clipCreated']) {
+        const r = response['^clipCreated'];
+        if (r.status === 'success' || r.success) {
+          let msg = `✓ Clip created at index ${r.index}`;
+          if (r.type) {
+            msg += ` (${r.type})`;
+          }
+          const presetRequested = !!r.presetPath;
+          const presetSuccess = r.presetLoaded === 1 || r.presetLoaded === true;
+          if (presetRequested) {
+            if (presetSuccess) {
+              msg += ` | Preset loaded (${r.presetPath}`;
+              if (typeof r.drumIndex === 'number') {
+                msg += ` → drum ${r.drumIndex}`;
+              }
+              msg += ')';
+            } else {
+              const reason = r.presetError ? r.presetError : 'unknown';
+              msg += ` | Preset failed (${reason}`;
+              if (typeof r.drumIndex === 'number') {
+                msg += `, drum ${r.drumIndex}`;
+              }
+              msg += ')';
+            }
+          }
+          log(msg, presetRequested && !presetSuccess ? 'info' : 'success');
+          sendCommand({getClips: {}});
+        } else if (r.message) {
+          log(`✗ Create clip failed: ${r.message}`, 'error');
+        }
+      }
+
+      if (response['^clipDuplicated']) {
+        const r = response['^clipDuplicated'];
+        if (r.status === 'success' || r.success) {
+          log(`✓ Clip duplicated to index ${r.index} (track ${r.trackId ?? '-'})`, 'success');
+          sendCommand({getClips: {}});
+        } else if (r.message) {
+          log(`✗ Duplicate clip failed: ${r.message}`, 'error');
+        }
+      }
+
+      if (response['^clipMoved']) {
+        const r = response['^clipMoved'];
+        if (r.status === 'success' || r.success) {
+          log(`↕️ Clip moved to index ${r.index ?? '-'} (section ${r.section ?? '-'})`, 'info');
+          sendCommand({getClips: {}});
+        } else if (r.message) {
+          log(`✗ Move clip failed: ${r.message}`, 'error');
+        }
+      }
+
+      if (response['^clipColour']) {
+        const r = response['^clipColour'];
+        if (r.status === 'success') {
+          log(`🎨 Clip ${r.index} colour set to ${r.colour}`, 'info');
+          sendCommand({getClips: {}});
+        } else if (r.message) {
+          log(`✗ Colour set failed: ${r.message}`, 'error');
+        }
+      }
+
+
+      if (response['^clipEntered']) {
+        const r = response['^clipEntered'];
+        if (r.status === 'success') {
+          log(`🚪 Entered clip ${r.index}`, 'info');
+        } else if (r.message) {
+          log(`✗ Enter clip failed: ${r.message}`, 'error');
+        }
+      }
+
+       if (response['^clipExited']) {
+         const r = response['^clipExited'];
+         if (r.status === 'success') {
+           log('⬅️ Back to Session View', 'info');
+         } else if (r.message) {
+           log(`✗ Exit clip failed: ${r.message}`, 'error');
+         }
+       }
+
+       if (response['^trackColour']) {
+         const r = response['^trackColour'];
+         if (r.status === 'success') {
+           log(`🌈 Track for clip ${r.index} hue set to ${r.colour}`, 'info');
+           sendCommand({getClips: {}});
+         } else if (r.message) {
+           log(`✗ Track colour failed: ${r.message}`, 'error');
+         }
+       }
+
+      if (response['^sectionLaunched']) {
+        const r = response['^sectionLaunched'];
+        if (r.status === 'success' || r.success) {
+          log(`🚀 Section ${r.section} launched`, 'success');
+        } else if (r.message) {
+          log(`✗ Launch section failed: ${r.message}`, 'error');
+        }
+      }
+
+      if (response['^clipDeleted']) {
+        const r = response['^clipDeleted'];
+        if (r.status === 'success') {
+          log(`🗑️ Clip ${r.index} deleted`, 'success');
+          sendCommand({getClips: {}});
+        } else if (r.message) {
+          log(`✗ Delete clip failed: ${r.message}`, 'error');
+        }
       }
 
       // Kit responses
@@ -1342,6 +1624,208 @@
       } else {
         hint.textContent = '';
       }
+    }
+
+    // Clip functions
+    function createClipCommand() {
+      const type = document.getElementById('clipTypeSelect').value;
+      const position = parseInt(document.getElementById('clipPositionInput').value, 10);
+      const presetPath = document.getElementById('clipPresetPathInput').value.trim();
+      const drumIndexValue = parseInt(document.getElementById('clipDrumIndexInput').value, 10);
+      const payload = { type };
+      if (!Number.isNaN(position) && position >= 0) {
+        payload.position = position;
+      }
+      if (presetPath.length > 0) {
+        payload.presetPath = presetPath;
+      }
+      if (!Number.isNaN(drumIndexValue) && drumIndexValue >= 0) {
+        if (type !== 'kit') {
+          log('ℹ️ Drum index is only used when creating kit clips', 'info');
+        }
+        payload.drumIndex = drumIndexValue;
+      }
+      sendCommand({createClip: payload});
+    }
+
+    function setClipColourCommand() {
+      const index = parseInt(document.getElementById('clipColourIndexInput').value, 10);
+      const colour = parseInt(document.getElementById('clipColourValueInput').value, 10);
+      if (Number.isNaN(index)) {
+        log('✗ Clip index required for colour change', 'error');
+        return;
+      }
+      if (Number.isNaN(colour)) {
+        log('✗ Colour value required', 'error');
+        return;
+      }
+      sendCommand({setClipColour: {index, colour}});
+    }
+
+    function setTrackColourCommand() {
+      const index = parseInt(document.getElementById('clipColourIndexInput').value, 10);
+      const colour = parseInt(document.getElementById('trackColourValueInput').value, 10);
+      if (Number.isNaN(index)) {
+        log('✗ Clip index required for track colour change', 'error');
+        return;
+      }
+      if (Number.isNaN(colour)) {
+        log('✗ Track colour hue required', 'error');
+        return;
+      }
+      sendCommand({setTrackColour: {index, colour}});
+    }
+
+    function enterClipCommand() {
+      const index = parseInt(document.getElementById('enterClipIndexInput').value, 10);
+      if (Number.isNaN(index)) {
+        log('✗ Clip index required to enter', 'error');
+        return;
+      }
+      sendCommand({enterClip: {index}});
+    }
+
+     function exitClipCommand() {
+       sendCommand({exitClip: {}});
+     }
+
+    function deleteClipCommand() {
+      const index = parseInt(document.getElementById('deleteClipIndexInput').value, 10);
+      if (Number.isNaN(index)) {
+        log('✗ Clip index required to delete', 'error');
+        return;
+      }
+      sendCommand({deleteClip: {index}});
+    }
+
+    function displayClips(data) {
+      const container = document.getElementById('clipDisplay');
+      if (!data || !Array.isArray(data.clips) || data.clips.length === 0) {
+        container.innerHTML = '<div style="color:#888;">No clips to display</div>';
+        return;
+      }
+
+      let html = '<table style="width:100%; font-size:11px; border-collapse:collapse;">';
+      html += '<tr style="text-align:left; color:#667eea;"><th style="padding:4px;">Idx</th><th style="padding:4px;">Clip ID</th><th style="padding:4px;">Track ID</th><th style="padding:4px;">Section</th><th style="padding:4px;">Type</th><th style="padding:4px;">Track</th><th style="padding:4px;">Clip Name</th><th style="padding:4px;">Len</th><th style="padding:4px;">Colour</th></tr>';
+      data.clips.forEach(clip => {
+        html += `<tr style="border-top:1px solid #333;">
+          <td style="padding:4px;">${clip.index}</td>
+          <td style="padding:4px;">${clip.clipId ?? '-'}</td>
+          <td style="padding:4px;">${clip.trackId ?? '-'}</td>
+          <td style="padding:4px;">${clip.section ?? '-'}</td>
+          <td style="padding:4px;">${clip.type}</td>
+          <td style="padding:4px;">${clip.trackName || '-'}</td>
+          <td style="padding:4px;">${clip.name || '-'}</td>
+          <td style="padding:4px;">${clip.length}</td>
+          <td style="padding:4px;">${clip.colour}</td>
+        </tr>`;
+      });
+      html += '</table>';
+      container.innerHTML = html;
+    }
+
+    function displayTracks(data) {
+      const container = document.getElementById('trackDisplay');
+      if (!data || !Array.isArray(data.tracks) || data.tracks.length === 0) {
+        container.innerHTML = '<div style="color:#888;">No tracks to display</div>';
+        return;
+      }
+
+      let html = '<table style="width:100%; font-size:11px; border-collapse:collapse;">';
+      html += '<tr style="text-align:left; color:#667eea;"><th style="padding:4px;">Track ID</th><th style="padding:4px;">Type</th><th style="padding:4px;">Name</th><th style="padding:4px;">Clips</th><th style="padding:4px;">Status</th></tr>';
+      data.tracks.forEach(track => {
+        const clipIds = Array.isArray(track.clipIds) ? track.clipIds.join(', ') : '-';
+        const statusParts = [];
+        if (track.playing) statusParts.push('Playing');
+        if (track.armed) statusParts.push('Armed');
+        const status = statusParts.length ? statusParts.join(' / ') : 'Idle';
+        html += `<tr style="border-top:1px solid #333;">
+          <td style="padding:4px;">${track.trackId}</td>
+          <td style="padding:4px;">${track.type || '-'}</td>
+          <td style="padding:4px;">${track.name || '-'}</td>
+          <td style="padding:4px;">${clipIds}</td>
+          <td style="padding:4px;">${status}</td>
+        </tr>`;
+      });
+      html += '</table>';
+      container.innerHTML = html;
+    }
+
+    function duplicateClipCommand() {
+      const clipIdStr = document.getElementById('dupClipIdInput').value.trim();
+      const clipId = clipIdStr ? Number.parseInt(clipIdStr, 10) : null;
+      const clipIndex = Number.parseInt(document.getElementById('dupClipIndexInput').value, 10);
+      const position = Number.parseInt(document.getElementById('dupPositionInput').value, 10);
+      const targetTrackStr = document.getElementById('dupTrackIdInput').value.trim();
+      const targetTrack = targetTrackStr ? Number.parseInt(targetTrackStr, 10) : null;
+      const section = Number.parseInt(document.getElementById('dupSectionInput').value, 10);
+
+      if ((!clipId || Number.isNaN(clipId)) && (Number.isNaN(clipIndex) || clipIndex < 0)) {
+        log('✗ Provide clipId or source index to duplicate', 'error');
+        return;
+      }
+
+      const payload = {};
+      if (clipId && !Number.isNaN(clipId)) {
+          payload.clipId = clipId;
+      }
+      if (!Number.isNaN(clipIndex) && clipIndex >= 0) {
+          payload.sourceIndex = clipIndex;
+      }
+      if (!Number.isNaN(position) && position >= 0) {
+          payload.position = position;
+      }
+      if (!Number.isNaN(section) && section >= 0) {
+          payload.section = section;
+      }
+      if (targetTrack && !Number.isNaN(targetTrack)) {
+          payload.trackId = targetTrack;
+      }
+
+      sendCommand({duplicateClip: payload});
+    }
+
+    function moveClipCommand() {
+      const clipIdStr = document.getElementById('moveClipIdInput').value.trim();
+      const clipId = clipIdStr ? Number.parseInt(clipIdStr, 10) : null;
+      const clipIndex = Number.parseInt(document.getElementById('moveClipIndexInput').value, 10);
+      const position = Number.parseInt(document.getElementById('movePositionInput').value, 10);
+      const targetTrackStr = document.getElementById('moveTrackIdInput').value.trim();
+      const targetTrack = targetTrackStr ? Number.parseInt(targetTrackStr, 10) : null;
+      const section = Number.parseInt(document.getElementById('moveSectionInput').value, 10);
+
+      if ((!clipId || Number.isNaN(clipId)) && (Number.isNaN(clipIndex) || clipIndex < 0)) {
+        log('✗ Provide clipId or index to move', 'error');
+        return;
+      }
+
+      const payload = {};
+      if (clipId && !Number.isNaN(clipId)) {
+        payload.clipId = clipId;
+      }
+      if (!Number.isNaN(clipIndex) && clipIndex >= 0) {
+        payload.index = clipIndex;
+      }
+      if (!Number.isNaN(position) && position >= 0) {
+        payload.position = position;
+      }
+      if (!Number.isNaN(section) && section >= 0) {
+        payload.section = section;
+      }
+      if (targetTrack && !Number.isNaN(targetTrack)) {
+        payload.trackId = targetTrack;
+      }
+
+      sendCommand({moveClip: payload});
+    }
+
+    function launchSectionCommand() {
+      const section = Number.parseInt(document.getElementById('launchSectionInput').value, 10);
+      if (Number.isNaN(section) || section < 0) {
+        log('✗ Section index required', 'error');
+        return;
+      }
+      sendCommand({launchSection: {section}});
     }
 
     // Kit/Drum functions
@@ -2054,6 +2538,107 @@
       return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    function enableAccordionSorting() {
+      const grid = document.querySelector('.main-grid');
+      if (!grid) return;
+      const accordions = grid.querySelectorAll('.accordion');
+      accordions.forEach(acc => {
+        acc.setAttribute('draggable', 'true');
+        acc.addEventListener('dragstart', handleAccordionDragStart);
+        acc.addEventListener('dragover', handleAccordionDragOver);
+        acc.addEventListener('dragend', handleAccordionDragEnd);
+      });
+    }
+
+    function handleAccordionDragStart(e) {
+      if (this.classList.contains('floating-log')) {
+        e.preventDefault();
+        return;
+      }
+      accordionDragInProgress = true;
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', '');
+    }
+
+    function handleAccordionDragOver(e) {
+      e.preventDefault();
+      const dragging = document.querySelector('.accordion.dragging');
+      if (!dragging || dragging === this || this.classList.contains('floating-log')) {
+        return;
+      }
+      const rect = this.getBoundingClientRect();
+      const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
+      const parent = this.parentNode;
+      if (shouldInsertBefore) {
+        parent.insertBefore(dragging, this);
+      } else {
+        parent.insertBefore(dragging, this.nextElementSibling);
+      }
+    }
+
+    function handleAccordionDragEnd() {
+      if (this.classList.contains('dragging')) {
+        this.classList.remove('dragging');
+      }
+      accordionDragInProgress = false;
+    }
+
+    function toggleLogFloating() {
+      const accordion = elements.messageLogAccordion;
+      if (!accordion) return;
+      logFloating = !logFloating;
+      if (logFloating) {
+        accordion.classList.add('floating-log');
+        accordion.setAttribute('draggable', 'false');
+        accordion.style.right = '20px';
+        accordion.style.bottom = '20px';
+        accordion.style.left = 'auto';
+        accordion.style.top = 'auto';
+      }
+      else {
+        accordion.classList.remove('floating-log');
+        accordion.style.removeProperty('left');
+        accordion.style.removeProperty('top');
+        accordion.style.removeProperty('right');
+        accordion.style.removeProperty('bottom');
+        accordion.setAttribute('draggable', 'true');
+      }
+      updateLogFloatButton();
+    }
+
+    function updateLogFloatButton() {
+      if (!elements.toggleLogFloatBtn) return;
+      elements.toggleLogFloatBtn.textContent = logFloating ? 'Dock Log' : 'Pop Out Log';
+    }
+
+    function initFloatingLogHandle() {
+      if (!elements.logDragHandle || !elements.messageLogAccordion) return;
+      elements.logDragHandle.addEventListener('mousedown', (e) => {
+        if (!logFloating) return;
+        e.preventDefault();
+        const accordion = elements.messageLogAccordion;
+        const rect = accordion.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left;
+        const offsetY = e.clientY - rect.top;
+
+        function onMove(ev) {
+          accordion.style.left = `${ev.clientX - offsetX}px`;
+          accordion.style.top = `${ev.clientY - offsetY}px`;
+          accordion.style.right = 'auto';
+          accordion.style.bottom = 'auto';
+        }
+
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        }
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    }
+
     // Test write operation
     async function testWrite() {
       if (!midiOutput || !midiInput) {
@@ -2346,6 +2931,9 @@
     }
 
     function toggleAccordion(header) {
+      if (accordionDragInProgress) {
+        return;
+      }
       const content = header.nextElementSibling;
       const icon = header.querySelector('.accordion-icon');
 
@@ -2360,6 +2948,9 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       setupEventListeners();
+      enableAccordionSorting();
+      initFloatingLogHandle();
+      updateLogFloatButton();
       log('UI initialized. Click Connect to begin.', 'info');
     });
   </script>

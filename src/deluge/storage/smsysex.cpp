@@ -11,6 +11,7 @@
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/sysex.h"
+#include "io/midi/sysex/clip_sysex.h"
 #include "io/midi/sysex/kit_sysex.h"
 #include "io/midi/sysex/settings_sysex.h"
 #include "io/midi/sysex/synth_sysex.h"
@@ -986,6 +987,50 @@ void smSysex::handleNextSysEx() {
 			goto done;
 		}
 		// Kit commands
+		else if (!strcmp(tagName, "getClips")) {
+			ClipSysex::getClips(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "getTracks")) {
+			ClipSysex::getTracks(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "createClip")) {
+			ClipSysex::createClip(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "duplicateClip")) {
+			ClipSysex::duplicateClip(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "moveClip")) {
+			ClipSysex::moveClip(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "launchSection")) {
+			ClipSysex::launchSection(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setClipColour")) {
+			ClipSysex::setClipColour(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setTrackColour")) {
+			ClipSysex::setTrackColour(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "enterClip")) {
+			ClipSysex::enterClip(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "exitClip")) {
+			ClipSysex::exitClip(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "deleteClip")) {
+			ClipSysex::deleteClip(de.cable, parser);
+			goto done;
+		}
 		else if (!strcmp(tagName, "getKitInfo")) {
 			KitSysex::getKitInfo(de.cable, parser);
 			goto done;

@@ -291,6 +291,7 @@ public:
 private:
 	uint8_t indentAmount;
 	bool firstItemHasBeenWritten = false;
+	void writeEscapedString(char const* value);
 };
 
 class JsonDeserializer : public FileDeserializer {

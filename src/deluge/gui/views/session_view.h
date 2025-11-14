@@ -58,7 +58,7 @@ public:
 	void removeClip(Clip* clip);
 	void redrawClipsOnScreen(bool doRender = true);
 	uint32_t getMaxZoom() override;
-	void cloneClip(uint8_t yDisplayFrom, uint8_t yDisplayTo);
+	Clip* cloneClip(int32_t yDisplayFrom, int32_t yDisplayTo);
 	bool renderRow(ModelStack* modelStack, uint8_t yDisplay, RGB thisImage[kDisplayWidth + kSideBarWidth],
 	               uint8_t thisOccupancyMask[kDisplayWidth + kSideBarWidth], bool drawUndefinedArea = true);
 	void graphicsRoutine() override;
@@ -94,6 +94,12 @@ public:
 	void clipNeedsReRendering(Clip* clip) override;
 	void sampleNeedsReRendering(Sample* sample) override;
 	Clip* getClipOnScreen(int32_t yDisplay);
+	Clip* getClipByIndex(int32_t index);
+	Clip* createClipAtIndex(OutputType outputType, int32_t insertIndex);
+	Clip* duplicateClipToIndex(int32_t sourceIndex, int32_t targetIndex);
+	bool deleteClipAtIndex(int32_t index);
+	bool setClipColour(int32_t index, int32_t colourOffset);
+	bool enterClipAtIndex(int32_t index);
 	Output* getOutputFromPad(int32_t x, int32_t y);
 	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
 	ActionResult verticalScrollOneSquare(int32_t direction);
