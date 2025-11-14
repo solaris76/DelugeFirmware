@@ -17,6 +17,7 @@
 
 #include "io/midi/sysex/synth_sysex.h"
 #include "gui/ui/ui.h"
+#include "io/midi/sysex/sysex_common.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
 #include "model/model_stack.h"
@@ -43,9 +44,7 @@ using namespace deluge::modulation::params;
 namespace SynthSysex {
 
 // Track subscription state
-constexpr uint32_t MAX_PARAMETER_SUBSCRIBERS = 4;
-static MIDICable* parameterSubscribers[MAX_PARAMETER_SUBSCRIBERS] = {nullptr};
-static uint32_t parameterSubscriberCount = 0;
+static SysexCommon::SubscriberList parameterSubscribers;
 
 // Separate JsonSerializer for async notifications to avoid reentrancy
 static JsonSerializer paramNotifyWriter;
@@ -652,79 +651,49 @@ void setPatchCable(MIDICable& cable, JsonDeserializer& reader) {
 
 // Subscribe to parameter changes
 void subscribeParameters(MIDICable& cable, JsonDeserializer& reader) {
-	jWriter.reset();
-	jWriter.setMemoryBased();
+	SysexCommon::startResponse(jWriter, reader, "^parametersSubscribed");
 
-	smSysex::startReply(jWriter, reader);
-	jWriter.writeOpeningTag("^parametersSubscribed", false, true);
-
-	for (uint32_t i = 0; i < parameterSubscriberCount; i++) {
-		if (parameterSubscribers[i] == &cable) {
-			jWriter.writeAttribute("status", "already");
-			jWriter.writeAttribute("subscribed", (int32_t)1);
-			jWriter.closeTag(true);
-			smSysex::sendMsg(cable, jWriter);
-			return;
-		}
-	}
-
-	if (parameterSubscriberCount < MAX_PARAMETER_SUBSCRIBERS) {
-		parameterSubscribers[parameterSubscriberCount++] = &cable;
-		jWriter.writeAttribute("status", "success");
+	switch (parameterSubscribers.add(&cable)) {
+	case SysexCommon::SubscriberList::AddResult::ALREADY_PRESENT:
+		SysexCommon::writeStatus(jWriter, "already");
 		jWriter.writeAttribute("subscribed", (int32_t)1);
-		jWriter.writeAttribute("count", parameterSubscriberCount);
-		jWriter.closeTag(true);
-		smSysex::sendMsg(cable, jWriter);
+		break;
+	case SysexCommon::SubscriberList::AddResult::ADDED:
+		SysexCommon::writeStatus(jWriter, "success");
+		jWriter.writeAttribute("subscribed", (int32_t)1);
+		jWriter.writeAttribute("count", (int32_t)parameterSubscribers.size());
+		break;
+	case SysexCommon::SubscriberList::AddResult::FULL:
+		SysexCommon::writeStatus(jWriter, "error", "Max subscribers reached");
+		jWriter.writeAttribute("subscribed", (int32_t)0);
+		break;
 	}
-	else {
-		jWriter.writeAttribute("status", "error");
-		jWriter.writeAttribute("message", "Max subscribers reached");
-		jWriter.closeTag(true);
-		smSysex::sendMsg(cable, jWriter);
-	}
+
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Unsubscribe from parameter changes
 void unsubscribeParameters(MIDICable& cable, JsonDeserializer& reader) {
-	jWriter.reset();
-	jWriter.setMemoryBased();
+	SysexCommon::startResponse(jWriter, reader, "^parametersUnsubscribed");
 
-	smSysex::startReply(jWriter, reader);
-	jWriter.writeOpeningTag("^parametersUnsubscribed", false, true);
-
-	for (uint32_t i = 0; i < parameterSubscriberCount; i++) {
-		if (parameterSubscribers[i] == &cable) {
-			for (uint32_t j = i; j < parameterSubscriberCount - 1; j++) {
-				parameterSubscribers[j] = parameterSubscribers[j + 1];
-			}
-			parameterSubscribers[parameterSubscriberCount - 1] = nullptr;
-			parameterSubscriberCount--;
-
-			jWriter.writeAttribute("status", "success");
-			jWriter.writeAttribute("subscribed", (int32_t)0);
-			jWriter.closeTag(true);
-			smSysex::sendMsg(cable, jWriter);
-			return;
-		}
+	if (parameterSubscribers.remove(&cable)) {
+		SysexCommon::writeStatus(jWriter, "success");
+	}
+	else {
+		SysexCommon::writeStatus(jWriter, "not_subscribed");
 	}
 
-	jWriter.writeAttribute("status", "not_subscribed");
 	jWriter.writeAttribute("subscribed", (int32_t)0);
-	jWriter.closeTag(true);
-	smSysex::sendMsg(cable, jWriter);
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Notify subscribers of parameter change
 void notifyParameterChanged(int32_t paramKind, int32_t paramId, const char* paramName, int32_t value) {
-	if (parameterSubscriberCount == 0 || !paramName) {
+	if (parameterSubscribers.size() == 0 || !paramName) {
 		return;
 	}
 
-	for (uint32_t i = 0; i < parameterSubscriberCount; i++) {
-		if (!parameterSubscribers[i]) {
-			continue;
-		}
-
+	parameterSubscribers.forEach([&](MIDICable& destination) {
 		paramNotifyWriter.reset();
 		paramNotifyWriter.setMemoryBased();
 		smSysex::startDirect(paramNotifyWriter);
@@ -734,8 +703,8 @@ void notifyParameterChanged(int32_t paramKind, int32_t paramId, const char* para
 		paramNotifyWriter.writeAttribute("name", paramName);
 		paramNotifyWriter.writeAttribute("value", value);
 		paramNotifyWriter.closeTag(true);
-		smSysex::sendMsg(*parameterSubscribers[i], paramNotifyWriter);
-	}
+		smSysex::sendMsg(destination, paramNotifyWriter);
+	});
 }
 
 } // namespace SynthSysex

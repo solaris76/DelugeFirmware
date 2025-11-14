@@ -17,6 +17,7 @@
 
 #include "io/midi/sysex/kit_sysex.h"
 #include "gui/ui/ui.h"
+#include "io/midi/sysex/sysex_common.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
 #include "model/drum/drum.h"
@@ -49,16 +50,14 @@ extern Song* currentSong;
 namespace KitSysex {
 
 // Track subscription state
-static bool kitSubscribed = false;
+static SysexCommon::SubscriberList kitSubscribers;
 
 // Separate JsonSerializer for async notifications to avoid reentrancy
 static JsonSerializer kitNotifyWriter;
 static JsonSerializer drumParamNotifyWriter;
 
 // Drum parameter subscription tracking
-const uint32_t MAX_DRUM_PARAM_SUBSCRIBERS = 4;
-static MIDICable* drumParamSubscribers[MAX_DRUM_PARAM_SUBSCRIBERS] = {nullptr};
-static uint32_t drumParamSubscriberCount = 0;
+static SysexCommon::SubscriberList drumParamSubscribers;
 
 // Helper to get the current kit from the active clip
 static Kit* getCurrentKit() {
@@ -428,9 +427,7 @@ void addDrum(MIDICable& cable, JsonDeserializer& reader) {
 	renderingNeededRegardlessOfUI(0, 0xFFFFFFFF);
 
 	// Notify subscribers
-	if (kitSubscribed) {
-		notifyDrumAdded(newIndex);
-	}
+	notifyDrumAdded(newIndex);
 }
 
 // Remove a drum from the kit by index
@@ -499,9 +496,7 @@ void removeDrum(MIDICable& cable, JsonDeserializer& reader) {
 	renderingNeededRegardlessOfUI(0, 0xFFFFFFFF);
 
 	// Notify subscribers
-	if (kitSubscribed) {
-		notifyDrumRemoved(drumIndex);
-	}
+	notifyDrumRemoved(drumIndex);
 }
 
 // Set drum properties
@@ -602,9 +597,7 @@ void setDrumProperty(MIDICable& cable, JsonDeserializer& reader) {
 		renderingNeededRegardlessOfUI(0, 0xFFFFFFFF);
 
 		// Notify subscribers
-		if (kitSubscribed) {
-			notifyDrumChanged(drumIndex);
-		}
+		notifyDrumChanged(drumIndex);
 	}
 	else {
 		jWriter.writeAttribute("error", "Unknown property or invalid value");
@@ -771,9 +764,7 @@ void setDrumSample(MIDICable& cable, JsonDeserializer& reader) {
 	renderingNeededRegardlessOfUI(0, 0xFFFFFFFF);
 
 	// Notify subscribers
-	if (kitSubscribed) {
-		notifyDrumChanged(drumIndex);
-	}
+	notifyDrumChanged(drumIndex);
 
 	jWriter.closeTag(true);
 	smSysex::sendMsg(cable, jWriter);
@@ -1025,9 +1016,7 @@ void setDrumParameter(MIDICable& cable, JsonDeserializer& reader) {
 		uiNeedsRendering(getCurrentUI());
 
 		// Notify subscribers
-		if (kitSubscribed) {
-			notifyDrumChanged(drumIndex);
-		}
+		notifyDrumChanged(drumIndex);
 	}
 	else {
 		jWriter.writeAttribute("error", errorMsg);
@@ -1040,47 +1029,26 @@ void setDrumParameter(MIDICable& cable, JsonDeserializer& reader) {
 
 // Create a new empty kit
 void createKit(MIDICable& cable, JsonDeserializer& reader) {
-	jWriter.reset();
-	jWriter.setMemoryBased();
-
-	smSysex::startReply(jWriter, reader);
-	jWriter.writeOpeningTag("^kitCreated", false, true);
-
-	// TODO: Implement kit creation - requires more complex song/clip management
-	jWriter.writeAttribute("error", "Not yet implemented");
-
-	jWriter.closeTag(true);
-	smSysex::sendMsg(cable, jWriter);
+	SysexCommon::startResponse(jWriter, reader, "^kitCreated");
+	SysexCommon::writeStatus(jWriter, "error", "Kit creation via SysEx not yet supported");
+	jWriter.writeAttribute("supported", (int32_t)0);
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Load an existing kit by name
 void loadKit(MIDICable& cable, JsonDeserializer& reader) {
-	jWriter.reset();
-	jWriter.setMemoryBased();
-
-	smSysex::startReply(jWriter, reader);
-	jWriter.writeOpeningTag("^kitLoaded", false, true);
-
-	// TODO: Implement kit loading - requires file system and song management
-	jWriter.writeAttribute("error", "Not yet implemented");
-
-	jWriter.closeTag(true);
-	smSysex::sendMsg(cable, jWriter);
+	SysexCommon::startResponse(jWriter, reader, "^kitLoaded");
+	SysexCommon::writeStatus(jWriter, "error", "Kit loading via SysEx not yet supported");
+	jWriter.writeAttribute("supported", (int32_t)0);
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Save the current kit
 void saveKit(MIDICable& cable, JsonDeserializer& reader) {
-	jWriter.reset();
-	jWriter.setMemoryBased();
-
-	smSysex::startReply(jWriter, reader);
-	jWriter.writeOpeningTag("^kitSaved", false, true);
-
-	// TODO: Implement kit saving - requires file system management
-	jWriter.writeAttribute("error", "Not yet implemented");
-
-	jWriter.closeTag(true);
-	smSysex::sendMsg(cable, jWriter);
+	SysexCommon::startResponse(jWriter, reader, "^kitSaved");
+	SysexCommon::writeStatus(jWriter, "error", "Kit saving via SysEx not yet supported");
+	jWriter.writeAttribute("supported", (int32_t)0);
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Subscribe to kit changes
@@ -1088,13 +1056,23 @@ void subscribeKit(MIDICable& cable, JsonDeserializer& reader) {
 	jWriter.reset();
 	jWriter.setMemoryBased();
 
-	kitSubscribed = true;
+	SysexCommon::startResponse(jWriter, reader, "^kitSubscribed");
 
-	smSysex::startReply(jWriter, reader);
-	jWriter.writeOpeningTag("^kitSubscribed", false, true);
-	jWriter.writeAttribute("subscribed", 1);
-	jWriter.closeTag(true);
-	smSysex::sendMsg(cable, jWriter);
+	switch (kitSubscribers.add(&cable)) {
+	case SysexCommon::SubscriberList::AddResult::ALREADY_PRESENT:
+		SysexCommon::writeStatus(jWriter, "already");
+		break;
+	case SysexCommon::SubscriberList::AddResult::ADDED:
+		SysexCommon::writeStatus(jWriter, "success");
+		jWriter.writeAttribute("count", (int32_t)kitSubscribers.size());
+		break;
+	case SysexCommon::SubscriberList::AddResult::FULL:
+		SysexCommon::writeStatus(jWriter, "error", "Max subscribers reached");
+		break;
+	}
+
+	jWriter.writeAttribute("subscribed", (int32_t)(kitSubscribers.contains(&cable) ? 1 : 0));
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Unsubscribe from kit changes
@@ -1102,152 +1080,131 @@ void unsubscribeKit(MIDICable& cable, JsonDeserializer& reader) {
 	jWriter.reset();
 	jWriter.setMemoryBased();
 
-	kitSubscribed = false;
+	SysexCommon::startResponse(jWriter, reader, "^kitUnsubscribed");
 
-	smSysex::startReply(jWriter, reader);
-	jWriter.writeOpeningTag("^kitUnsubscribed", false, true);
-	jWriter.writeAttribute("subscribed", false);
-	jWriter.closeTag(true);
-	smSysex::sendMsg(cable, jWriter);
+	if (kitSubscribers.remove(&cable)) {
+		SysexCommon::writeStatus(jWriter, "success");
+	}
+	else {
+		SysexCommon::writeStatus(jWriter, "not_subscribed");
+	}
+
+	jWriter.writeAttribute("subscribed", (int32_t)0);
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Subscribe to drum parameter changes
 void subscribeDrumParameters(MIDICable& cable, JsonDeserializer& reader) {
-	jWriter.reset();
-	jWriter.setMemoryBased();
+	SysexCommon::startResponse(jWriter, reader, "^drumParametersSubscribed");
 
-	for (uint32_t i = 0; i < drumParamSubscriberCount; i++) {
-		if (drumParamSubscribers[i] == &cable) {
-			smSysex::startReply(jWriter, reader);
-			jWriter.writeOpeningTag("^drumParametersSubscribed", false, true);
-			jWriter.writeAttribute("status", "already");
-			jWriter.closeTag(true);
-			smSysex::sendMsg(cable, jWriter);
-			return;
-		}
+	switch (drumParamSubscribers.add(&cable)) {
+	case SysexCommon::SubscriberList::AddResult::ALREADY_PRESENT:
+		SysexCommon::writeStatus(jWriter, "already");
+		jWriter.writeAttribute("subscribed", (int32_t)1);
+		break;
+	case SysexCommon::SubscriberList::AddResult::ADDED:
+		SysexCommon::writeStatus(jWriter, "success");
+		jWriter.writeAttribute("subscribed", (int32_t)1);
+		jWriter.writeAttribute("count", (int32_t)drumParamSubscribers.size());
+		break;
+	case SysexCommon::SubscriberList::AddResult::FULL:
+		SysexCommon::writeStatus(jWriter, "error", "Max subscribers reached");
+		jWriter.writeAttribute("subscribed", (int32_t)0);
+		SysexCommon::sendResponse(cable, jWriter);
+		return;
 	}
 
-	if (drumParamSubscriberCount < MAX_DRUM_PARAM_SUBSCRIBERS) {
-		drumParamSubscribers[drumParamSubscriberCount++] = &cable;
-		smSysex::startReply(jWriter, reader);
-		jWriter.writeOpeningTag("^drumParametersSubscribed", false, true);
-		jWriter.writeAttribute("status", "success");
-		jWriter.writeAttribute("count", drumParamSubscriberCount);
-		jWriter.closeTag(true);
-		smSysex::sendMsg(cable, jWriter);
-	}
-	else {
-		smSysex::startReply(jWriter, reader);
-		jWriter.writeOpeningTag("^error", false, true);
-		jWriter.writeAttribute("message", "Max drum parameter subscribers reached");
-		jWriter.closeTag(true);
-		smSysex::sendMsg(cable, jWriter);
-	}
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Unsubscribe from drum parameter changes
 void unsubscribeDrumParameters(MIDICable& cable, JsonDeserializer& reader) {
-	jWriter.reset();
-	jWriter.setMemoryBased();
+	SysexCommon::startResponse(jWriter, reader, "^drumParametersUnsubscribed");
 
-	for (uint32_t i = 0; i < drumParamSubscriberCount; i++) {
-		if (drumParamSubscribers[i] == &cable) {
-			for (uint32_t j = i; j < drumParamSubscriberCount - 1; j++) {
-				drumParamSubscribers[j] = drumParamSubscribers[j + 1];
-			}
-			drumParamSubscribers[drumParamSubscriberCount - 1] = nullptr;
-			drumParamSubscriberCount--;
-
-			smSysex::startReply(jWriter, reader);
-			jWriter.writeOpeningTag("^drumParametersUnsubscribed", false, true);
-			jWriter.writeAttribute("status", "success");
-			jWriter.closeTag(true);
-			smSysex::sendMsg(cable, jWriter);
-			return;
-		}
+	if (drumParamSubscribers.remove(&cable)) {
+		SysexCommon::writeStatus(jWriter, "success");
+	}
+	else {
+		SysexCommon::writeStatus(jWriter, "not_subscribed");
 	}
 
-	smSysex::startReply(jWriter, reader);
-	jWriter.writeOpeningTag("^drumParametersUnsubscribed", false, true);
-	jWriter.writeAttribute("status", "not_subscribed");
-	jWriter.closeTag(true);
-	smSysex::sendMsg(cable, jWriter);
+	jWriter.writeAttribute("subscribed", (int32_t)0);
+	SysexCommon::sendResponse(cable, jWriter);
 }
 
 // Notify subscribers when a drum is added
 void notifyDrumAdded(int32_t drumIndex) {
-	if (!kitSubscribed) {
+	if (kitSubscribers.size() == 0) {
 		return;
 	}
 
-	kitNotifyWriter.reset();
-	kitNotifyWriter.setMemoryBased();
-
-	kitNotifyWriter.writeOpeningTag("^drumAdded", false, true);
-	kitNotifyWriter.writeAttribute("index", drumIndex);
-	kitNotifyWriter.closeTag(true);
-
-	// TODO: Send via MIDI SysEx - need cable reference
-	// For now, notification is prepared but not sent
+	kitSubscribers.forEach([&](MIDICable& destination) {
+		kitNotifyWriter.reset();
+		kitNotifyWriter.setMemoryBased();
+		smSysex::startDirect(kitNotifyWriter);
+		kitNotifyWriter.writeOpeningTag("^drumAdded", false, true);
+		kitNotifyWriter.writeAttribute("index", drumIndex);
+		kitNotifyWriter.closeTag(true);
+		smSysex::sendMsg(destination, kitNotifyWriter);
+	});
 }
 
 // Notify subscribers when a drum is removed
 void notifyDrumRemoved(int32_t drumIndex) {
-	if (!kitSubscribed) {
+	if (kitSubscribers.size() == 0) {
 		return;
 	}
 
-	kitNotifyWriter.reset();
-	kitNotifyWriter.setMemoryBased();
-
-	kitNotifyWriter.writeOpeningTag("^drumRemoved", false, true);
-	kitNotifyWriter.writeAttribute("index", drumIndex);
-	kitNotifyWriter.closeTag(true);
-
-	// TODO: Send via MIDI SysEx - need cable reference
+	kitSubscribers.forEach([&](MIDICable& destination) {
+		kitNotifyWriter.reset();
+		kitNotifyWriter.setMemoryBased();
+		smSysex::startDirect(kitNotifyWriter);
+		kitNotifyWriter.writeOpeningTag("^drumRemoved", false, true);
+		kitNotifyWriter.writeAttribute("index", drumIndex);
+		kitNotifyWriter.closeTag(true);
+		smSysex::sendMsg(destination, kitNotifyWriter);
+	});
 }
 
 // Notify subscribers when a drum property changes
 void notifyDrumChanged(int32_t drumIndex) {
-	if (!kitSubscribed) {
+	if (kitSubscribers.size() == 0) {
 		return;
 	}
 
-	kitNotifyWriter.reset();
-	kitNotifyWriter.setMemoryBased();
-
-	kitNotifyWriter.writeOpeningTag("^drumChanged", false, true);
-	kitNotifyWriter.writeAttribute("index", drumIndex);
-	kitNotifyWriter.closeTag(true);
-
-	// TODO: Send via MIDI SysEx - need cable reference
+	kitSubscribers.forEach([&](MIDICable& destination) {
+		kitNotifyWriter.reset();
+		kitNotifyWriter.setMemoryBased();
+		smSysex::startDirect(kitNotifyWriter);
+		kitNotifyWriter.writeOpeningTag("^drumChanged", false, true);
+		kitNotifyWriter.writeAttribute("index", drumIndex);
+		kitNotifyWriter.closeTag(true);
+		smSysex::sendMsg(destination, kitNotifyWriter);
+	});
 }
 
 // Notify subscribers when the kit itself changes (load/create)
 void notifyKitChanged() {
-	if (!kitSubscribed) {
+	if (kitSubscribers.size() == 0) {
 		return;
 	}
 
-	kitNotifyWriter.reset();
-	kitNotifyWriter.setMemoryBased();
-
-	kitNotifyWriter.writeOpeningTag("^kitChanged", false, true);
-	kitNotifyWriter.closeTag(true);
-
-	// TODO: Send via MIDI SysEx - need cable reference
+	kitSubscribers.forEach([&](MIDICable& destination) {
+		kitNotifyWriter.reset();
+		kitNotifyWriter.setMemoryBased();
+		smSysex::startDirect(kitNotifyWriter);
+		kitNotifyWriter.writeOpeningTag("^kitChanged", false, true);
+		kitNotifyWriter.closeTag(true);
+		smSysex::sendMsg(destination, kitNotifyWriter);
+	});
 }
 
 void notifyDrumParameterChanged(int32_t drumIndex, char const* paramName, int32_t value) {
-	if (drumParamSubscriberCount == 0 || !paramName) {
+	if (drumParamSubscribers.size() == 0 || !paramName) {
 		return;
 	}
 
-	for (uint32_t i = 0; i < drumParamSubscriberCount; i++) {
-		if (!drumParamSubscribers[i]) {
-			continue;
-		}
-
+	drumParamSubscribers.forEach([&](MIDICable& destination) {
 		drumParamNotifyWriter.reset();
 		drumParamNotifyWriter.setMemoryBased();
 		smSysex::startDirect(drumParamNotifyWriter);
@@ -1256,8 +1213,8 @@ void notifyDrumParameterChanged(int32_t drumIndex, char const* paramName, int32_
 		drumParamNotifyWriter.writeAttribute("name", paramName);
 		drumParamNotifyWriter.writeAttribute("value", value);
 		drumParamNotifyWriter.closeTag(true);
-		smSysex::sendMsg(*drumParamSubscribers[i], drumParamNotifyWriter);
-	}
+		smSysex::sendMsg(destination, drumParamNotifyWriter);
+	});
 }
 
 } // namespace KitSysex
