@@ -18,12 +18,15 @@
 #include "io/midi/sysex/clip_sysex.h"
 #include "gui/views/session_view.h"
 #include "io/midi/sysex/sysex_common.h"
+#include "model/action/action_logger.h"
 #include "model/clip/clip.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
 #include "model/instrument/kit.h"
 #include "model/model_stack.h"
+#include "model/note/note.h"
 #include "model/note/note_row.h"
+#include "model/scale/preset_scales.h"
 #include "model/song/song.h"
 #include "modulation/params/param_manager.h"
 #include "playback/mode/session.h"
@@ -40,6 +43,7 @@
 extern JsonSerializer jWriter;
 extern Song* currentSong;
 extern SessionView sessionView;
+extern ActionLogger actionLogger;
 extern bool sdRoutineLock;
 
 namespace {
@@ -521,6 +525,9 @@ void createClip(MIDICable& cable, JsonDeserializer& reader) {
 		writeErrorAndSend(cable, "error", "Failed to create clip");
 		return;
 	}
+
+	// SysEx-created tracks should default to the first section (top row) for consistency
+	newClip->section = 0;
 
 	int32_t newIndex = currentSong->sessionClips.getIndexForClip(newClip);
 	if (colourProvided) {
@@ -1006,6 +1013,305 @@ void launchSection(MIDICable& cable, JsonDeserializer& reader) {
 
 	SysexCommon::writeStatus(jWriter, "success");
 	jWriter.writeAttribute("section", section);
+	SysexCommon::sendResponse(cable, jWriter);
+}
+
+void getNotes(MIDICable& cable, JsonDeserializer& reader) {
+	SysexCommon::startResponse(jWriter, reader, "^notes");
+
+	if (!guardSongAndCard(cable)) {
+		return;
+	}
+
+	uint32_t clipId = 0;
+	int32_t clipIndex = -1;
+
+	reader.match('{');
+	char const* tagName;
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "clipId")) {
+			clipId = (uint32_t)reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "clipIndex") || !strcmp(tagName, "index")) {
+			clipIndex = reader.readTagOrAttributeValueInt();
+		}
+		else {
+			reader.readTagOrAttributeValue();
+		}
+	}
+	reader.match('}');
+
+	Clip* clip = nullptr;
+	if (clipId) {
+		clip = findClipById(clipId);
+	}
+	if (!clip && clipIndex >= 0 && clipIndex < currentSong->sessionClips.getNumElements()) {
+		clip = currentSong->sessionClips.getClipAtIndex(clipIndex);
+	}
+
+	if (!clip) {
+		writeErrorAndSend(cable, "error", "Clip not found");
+		return;
+	}
+
+	if (clip->type != ClipType::INSTRUMENT) {
+		writeErrorAndSend(cable, "error", "Clip is not an instrument clip");
+		return;
+	}
+
+	InstrumentClip* instrumentClip = (InstrumentClip*)clip;
+
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+	modelStack->setTimelineCounter(clip);
+
+	SysexCommon::writeStatus(jWriter, "success");
+	jWriter.writeAttribute("clipId", (int32_t)getClipId(clip));
+	jWriter.writeAttribute("length", (int32_t)clip->loopLength);
+	jWriter.writeAttribute("scaleMode", instrumentClip->isScaleModeClip() ? 1 : 0);
+
+	if (instrumentClip->isScaleModeClip()) {
+		jWriter.writeAttribute("scaleType", (int32_t)instrumentClip->getScaleType());
+	}
+
+	jWriter.writeArrayStart("notes");
+
+	uint32_t totalNotes = 0;
+	for (int32_t rowIndex = 0; rowIndex < instrumentClip->noteRows.getNumElements(); rowIndex++) {
+		NoteRow* noteRow = instrumentClip->noteRows.getElement(rowIndex);
+		if (!noteRow) {
+			continue;
+		}
+
+		int32_t noteRowId = instrumentClip->getNoteRowId(noteRow, rowIndex);
+		int32_t y = noteRow->y;
+
+		// Iterate through all notes in this row
+		for (int32_t noteIndex = 0; noteIndex < noteRow->notes.getNumElements(); noteIndex++) {
+			Note* note = noteRow->notes.getElement(noteIndex);
+			if (!note) {
+				continue;
+			}
+
+			// Generate stable note ID: rowId + pos (notes can't overlap in same row)
+			uint64_t noteId = ((uint64_t)noteRowId << 32) | (uint32_t)note->pos;
+
+			jWriter.writeOpeningTagBeginning(nullptr, true, true);
+			jWriter.writeAttribute("noteId", (int32_t)(noteId & 0xFFFFFFFF));
+			jWriter.writeAttribute("noteIdHigh", (int32_t)(noteId >> 32));
+			jWriter.writeAttribute("rowId", noteRowId);
+			jWriter.writeAttribute("y", y);
+			jWriter.writeAttribute("start", (int32_t)note->pos);
+			jWriter.writeAttribute("length", (int32_t)note->getLength());
+			jWriter.writeAttribute("velocity", (int32_t)note->getVelocity());
+			jWriter.closeTag(false);
+			totalNotes++;
+		}
+	}
+
+	jWriter.writeArrayEnding("notes");
+	jWriter.writeAttribute("count", (int32_t)totalNotes);
+	SysexCommon::sendResponse(cable, jWriter);
+}
+
+void setNotes(MIDICable& cable, JsonDeserializer& reader) {
+	SysexCommon::startResponse(jWriter, reader, "^notesSet");
+
+	if (!guardSongAndCard(cable)) {
+		return;
+	}
+
+	uint32_t clipId = 0;
+	int32_t clipIndex = -1;
+
+	reader.match('{');
+	char const* tagName;
+	bool parsedNotes = false;
+	bool hasNoteOps = false;
+
+	Clip* clip = nullptr;
+	if (clipId) {
+		clip = findClipById(clipId);
+	}
+	if (!clip && clipIndex >= 0 && clipIndex < currentSong->sessionClips.getNumElements()) {
+		clip = currentSong->sessionClips.getClipAtIndex(clipIndex);
+	}
+
+	if (!clip) {
+		writeErrorAndSend(cable, "error", "Clip not found");
+		return;
+	}
+
+	if (clip->type != ClipType::INSTRUMENT) {
+		writeErrorAndSend(cable, "error", "Clip is not an instrument clip");
+		return;
+	}
+
+	InstrumentClip* instrumentClip = (InstrumentClip*)clip;
+
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+	modelStack->setTimelineCounter(clip);
+
+	Action* action = actionLogger.getNewAction(ActionType::NOTE_EDIT, ActionAddition::ALLOWED);
+
+	int32_t successCount = 0;
+	int32_t errorCount = 0;
+
+	// Parse incoming object
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "clipId")) {
+			clipId = (uint32_t)reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "clipIndex") || !strcmp(tagName, "index")) {
+			clipIndex = reader.readTagOrAttributeValueInt();
+		}
+		else if (!strcmp(tagName, "notes")) {
+			hasNoteOps = true;
+			reader.match('[');
+			while (reader.match('{')) {
+				char const* noteTagName;
+				String opString;
+				const char* op = nullptr;
+				uint64_t noteId = 0;
+				int32_t rowId = -1;
+				int32_t y = -32768;
+				int32_t start = -1;
+				int32_t length = -1;
+				int32_t velocity = -1;
+
+				while (*(noteTagName = reader.readNextTagOrAttributeName())) {
+					if (!strcmp(noteTagName, "op")) {
+						reader.readTagOrAttributeValueString(&opString);
+						op = opString.get();
+					}
+					else if (!strcmp(noteTagName, "noteId")) {
+						uint32_t low = (uint32_t)reader.readTagOrAttributeValueInt();
+						noteId = low;
+					}
+					else if (!strcmp(noteTagName, "noteIdHigh")) {
+						uint32_t high = (uint32_t)reader.readTagOrAttributeValueInt();
+						noteId |= ((uint64_t)high << 32);
+					}
+					else if (!strcmp(noteTagName, "rowId")) {
+						rowId = reader.readTagOrAttributeValueInt();
+					}
+					else if (!strcmp(noteTagName, "y")) {
+						y = reader.readTagOrAttributeValueInt();
+					}
+					else if (!strcmp(noteTagName, "start") || !strcmp(noteTagName, "pos")) {
+						start = reader.readTagOrAttributeValueInt();
+					}
+					else if (!strcmp(noteTagName, "length")) {
+						length = reader.readTagOrAttributeValueInt();
+					}
+					else if (!strcmp(noteTagName, "velocity")) {
+						velocity = reader.readTagOrAttributeValueInt();
+					}
+					else {
+						reader.readTagOrAttributeValue();
+					}
+				}
+				reader.match('}');
+
+				if (!op) {
+					errorCount++;
+					continue;
+				}
+
+				NoteRow* noteRow = nullptr;
+				ModelStackWithNoteRow* modelStackWithNoteRow = nullptr;
+
+				if (rowId >= 0) {
+					noteRow = instrumentClip->getNoteRowFromId(rowId);
+					if (noteRow) {
+						modelStackWithNoteRow = modelStack->addNoteRow(rowId, noteRow);
+						rowId = modelStackWithNoteRow->noteRowId;
+					}
+				}
+				else if (y != -32768) {
+					modelStackWithNoteRow = instrumentClip->getOrCreateNoteRowForYNote(y, modelStack, action);
+					if (modelStackWithNoteRow) {
+						noteRow = modelStackWithNoteRow->getNoteRowAllowNull();
+						rowId = modelStackWithNoteRow->noteRowId;
+					}
+				}
+
+				if (!noteRow || !modelStackWithNoteRow) {
+					errorCount++;
+					continue;
+				}
+
+				if (!strcmp(op, "add") || !strcmp(op, "create")) {
+					if (start < 0 || length <= 0 || velocity < 1 || velocity > 127) {
+						errorCount++;
+						continue;
+					}
+
+					int32_t result = noteRow->attemptNoteAdd(
+					    start, length, velocity, noteRow->getDefaultProbability(), noteRow->getDefaultIterance(),
+					    noteRow->getDefaultFill(modelStackWithNoteRow), modelStackWithNoteRow, action);
+					if (result > 0) {
+						successCount++;
+					}
+					else {
+						errorCount++;
+					}
+				}
+				else if (!strcmp(op, "update") || !strcmp(op, "edit")) {
+					uint32_t notePos = (uint32_t)(noteId & 0xFFFFFFFF);
+					int32_t noteIndex = noteRow->notes.search(notePos, GREATER_OR_EQUAL);
+					if (noteIndex < noteRow->notes.getNumElements()) {
+						Note* note = noteRow->notes.getElement(noteIndex);
+						if (note && note->pos == (int32_t)notePos) {
+							if (length > 0) {
+								note->setLength(length);
+							}
+							if (velocity >= 1 && velocity <= 127) {
+								note->setVelocity(velocity);
+							}
+							if (action) {
+								action->recordNoteChange(instrumentClip, rowId, note, note->getLength(),
+								                         note->getVelocity(), note->getProbability());
+							}
+							successCount++;
+						}
+						else {
+							errorCount++;
+						}
+					}
+					else {
+						errorCount++;
+					}
+				}
+				else if (!strcmp(op, "delete") || !strcmp(op, "remove")) {
+					uint32_t notePos = (uint32_t)(noteId & 0xFFFFFFFF);
+					noteRow->deleteNoteByPos(modelStackWithNoteRow, notePos, action);
+					successCount++;
+				}
+				else {
+					errorCount++;
+				}
+			}
+			reader.match(']');
+			parsedNotes = true;
+		}
+		else {
+			reader.readTagOrAttributeValue();
+		}
+	}
+	reader.match('}');
+
+	if (hasNoteOps && !parsedNotes) {
+		errorCount++;
+	}
+
+	instrumentClip->expectEvent();
+	sessionView.redrawClipsOnScreen();
+
+	SysexCommon::writeStatus(jWriter, successCount > 0 ? "success" : "error");
+	jWriter.writeAttribute("successCount", successCount);
+	jWriter.writeAttribute("errorCount", errorCount);
 	SysexCommon::sendResponse(cable, jWriter);
 }
 

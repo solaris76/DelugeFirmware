@@ -35,5 +35,7 @@ void getTracks(MIDICable& cable, JsonDeserializer& reader);
 void duplicateClip(MIDICable& cable, JsonDeserializer& reader);
 void moveClip(MIDICable& cable, JsonDeserializer& reader);
 void launchSection(MIDICable& cable, JsonDeserializer& reader);
+void getNotes(MIDICable& cable, JsonDeserializer& reader);
+void setNotes(MIDICable& cable, JsonDeserializer& reader);
 
 } // namespace ClipSysex

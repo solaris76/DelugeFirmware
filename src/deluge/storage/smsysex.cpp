@@ -1011,6 +1011,14 @@ void smSysex::handleNextSysEx() {
 			ClipSysex::launchSection(de.cable, parser);
 			goto done;
 		}
+		else if (!strcmp(tagName, "getNotes")) {
+			ClipSysex::getNotes(de.cable, parser);
+			goto done;
+		}
+		else if (!strcmp(tagName, "setNotes")) {
+			ClipSysex::setNotes(de.cable, parser);
+			goto done;
+		}
 		else if (!strcmp(tagName, "setClipColour")) {
 			ClipSysex::setClipColour(de.cable, parser);
 			goto done;
