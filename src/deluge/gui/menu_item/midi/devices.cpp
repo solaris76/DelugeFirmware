@@ -86,28 +86,19 @@ void Devices::selectEncoderAction(int32_t offset) {
 	// Don't show devices which aren't connected. Sometimes we won't even have a name to display for them.
 
 	if (display->haveOLED()) {
-		if (this->getValue() < currentScroll) {
-			currentScroll = this->getValue();
+		// Keep selection within the visible window [currentScroll, currentScroll + visible - 1]
+		const int32_t visible = kOLEDMenuNumOptionsVisible;
+		const int32_t top = currentScroll;
+		const int32_t bottom = currentScroll + visible - 1;
+		const int32_t v = this->getValue();
+		if (v < top) {
+			currentScroll = v;
 		}
-		//
-		if (offset >= 0) {
-			int32_t d = this->getValue();
-			int32_t numSeen = 1;
-			while (d > lowestDeviceNum) {
-				d--;
-				if (d == currentScroll) {
-					break;
-				}
-				auto device = getCable(d);
-				if (!(device && device->connectionFlags)) {
-					continue;
-				}
-				numSeen++;
-				if (numSeen >= kOLEDMenuNumOptionsVisible) {
-					currentScroll = d;
-					break;
-				}
-			}
+		else if (v > bottom) {
+			currentScroll = v - (visible - 1);
+		}
+		if (currentScroll < lowestDeviceNum) {
+			currentScroll = lowestDeviceNum;
 		}
 	}
 

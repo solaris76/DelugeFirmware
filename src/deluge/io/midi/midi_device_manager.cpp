@@ -34,6 +34,7 @@
 extern "C" {
 #include "RZA1/usb/r_usb_basic/src/driver/inc/r_usb_basic_define.h"
 #include "drivers/uart/uart.h"
+#include "RZA1/usb/r_usb_hmidi/src/inc/r_usb_hmidi.h"
 
 extern uint8_t anyUSBSendingStillHappening[];
 }
@@ -130,16 +131,15 @@ MIDICableUSBHosted* getOrCreateHostedMIDIDeviceFromDetails(String* name, uint16_
 		}
 	}
 
-	// Ok, try searching by vendor / product id
-	for (int32_t i = 0; i < hostedMIDIDevices.getNumElements(); i++) {
-		auto* candidate = static_cast<MIDICableUSBHosted*>(hostedMIDIDevices.getElement(i));
+	// If we have a name, do NOT merge by vendor/product IDs — allow multiple entries per VID:PID
+	if (!gotAName) {
+		// Ok, try searching by vendor / product id
+		for (int32_t i = 0; i < hostedMIDIDevices.getNumElements(); i++) {
+			auto* candidate = static_cast<MIDICableUSBHosted*>(hostedMIDIDevices.getElement(i));
 
-		if (candidate->vendorId == vendorId && candidate->productId == productId) {
-			// Update its name - if we got one and it's different
-			if (gotAName && !candidate->name.equals(name)) {
-				hostedMIDIDevices.renameMember(i, name);
+			if (candidate->vendorId == vendorId && candidate->productId == productId) {
+				return candidate;
 			}
-			return candidate;
 		}
 	}
 
@@ -229,6 +229,32 @@ extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 	                                                                    usbDeviceCurrentlyBeingSetUp[ip].vendorId,
 	                                                                    usbDeviceCurrentlyBeingSetUp[ip].productId);
 
+	// Determine actual number of embedded MIDI jacks (virtual cables) from configuration descriptor, if available
+	int32_t detectedCables = 0;
+	if (g_p_usb_hmidi_config_table[ip]) {
+		uint8_t const* cfg = g_p_usb_hmidi_config_table[ip];
+		uint16_t totalLen = cfg[2] | (cfg[3] << 8);
+		uint16_t pos = 0;
+		while (pos + 2 < totalLen) {
+			uint8_t bLen = cfg[pos];
+			uint8_t bType = cfg[pos + 1];
+			if (bLen == 0) {
+				break;
+			}
+			// Class-Specific Endpoint (MS_GENERAL), parse bNumEmbMIDIJack
+			if (bType == 0x25 && bLen >= 4) {
+				uint8_t subType = cfg[pos + 2];
+				if (subType == 0x01 && bLen >= 5) {
+					uint8_t numJacks = cfg[pos + 3];
+					if (numJacks > detectedCables) {
+						detectedCables = numJacks;
+					}
+				}
+			}
+			pos += bLen;
+		}
+	}
+
 	usbDeviceCurrentlyBeingSetUp[ip].name.clear(); // Save some memory. Not strictly necessary
 
 	if (!device) {
@@ -239,16 +265,68 @@ extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 	ConnectedUSBMIDIDevice* connectedDevice = &connectedUSBMIDIDevices[ip][midiDeviceNum];
 
 	connectedDevice->setup();
-	int32_t ports = connectedDevice->maxPortConnected;
-	for (int32_t i = 0; i <= ports; i++) {
-		connectedDevice->cable[i] = device;
+	// Prefer exact count from descriptor; fall back to driver-reported maxPortConnected; cap to 6
+	int32_t ports = (detectedCables > 0) ? (detectedCables - 1) : connectedDevice->maxPortConnected;
+	if (ports > 5) {
+		ports = 5;
+	}
+	if (ports < 0) {
+		ports = 0;
+	}
+	// Keep a stable base name to avoid cumulative concatenation like "Name port 1 port 2 ..."
+	String baseName;
+	baseName.set(&device->name);
+	// Respect global visibility cap of 6 hosted USB ports total.
+	// hostedMIDIDevices entries correspond to visible hosted cables.
+	int32_t remainingSlots = 6 - hostedMIDIDevices.getNumElements();
+	if (remainingSlots <= 0) {
+		remainingSlots = 0;
+	}
+	// Number of cables we will actually expose for this device:
+	int32_t cablesToCreate = ports + 1;
+	if (cablesToCreate > remainingSlots) {
+		cablesToCreate = remainingSlots;
+	}
+	// Create per-port hosted entries so each shows as a separate selectable device, up to global cap.
+	for (int32_t i = 0; i < cablesToCreate; i++) {
+		// Derive unique per-port name for UI/persistence
+		String perPortName;
+		perPortName.set(&baseName);
+		perPortName.concatenate(" port ");
+		char numBuf[8];
+		snprintf(numBuf, sizeof numBuf, "%d", i + 1);
+		perPortName.concatenate(numBuf);
+
+		// Create/find a device entry for this specific port using the same VID:PID, now safe due to no-merge rule with name
+		MIDICableUSBHosted* perPortDevice =
+		    getOrCreateHostedMIDIDeviceFromDetails(&perPortName, device->vendorId, device->productId);
+		if (!perPortDevice) {
+			// Fallback to base device if allocation failed
+			perPortDevice = device;
+		}
+		// Set the virtual cable number so IO uses the right USB cable
+		perPortDevice->portNumber = static_cast<uint8_t>(i);
+		connectedDevice->cable[i] = perPortDevice;
+	}
+
+	// Ensure routing only considers actually created ports (prevents null deref on incoming)
+	if (cablesToCreate > 0) {
+		connectedDevice->maxPortConnected = cablesToCreate - 1;
+	}
+	else {
+		connectedDevice->maxPortConnected = 0;
 	}
 
 	connectedDevice->sq = 0;
 	connectedDevice->canHaveMIDISent = (bool)strcmp(device->name.get(), "Synthstrom MIDI Foot Controller");
 	connectedDevice->canHaveMIDISent = (bool)strcmp(device->name.get(), "LUMI Keys BLOCK");
 
-	device->connectedNow(midiDeviceNum);
+	// Mark all per-port devices as connected
+	for (int32_t i = 0; i < cablesToCreate; i++) {
+		if (connectedDevice->cable[i]) {
+			connectedDevice->cable[i]->connectedNow(midiDeviceNum);
+		}
+	}
 	recountSmallestMPEZones(); // Must be called after setting device->connectionFlags
 
 	device->freshly_connected = true; // Used to trigger hookOnConnected from the input loop
@@ -278,6 +356,9 @@ extern "C" void hostedDeviceDetached(int32_t ip, int32_t midiDeviceNum) {
 	uartPrintNumber(midiDeviceNum);
 	ConnectedUSBMIDIDevice* connectedDevice = &connectedUSBMIDIDevices[ip][midiDeviceNum];
 	int32_t ports = connectedDevice->maxPortConnected;
+	if (ports > 5) {
+		ports = 5;
+	}
 	for (int32_t i = 0; i <= ports; i++) {
 		MIDICableUSB* device = connectedDevice->cable[i];
 		if (device) { // Surely always has one?

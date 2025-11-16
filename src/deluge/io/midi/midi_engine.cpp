@@ -558,15 +558,9 @@ void MidiEngine::sendUsbMidi(MIDIMessage message, int32_t filter) {
 				// if device exists, it's not port 3 (for sysex)
 				if (connectedDevice->cable[p]
 				    && connectedDevice->cable[p] != &MIDIDeviceManager::upstreamUSBMIDICable3) {
-					// if it's a clock (or sysex technically but we don't send that to this function)
-					// or if it's a message that this channel wants
-					if (connectedDevice->cable[p]->wantsToOutputMIDIOnChannel(message, filter)) {
-
-						// Or with the port to add the cable number to the full message. This
-						// is a bit hacky but it works
-						uint32_t channeled_message = fullMessage | (p << 4);
-						connectedDevice->bufferMessage(channeled_message);
-					}
+					// Broadcast to all USB outputs per user requirement. Respect cable number.
+					uint32_t channeled_message = fullMessage | (p << 4);
+					connectedDevice->bufferMessage(channeled_message);
 				}
 			}
 		}
