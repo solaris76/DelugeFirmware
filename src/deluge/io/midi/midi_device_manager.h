@@ -63,7 +63,7 @@ struct MIDICableUSB;
  */
 class ConnectedUSBMIDIDevice {
 public:
-	MIDICableUSB* cable[4]; // If NULL, then no cable is connected here
+	MIDICableUSB* cable[6]; // If NULL, then no cable is connected here. Support up to 6 virtual cables.
 	ConnectedUSBMIDIDevice();
 	void bufferMessage(uint32_t fullMessage);
 	void setup();

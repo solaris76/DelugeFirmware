@@ -20,26 +20,23 @@
 #include "gui/menu_item/mpe/zone_num_member_channels.h"
 #include "gui/ui/sound_editor.h"
 #include "hid/display/display.h"
-#include "io/midi/cable_types/usb_common.h"
+#include "io/midi/cable_types/din.h"
 #include "io/midi/cable_types/usb_device_cable.h"
-#include "io/midi/cable_types/usb_hosted.h"
 #include "io/midi/device_specific/specific_midi_device.h"
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
-#include "io/midi/root_complex/usb_peripheral.h"
-#include "io/usb/usb_state.h"
 #include "mem_functions.h"
 #include "memory/general_memory_allocator.h"
 #include "storage/storage_manager.h"
 #include "util/container/vector/named_thing_vector.h"
 #include "util/misc.h"
-#include <memory>
-
-using namespace deluge::io::usb;
 
 extern "C" {
 #include "RZA1/usb/r_usb_basic/src/driver/inc/r_usb_basic_define.h"
+#include "RZA1/usb/r_usb_hmidi/src/inc/r_usb_hmidi.h"
 #include "drivers/uart/uart.h"
+
+extern uint8_t anyUSBSendingStillHappening[];
 }
 #pragma GCC diagnostic push
 // This is supported by GCC and other compilers should error (not warn), so turn off for this file
@@ -52,6 +49,8 @@ PLACE_SDRAM_BSS ConnectedUSBMIDIDevice connectedUSBMIDIDevices[USB_NUM_USBIP][MA
 
 namespace MIDIDeviceManager {
 
+NamedThingVector hostedMIDIDevices{__builtin_offsetof(MIDICableUSBHosted, name)};
+
 bool differentiatingInputsByDevice = true;
 
 struct USBDev {
@@ -61,8 +60,12 @@ struct USBDev {
 };
 std::array<USBDev, USB_NUM_USBIP> usbDeviceCurrentlyBeingSetUp{};
 
-PLACE_SDRAM_BSS DINRootComplex root_din{};
-gsl::owner<MIDIRootComplex*> root_usb{nullptr};
+// This class represents a thing you can send midi too,
+// the virtual cable is an implementation detail
+PLACE_SDRAM_BSS MIDICableUSBUpstream upstreamUSBMIDICable1{0};
+PLACE_SDRAM_BSS MIDICableUSBUpstream upstreamUSBMIDICable2{1};
+PLACE_SDRAM_BSS MIDICableUSBUpstream upstreamUSBMIDICable3{2};
+PLACE_SDRAM_BSS MIDICableDINPorts dinMIDIPorts{};
 
 uint8_t lowestLastMemberChannelOfLowerZoneOnConnectedOutput = 15;
 uint8_t highestLastMemberChannelOfUpperZoneOnConnectedOutput = 0;
@@ -71,21 +74,18 @@ bool anyChangesToSave = false;
 
 // Gets called within UITimerManager, which may get called during SD card routine.
 void slowRoutine() {
-	if (!root_usb) {
-		// Nothing to do if there's no USB device connected.
-		return;
-	}
+	upstreamUSBMIDICable1.sendMCMsNowIfNeeded();
+	upstreamUSBMIDICable2.sendMCMsNowIfNeeded();
+	// port3 is not used for channel data
 
-	for (auto& usbCable : root_usb->getCables()) {
-		auto& cable = static_cast<MIDICableUSB&>(usbCable);
-		cable.sendMCMsNowIfNeeded();
+	for (int32_t d = 0; d < hostedMIDIDevices.getNumElements(); d++) {
+		MIDICableUSBHosted* device = (MIDICableUSBHosted*)hostedMIDIDevices.getElement(d);
+		device->sendMCMsNowIfNeeded();
 
-		if (root_usb->getType() == RootComplexType::RC_USB_HOST) {
-			auto& hostCable = static_cast<MIDICableUSBHosted&>(cable);
-			if (hostCable.freshly_connected) {
-				hostCable.hookOnConnected();
-				hostCable.freshly_connected = false;
-			}
+		// This routine placed here because for whatever reason we can't send sysex from hostedDeviceConfigured
+		if (device->freshly_connected) {
+			device->hookOnConnected();
+			device->freshly_connected = false; // Must be set to false here or the hook will run forever
 		}
 	}
 }
@@ -106,12 +106,6 @@ extern "C" void giveDetailsOfDeviceBeingSetUp(int32_t ip, char const* name, uint
 
 // name can be NULL, or an empty String
 MIDICableUSBHosted* getOrCreateHostedMIDIDeviceFromDetails(String* name, uint16_t vendorId, uint16_t productId) {
-	MIDIRootComplexUSBHosted* root = getHosted();
-	if (getHosted() == nullptr) {
-		return nullptr;
-	}
-
-	auto& hostedMIDIDevices = root->getHostedMIDIDevices();
 
 	// Do we know any details about this device already?
 
@@ -128,7 +122,7 @@ MIDICableUSBHosted* getOrCreateHostedMIDIDeviceFromDetails(String* name, uint16_
 			auto* device = static_cast<MIDICableUSBHosted*>(hostedMIDIDevices.getElement(i));
 
 			// Update vendor and product id, if we have those
-			if (vendorId != 0u) {
+			if (vendorId) {
 				device->vendorId = vendorId;
 				device->productId = productId;
 			}
@@ -137,16 +131,15 @@ MIDICableUSBHosted* getOrCreateHostedMIDIDeviceFromDetails(String* name, uint16_
 		}
 	}
 
-	// Ok, try searching by vendor / product id
-	for (int32_t i = 0; i < hostedMIDIDevices.getNumElements(); i++) {
-		auto* candidate = static_cast<MIDICableUSBHosted*>(hostedMIDIDevices.getElement(i));
+	// If we have a name, do NOT merge by vendor/product IDs — allow multiple entries per VID:PID
+	if (!gotAName) {
+		// Ok, try searching by vendor / product id
+		for (int32_t i = 0; i < hostedMIDIDevices.getNumElements(); i++) {
+			auto* candidate = static_cast<MIDICableUSBHosted*>(hostedMIDIDevices.getElement(i));
 
-		if (candidate->vendorId == vendorId && candidate->productId == productId) {
-			// Update its name - if we got one and it's different
-			if (gotAName && !candidate->name.equals(name)) {
-				hostedMIDIDevices.renameMember(i, name);
+			if (candidate->vendorId == vendorId && candidate->productId == productId) {
+				return candidate;
 			}
-			return candidate;
 		}
 	}
 
@@ -220,13 +213,14 @@ void recountSmallestMPEZones() {
 	lowestLastMemberChannelOfLowerZoneOnConnectedOutput = 15;
 	highestLastMemberChannelOfUpperZoneOnConnectedOutput = 0;
 
-	if (root_usb) {
-		for (auto& cable : root_usb->getCables()) {
-			recountSmallestMPEZonesForCable(cable);
-		}
-	}
+	recountSmallestMPEZonesForCable(upstreamUSBMIDICable1);
+	recountSmallestMPEZonesForCable(upstreamUSBMIDICable2);
+	recountSmallestMPEZonesForCable(dinMIDIPorts);
 
-	recountSmallestMPEZonesForCable(root_din.cable);
+	for (int32_t d = 0; d < hostedMIDIDevices.getNumElements(); d++) {
+		MIDICableUSBHosted* cable = (MIDICableUSBHosted*)hostedMIDIDevices.getElement(d);
+		recountSmallestMPEZonesForCable(*cable);
+	}
 }
 
 // Create the midi device configuration and add to the USB midi array
@@ -234,6 +228,32 @@ extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 	MIDICableUSBHosted* device = getOrCreateHostedMIDIDeviceFromDetails(&usbDeviceCurrentlyBeingSetUp[ip].name,
 	                                                                    usbDeviceCurrentlyBeingSetUp[ip].vendorId,
 	                                                                    usbDeviceCurrentlyBeingSetUp[ip].productId);
+
+	// Determine actual number of embedded MIDI jacks (virtual cables) from configuration descriptor, if available
+	int32_t detectedCables = 0;
+	if (g_p_usb_hmidi_config_table[ip]) {
+		uint8_t const* cfg = g_p_usb_hmidi_config_table[ip];
+		uint16_t totalLen = cfg[2] | (cfg[3] << 8);
+		uint16_t pos = 0;
+		while (pos + 2 < totalLen) {
+			uint8_t bLen = cfg[pos];
+			uint8_t bType = cfg[pos + 1];
+			if (bLen == 0) {
+				break;
+			}
+			// Class-Specific Endpoint (MS_GENERAL), parse bNumEmbMIDIJack
+			if (bType == 0x25 && bLen >= 4) {
+				uint8_t subType = cfg[pos + 2];
+				if (subType == 0x01 && bLen >= 5) {
+					uint8_t numJacks = cfg[pos + 3];
+					if (numJacks > detectedCables) {
+						detectedCables = numJacks;
+					}
+				}
+			}
+			pos += bLen;
+		}
+	}
 
 	usbDeviceCurrentlyBeingSetUp[ip].name.clear(); // Save some memory. Not strictly necessary
 
@@ -245,16 +265,69 @@ extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 	ConnectedUSBMIDIDevice* connectedDevice = &connectedUSBMIDIDevices[ip][midiDeviceNum];
 
 	connectedDevice->setup();
-	int32_t ports = connectedDevice->maxPortConnected;
-	for (int32_t i = 0; i <= ports; i++) {
-		connectedDevice->cable[i] = device;
+	// Prefer exact count from descriptor; fall back to driver-reported maxPortConnected; cap to 6
+	int32_t ports = (detectedCables > 0) ? (detectedCables - 1) : connectedDevice->maxPortConnected;
+	if (ports > 5) {
+		ports = 5;
+	}
+	if (ports < 0) {
+		ports = 0;
+	}
+	// Keep a stable base name to avoid cumulative concatenation like "Name port 1 port 2 ..."
+	String baseName;
+	baseName.set(&device->name);
+	// Respect global visibility cap of 6 hosted USB ports total.
+	// hostedMIDIDevices entries correspond to visible hosted cables.
+	int32_t remainingSlots = 6 - hostedMIDIDevices.getNumElements();
+	if (remainingSlots <= 0) {
+		remainingSlots = 0;
+	}
+	// Number of cables we will actually expose for this device:
+	int32_t cablesToCreate = ports + 1;
+	if (cablesToCreate > remainingSlots) {
+		cablesToCreate = remainingSlots;
+	}
+	// Create per-port hosted entries so each shows as a separate selectable device, up to global cap.
+	for (int32_t i = 0; i < cablesToCreate; i++) {
+		// Derive unique per-port name for UI/persistence
+		String perPortName;
+		perPortName.set(&baseName);
+		perPortName.concatenate(" port ");
+		char numBuf[8];
+		snprintf(numBuf, sizeof numBuf, "%d", i + 1);
+		perPortName.concatenate(numBuf);
+
+		// Create/find a device entry for this specific port using the same VID:PID, now safe due to no-merge rule with
+		// name
+		MIDICableUSBHosted* perPortDevice =
+		    getOrCreateHostedMIDIDeviceFromDetails(&perPortName, device->vendorId, device->productId);
+		if (!perPortDevice) {
+			// Fallback to base device if allocation failed
+			perPortDevice = device;
+		}
+		// Set the virtual cable number so IO uses the right USB cable
+		perPortDevice->portNumber = static_cast<uint8_t>(i);
+		connectedDevice->cable[i] = perPortDevice;
+	}
+
+	// Ensure routing only considers actually created ports (prevents null deref on incoming)
+	if (cablesToCreate > 0) {
+		connectedDevice->maxPortConnected = cablesToCreate - 1;
+	}
+	else {
+		connectedDevice->maxPortConnected = 0;
 	}
 
 	connectedDevice->sq = 0;
 	connectedDevice->canHaveMIDISent = (bool)strcmp(device->name.get(), "Synthstrom MIDI Foot Controller");
 	connectedDevice->canHaveMIDISent = (bool)strcmp(device->name.get(), "LUMI Keys BLOCK");
 
-	device->connectedNow(midiDeviceNum);
+	// Mark all per-port devices as connected
+	for (int32_t i = 0; i < cablesToCreate; i++) {
+		if (connectedDevice->cable[i]) {
+			connectedDevice->cable[i]->connectedNow(midiDeviceNum);
+		}
+	}
 	recountSmallestMPEZones(); // Must be called after setting device->connectionFlags
 
 	device->freshly_connected = true; // Used to trigger hookOnConnected from the input loop
@@ -284,6 +357,9 @@ extern "C" void hostedDeviceDetached(int32_t ip, int32_t midiDeviceNum) {
 	uartPrintNumber(midiDeviceNum);
 	ConnectedUSBMIDIDevice* connectedDevice = &connectedUSBMIDIDevices[ip][midiDeviceNum];
 	int32_t ports = connectedDevice->maxPortConnected;
+	if (ports > 5) {
+		ports = 5;
+	}
 	for (int32_t i = 0; i <= ports; i++) {
 		MIDICableUSB* device = connectedDevice->cable[i];
 		if (device) { // Surely always has one?
@@ -299,22 +375,19 @@ extern "C" void configuredAsPeripheral(int32_t ip) {
 	// Leave this - we'll use this device for all upstream ports
 	ConnectedUSBMIDIDevice* connectedDevice = &connectedUSBMIDIDevices[ip][0];
 
-	auto* root = new MIDIRootComplexUSBPeripheral();
-	MIDIDeviceManager::setUSBRoot(root);
-
 	// add second port here
 	connectedDevice->setup();
-	for (auto i = 0; i < 3; ++i) {
-		auto* cable = static_cast<MIDICableUSB*>(root->getCable(i));
-		cable->connectedNow(0);
-		connectedDevice->cable[i] = cable;
-	}
-
+	connectedDevice->cable[0] = &upstreamUSBMIDICable1;
+	connectedDevice->cable[1] = &upstreamUSBMIDICable2;
+	connectedDevice->cable[2] = &upstreamUSBMIDICable3;
 	connectedDevice->maxPortConnected = 2;
 	connectedDevice->canHaveMIDISent = 1;
 
 	anyUSBSendingStillHappening[ip] = 0; // Initialize this. There's obviously nothing sending yet right now.
 
+	upstreamUSBMIDICable1.connectedNow(0);
+	upstreamUSBMIDICable2.connectedNow(0);
+	upstreamUSBMIDICable3.connectedNow(0);
 	recountSmallestMPEZones();
 }
 
@@ -322,10 +395,11 @@ extern "C" void detachedAsPeripheral(int32_t ip) {
 	// will need to reset all devices if more are added
 	int32_t ports = connectedUSBMIDIDevices[ip][0].maxPortConnected;
 	for (int32_t i = 0; i <= ports; i++) {
-		auto* cable = connectedUSBMIDIDevices[ip][0].cable[i];
-		cable->connectionFlags = 0;
 		connectedUSBMIDIDevices[ip][0].cable[i] = nullptr;
 	}
+	upstreamUSBMIDICable1.connectionFlags = 0;
+	upstreamUSBMIDICable2.connectionFlags = 0;
+	upstreamUSBMIDICable3.connectionFlags = 0;
 	anyUSBSendingStillHappening[ip] = 0; // Reset this again. Been meaning to do this, and can no longer quite remember
 	                                     // reason or whether technically essential, but adds to safety at least.
 
@@ -353,27 +427,17 @@ MIDICable* readDeviceReferenceFromFile(Deserializer& reader) {
 		}
 		else if (!strcmp(tagName, "port")) {
 			char const* port = reader.readTagOrAttributeValue();
-			constexpr char const* const kUpstreamUSB = "upstreamUSB";
-			constexpr auto kUpstreamUSBLen = (std::string{kUpstreamUSB}).length();
-
-			if (root_usb && root_usb->getType() == RootComplexType::RC_USB_PERIPHERAL
-			    && !strncmp(kUpstreamUSB, port, strlen(kUpstreamUSB))) {
-				switch (port[kUpstreamUSBLen]) {
-				case '\0':
-					device = root_usb->getCable(0);
-					break;
-				case '2':
-					device = root_usb->getCable(1);
-					break;
-				case '3':
-					device = root_usb->getCable(2);
-					break;
-				default:
-					break;
-				}
+			if (!strcmp(port, "upstreamUSB")) {
+				device = &upstreamUSBMIDICable1;
+			}
+			else if (!strcmp(port, "upstreamUSB2")) {
+				device = &upstreamUSBMIDICable2;
+			}
+			else if (!strcmp(port, "upstreamUSB3")) {
+				device = &upstreamUSBMIDICable3;
 			}
 			else if (!strcmp(port, "din")) {
-				device = &root_din.cable;
+				device = &dinMIDIPorts;
 			}
 		}
 
@@ -393,30 +457,28 @@ MIDICable* readDeviceReferenceFromFile(Deserializer& reader) {
 }
 
 static MIDICable* readCableFromFlash(uint8_t const* memory) {
-	uint16_t vendor_id = *(uint16_t const*)memory;
+	uint16_t vendorId = *(uint16_t const*)memory;
 
 	MIDICable* cable;
 
-	if (vendor_id == VENDOR_ID_NONE) {
+	if (vendorId == VENDOR_ID_NONE) {
 		cable = nullptr;
 	}
-	else if (root_usb != nullptr && root_usb->getType() == RootComplexType::RC_USB_PERIPHERAL) {
-		if (vendor_id == VENDOR_ID_UPSTREAM_USB) {
-			cable = root_usb->getCable(0);
-		}
-		else if (vendor_id == VENDOR_ID_UPSTREAM_USB2) {
-			cable = root_usb->getCable(1);
-		}
-		else if (vendor_id == VENDOR_ID_UPSTREAM_USB3) {
-			cable = root_usb->getCable(2);
-		}
+	else if (vendorId == VENDOR_ID_UPSTREAM_USB) {
+		cable = &upstreamUSBMIDICable1;
 	}
-	else if (vendor_id == VENDOR_ID_DIN) {
-		cable = &root_din.cable;
+	else if (vendorId == VENDOR_ID_UPSTREAM_USB2) {
+		cable = &upstreamUSBMIDICable2;
+	}
+	else if (vendorId == VENDOR_ID_UPSTREAM_USB3) {
+		cable = &upstreamUSBMIDICable3;
+	}
+	else if (vendorId == VENDOR_ID_DIN) {
+		cable = &dinMIDIPorts;
 	}
 	else {
-		uint16_t product_id = *(reinterpret_cast<uint16_t const*>(memory + 2));
-		cable = getOrCreateHostedMIDIDeviceFromDetails(nullptr, vendor_id, product_id);
+		uint16_t productId = *(uint16_t const*)(memory + 2);
+		cable = getOrCreateHostedMIDIDeviceFromDetails(nullptr, vendorId, productId);
 	}
 
 	return cable;
@@ -448,12 +510,12 @@ void writeDevicesToFile() {
 	}
 	anyChangesToSave = false;
 
-	bool anyWorthWritting = root_din.cable.worthWritingToFile();
-
-	// First, see if it's even worth writing anything
-	if (!anyWorthWritting && root_usb != nullptr) {
-		for (auto& cable : root_usb->getCables()) {
-			if (cable.worthWritingToFile()) {
+	bool anyWorthWritting = dinMIDIPorts.worthWritingToFile() || upstreamUSBMIDICable1.worthWritingToFile()
+	                        || upstreamUSBMIDICable2.worthWritingToFile();
+	if (!anyWorthWritting) {
+		for (int32_t d = 0; d < hostedMIDIDevices.getNumElements(); d++) {
+			MIDICableUSBHosted* device = (MIDICableUSBHosted*)hostedMIDIDevices.getElement(d);
+			if (device->worthWritingToFile()) {
 				anyWorthWritting = true;
 				break;
 			}
@@ -477,33 +539,23 @@ void writeDevicesToFile() {
 	writer.writeEarliestCompatibleFirmwareVersion("4.0.0");
 	writer.writeOpeningTagEnd();
 
-	if (root_din.cable.worthWritingToFile()) {
-		root_din.cable.writeToFile(writer, "dinPorts");
+	if (dinMIDIPorts.worthWritingToFile()) {
+		dinMIDIPorts.writeToFile(writer, "dinPorts");
+	}
+	if (upstreamUSBMIDICable1.worthWritingToFile()) {
+		upstreamUSBMIDICable1.writeToFile(writer, "upstreamUSBDevice");
+	}
+	if (upstreamUSBMIDICable2.worthWritingToFile()) {
+		upstreamUSBMIDICable2.writeToFile(writer, "upstreamUSBDevice2");
 	}
 
-	if (root_usb != nullptr) {
-		switch (root_usb->getType()) {
-		case RootComplexType::RC_DIN:
-			// illegal
-			break;
-		case RootComplexType::RC_USB_PERIPHERAL:
-			if (root_usb->getCable(0)->worthWritingToFile()) {
-				root_usb->getCable(0)->writeToFile(writer, "upstreamUSBDevice");
-			}
-			if (root_usb->getCable(1)->worthWritingToFile()) {
-				root_usb->getCable(1)->writeToFile(writer, "upstreamUSBDevice2");
-			}
-			break;
-		case RootComplexType::RC_USB_HOST:
-			for (auto& cable : root_usb->getCables()) {
-				auto& cableHosted = static_cast<MIDICableUSBHosted&>(cable);
-				if (cableHosted.worthWritingToFile()) {
-					cableHosted.writeToFile(writer, "hostedUSBDevice");
-				}
-				cableHosted.hookOnWriteHostedDeviceToFile();
-			}
-			break;
+	for (int32_t d = 0; d < hostedMIDIDevices.getNumElements(); d++) {
+		MIDICableUSBHosted* device = (MIDICableUSBHosted*)hostedMIDIDevices.getElement(d);
+		if (device->worthWritingToFile()) {
+			device->writeToFile(writer, "hostedUSBDevice");
 		}
+		// Stow this for the hook  point later
+		device->hookOnWriteHostedDeviceToFile();
 	}
 
 	writer.writeClosingTag("midiDevices");
@@ -546,32 +598,19 @@ void readDevicesFromFile() {
 	char const* tagName;
 	while (*(tagName = reader.readNextTagOrAttributeName())) {
 		if (!strcmp(tagName, "dinPorts")) {
-			root_din.cable.readFromFile(reader);
+			dinMIDIPorts.readFromFile(reader);
 		}
-		else if (root_usb != nullptr) {
-			auto type = root_usb->getType();
-			if (type == RootComplexType::RC_USB_PERIPHERAL) {
-				constexpr char const* const kUpstreamUSB = "upstreamUSBDevice";
-				constexpr auto kUpstreamUSBLen = (std::string{kUpstreamUSB}).length();
-
-				if (strncmp(kUpstreamUSB, tagName, strlen(kUpstreamUSB)) == 0) {
-
-					switch (tagName[kUpstreamUSBLen]) {
-					case '\0':
-						root_usb->getCable(0)->readFromFile(reader);
-						break;
-					case '2':
-						root_usb->getCable(1)->readFromFile(reader);
-						break;
-					case '3':
-						root_usb->getCable(3)->readFromFile(reader);
-						break;
-					}
-				}
-			}
-			else if (type == RootComplexType::RC_USB_HOST && strcmp(tagName, "hostedUSBDevice") == 0) {
-				readAHostedDeviceFromFile(reader);
-			}
+		else if (!strcmp(tagName, "upstreamUSBDevice")) {
+			upstreamUSBMIDICable1.readFromFile(reader);
+		}
+		else if (!strcmp(tagName, "upstreamUSBDevice2")) {
+			upstreamUSBMIDICable2.readFromFile(reader);
+		}
+		else if (!strcmp(tagName, "upstreamUSBDevice3")) {
+			upstreamUSBMIDICable3.readFromFile(reader);
+		}
+		else if (!strcmp(tagName, "hostedUSBDevice")) {
+			readAHostedDeviceFromFile(reader);
 		}
 
 		reader.exitTag();
@@ -586,7 +625,6 @@ void readDevicesFromFile() {
 	successfullyReadDevicesFromFile = true;
 }
 
-/// Read a single hosted USB device. This assumes the root complex is a MIDIRootComplexUSBHosted
 void readAHostedDeviceFromFile(Deserializer& reader) {
 	MIDICableUSBHosted* device = nullptr;
 
@@ -662,29 +700,13 @@ checkDevice:
 	if (device) {}
 }
 
-void setUSBRoot(gsl::owner<MIDIRootComplex*> root) {
-	delete root_usb;
-	root_usb = root;
-}
-
-MIDIRootComplexUSBHosted* getHosted() {
-	if (root_usb == nullptr) {
-		return nullptr;
-	}
-	if (root_usb->getType() != RootComplexType::RC_USB_HOST) {
-		return nullptr;
-	}
-
-	return static_cast<MIDIRootComplexUSBHosted*>(root_usb);
-}
-
 } // namespace MIDIDeviceManager
 
 void ConnectedUSBMIDIDevice::bufferMessage(uint32_t fullMessage) {
 	uint32_t queued = ringBufWriteIdx - ringBufReadIdx;
 	if (queued > 16) {
 		if (!anyUSBSendingStillHappening[0]) {
-			midiEngine.flushMIDI();
+			midiEngine.flushUSBMIDIOutput();
 		}
 		queued = ringBufWriteIdx - ringBufReadIdx;
 	}
@@ -696,7 +718,7 @@ void ConnectedUSBMIDIDevice::bufferMessage(uint32_t fullMessage) {
 	sendDataRingBuf[ringBufWriteIdx & MIDI_SEND_RING_MASK] = fullMessage;
 	ringBufWriteIdx++;
 
-	deluge::io::usb::anythingInUSBOutputBuffer = true;
+	anythingInUSBOutputBuffer = true;
 }
 
 bool ConnectedUSBMIDIDevice::hasBufferedSendData() {

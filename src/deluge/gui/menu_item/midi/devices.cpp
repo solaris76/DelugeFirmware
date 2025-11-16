@@ -19,10 +19,12 @@
 #include "device.h"
 #include "gui/ui/sound_editor.h"
 #include "hid/display/display.h"
+#include "io/debug/log.h"
+#include "io/midi/cable_types/din.h"
+#include "io/midi/cable_types/usb_device_cable.h"
+#include "io/midi/cable_types/usb_hosted.h"
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_device_manager.h"
-#include "io/midi/midi_root_complex.h"
-#include <algorithm>
 #include <etl/vector.h>
 #include <string_view>
 
@@ -30,55 +32,29 @@ extern deluge::gui::menu_item::midi::Device midiDeviceMenu;
 
 namespace deluge::gui::menu_item::midi {
 
-static bool canSelectCable(MIDICable const* cable) {
-	return cable != nullptr && cable->connectionFlags != 0;
-}
-
-/// Get the current maximum index for cables. This depends on what the current root USB device is.
-static int32_t currentMaxCable() {
-	if (MIDIDeviceManager::root_usb == nullptr) {
-		return 0;
-	}
-	// n.b. we intentionally do not subtract 1 here since cable index 0 is the DIN ports  still
-	return static_cast<int32_t>(MIDIDeviceManager::root_usb->getNumCables());
-}
+static constexpr int32_t lowestDeviceNum = -3;
 
 void Devices::beginSession(MenuItem* navigatedBackwardFrom) {
 	bool found = false;
 	if (navigatedBackwardFrom != nullptr) {
-		// This will technically do the wrong thing when we're in peripheral mode (it'll set the max index to 2 instead
-		// of 0, which would be accurate) but it should be harmless -- `Devices::getCable` should just return nullptr in
-		// that case which we handle fine already anyway.
-		auto max_index = currentMaxCable();
-		for (int32_t idx = 0; idx < max_index; idx++) {
+		for (int32_t idx = lowestDeviceNum; idx < MIDIDeviceManager::hostedMIDIDevices.getNumElements(); idx++) {
 			if (getCable(idx) == soundEditor.currentMIDICable) {
 				found = true;
-				current_cable_ = idx;
+				this->setValue(idx);
 				break;
 			}
 		}
 	}
 
 	if (!found) {
-		// Start on "DIN". That's the only one that'll always be there.
-		current_cable_ = 0;
+		this->setValue(lowestDeviceNum); // Start on "DIN". That's the only one that'll always be there.
 	}
 
-	soundEditor.currentMIDICable = getCable(current_cable_);
-
-	// Update scroll position
-	if (current_cable_ == 0) {
-		scroll_pos_ = 0;
-	}
-	else if (current_cable_ >= kOLEDMenuNumOptionsVisible) {
-		scroll_pos_ = kOLEDMenuNumOptionsVisible - 1;
+	soundEditor.currentMIDICable = getCable(this->getValue());
+	if (display->haveOLED()) {
+		currentScroll = this->getValue();
 	}
 	else {
-		scroll_pos_ = current_cable_;
-	}
-
-	// Redraw for 7seg
-	if (!display->haveOLED()) {
 		drawValue();
 	}
 }
@@ -86,72 +62,68 @@ void Devices::beginSession(MenuItem* navigatedBackwardFrom) {
 void Devices::selectEncoderAction(int32_t offset) {
 	offset = std::clamp<int32_t>(offset, -1, 1);
 
-	// Find the next valid cable in the direction specified by `offset`
-	int32_t max_index = currentMaxCable();
-	int32_t new_index = current_cable_;
-	MIDICable* new_cable = nullptr;
 	do {
-		new_index += offset;
-		if (new_index > max_index) {
+		int32_t newValue = this->getValue() + offset;
+
+		if (newValue >= MIDIDeviceManager::hostedMIDIDevices.getNumElements()) {
 			if (display->haveOLED()) {
 				return;
 			}
-			new_index = 0;
+			newValue = lowestDeviceNum;
 		}
-		if (new_index < 0) {
+		else if (newValue < lowestDeviceNum) {
 			if (display->haveOLED()) {
 				return;
 			}
-			new_index = max_index;
+			newValue = MIDIDeviceManager::hostedMIDIDevices.getNumElements() - 1;
 		}
-		new_cable = getCable(new_index);
-	} while (!canSelectCable(new_cable));
 
-	// Write the cable to the sound editor and our state.
-	current_cable_ = new_index;
-	soundEditor.currentMIDICable = new_cable;
+		this->setValue(newValue);
 
-	// Figure out how to adjust the scroll position.
-	if (offset > 0) {
-		// If there are no valid cables after this one we're allowed to set the scroll position to the last line of the
-		// OLED.
-		bool seen_valid_cable = false;
-		do {
-			new_index++;
-			new_cable = getCable(new_index);
-			seen_valid_cable |= canSelectCable(new_cable);
-		} while (new_index < max_index && !seen_valid_cable);
+		soundEditor.currentMIDICable = getCable(this->getValue());
 
-		if (seen_valid_cable) {
-			scroll_pos_ = std::clamp<int32_t>(scroll_pos_ + offset, 0, kOLEDMenuNumOptionsVisible - 2);
+	} while (!soundEditor.currentMIDICable->connectionFlags);
+	// Don't show devices which aren't connected. Sometimes we won't even have a name to display for them.
+
+	if (display->haveOLED()) {
+		// Keep selection within the visible window [currentScroll, currentScroll + visible - 1]
+		const int32_t visible = kOLEDMenuNumOptionsVisible;
+		const int32_t top = currentScroll;
+		const int32_t bottom = currentScroll + visible - 1;
+		const int32_t v = this->getValue();
+		if (v < top) {
+			currentScroll = v;
 		}
-		else {
-			scroll_pos_ = kOLEDMenuNumOptionsVisible - 1;
+		else if (v > bottom) {
+			currentScroll = v - (visible - 1);
 		}
-	}
-	else {
-		// Since the DIN ports are always OK and always valid, we can just clamp the scroll position
-		scroll_pos_ = std::max<int32_t>(scroll_pos_ + offset, 0);
+		if (currentScroll < lowestDeviceNum) {
+			currentScroll = lowestDeviceNum;
+		}
 	}
 
 	drawValue();
 }
 
-MenuItem* Devices::selectButtonPress() {
-	return &midiDeviceMenu;
-}
-
 MIDICable* Devices::getCable(int32_t deviceIndex) {
-	if (deviceIndex == 0) {
-		return &MIDIDeviceManager::root_din.cable;
-	}
-
-	if (MIDIDeviceManager::root_usb == nullptr) {
+	if (deviceIndex < lowestDeviceNum || deviceIndex >= MIDIDeviceManager::hostedMIDIDevices.getNumElements()) {
+		D_PRINTLN("impossible device request");
 		return nullptr;
 	}
-
-	// USBRootComplex will return nullptr for out-of-range cables.
-	return MIDIDeviceManager::root_usb->getCable(deviceIndex - 1);
+	switch (deviceIndex) {
+	case -3: {
+		return &MIDIDeviceManager::dinMIDIPorts;
+	}
+	case -2: {
+		return &MIDIDeviceManager::upstreamUSBMIDICable1;
+	}
+	case -1: {
+		return &MIDIDeviceManager::upstreamUSBMIDICable2;
+	}
+	default: {
+		return static_cast<MIDICable*>(MIDIDeviceManager::hostedMIDIDevices.getElement(deviceIndex));
+	}
+	}
 }
 
 void Devices::drawValue() {
@@ -164,36 +136,30 @@ void Devices::drawValue() {
 	}
 }
 
+MenuItem* Devices::selectButtonPress() {
+	return &midiDeviceMenu;
+}
+
 void Devices::drawPixelsForOled() {
-	// Collect all the item names
-	etl::vector<std::string_view, kOLEDMenuNumOptionsVisible> item_names = {};
+	etl::vector<std::string_view, kOLEDMenuNumOptionsVisible> itemNames = {};
 
-	// Fill in the items before the scroll position.
-	int32_t cable_index = current_cable_ - 1;
-	while (cable_index >= 0 && static_cast<int32_t>(item_names.size()) < scroll_pos_) {
-		auto const* cable = getCable(cable_index);
-		if (canSelectCable(cable)) {
-			item_names.push_back(cable->getDisplayName());
+	int32_t selectedRow = -1;
+
+	int32_t device_idx = currentScroll;
+	size_t row = 0;
+	while (row < kOLEDMenuNumOptionsVisible && device_idx < MIDIDeviceManager::hostedMIDIDevices.getNumElements()) {
+		MIDICable* cable = getCable(device_idx);
+		if (cable && cable->connectionFlags != 0u) {
+			itemNames.push_back(cable->getDisplayName());
+			if (device_idx == this->getValue()) {
+				selectedRow = static_cast<int32_t>(row);
+			}
+			row++;
 		}
-		cable_index--;
-	}
-	std::ranges::reverse(item_names.begin(), item_names.end());
-
-	// Add the item at the scroll position
-	item_names.push_back(getCable(current_cable_)->getDisplayName());
-
-	// And fill in the items after the current cable.
-	cable_index = current_cable_ + 1;
-	auto max_index = currentMaxCable();
-	while (cable_index <= max_index && item_names.size() < item_names.capacity()) {
-		auto const* cable = getCable(cable_index);
-		if (canSelectCable(cable)) {
-			item_names.push_back(cable->getDisplayName());
-		}
-		cable_index++;
+		device_idx++;
 	}
 
-	drawItemsForOled(item_names, scroll_pos_);
+	drawItemsForOled(itemNames, selectedRow);
 }
 
 } // namespace deluge::gui::menu_item::midi
