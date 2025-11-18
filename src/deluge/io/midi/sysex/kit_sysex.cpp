@@ -670,13 +670,34 @@ void setDrumSample(MIDICable& cable, JsonDeserializer& reader) {
 	}
 
 	InstrumentClip* instrumentClip = (InstrumentClip*)clip;
-	NoteRow* noteRow = instrumentClip->getNoteRowForDrum(drum);
+
+	// Setup model stack
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+	modelStack->setTimelineCounter(clip);
+
+	int32_t noteRowIndex;
+	NoteRow* noteRow = instrumentClip->getNoteRowForDrum(drum, &noteRowIndex);
+
+	// Create NoteRow if it doesn't exist (similar to addDrum)
 	if (!noteRow) {
-		jWriter.writeAttribute("error", "Drum has no NoteRow");
-		jWriter.closeTag(true);
-		smSysex::sendMsg(cable, jWriter);
-		return;
+		noteRowIndex = instrumentClip->noteRows.getNumElements();
+		noteRow = instrumentClip->noteRows.insertNoteRowAtIndex(noteRowIndex);
+
+		if (!noteRow) {
+			jWriter.writeAttribute("error", "Insufficient RAM to create NoteRow");
+			jWriter.closeTag(true);
+			smSysex::sendMsg(cable, jWriter);
+			return;
+		}
+
+		// Associate drum with note row
+		ModelStackWithNoteRow* modelStackWithNoteRow = modelStack->addNoteRow(noteRowIndex, noteRow);
+		noteRow->setDrum(drum, kit, modelStackWithNoteRow);
 	}
+
+	// Get model stack with note row
+	ModelStackWithNoteRow* modelStackWithNoteRow = modelStack->addNoteRow(noteRowIndex, noteRow);
 
 	// Setup as sample if not already
 	if (soundDrum->sources[0].oscType != OscType::SAMPLE) {
@@ -685,6 +706,7 @@ void setDrumSample(MIDICable& cable, JsonDeserializer& reader) {
 			Error error = paramManager->setupWithPatching();
 			if (error != Error::NONE) {
 				jWriter.writeAttribute("error", "Failed to setup ParamManager");
+				jWriter.writeAttribute("paramError", (int32_t)error);
 				jWriter.closeTag(true);
 				smSysex::sendMsg(cable, jWriter);
 				return;
@@ -693,6 +715,19 @@ void setDrumSample(MIDICable& cable, JsonDeserializer& reader) {
 		}
 		soundDrum->setupAsSample(paramManager);
 		currentSong->backUpParamManager(soundDrum, clip, paramManager, true);
+	}
+
+	// Ensure ParamManager is initialized (prevents E325 error)
+	if (!noteRow->paramManager.containsAnyMainParamCollections()) {
+		Error error = noteRow->paramManager.setupWithPatching();
+		if (error != Error::NONE) {
+			jWriter.writeAttribute("error", "Failed to initialize ParamManager");
+			jWriter.writeAttribute("paramError", (int32_t)error);
+			jWriter.closeTag(true);
+			smSysex::sendMsg(cable, jWriter);
+			return;
+		}
+		Sound::initParams(&noteRow->paramManager);
 	}
 
 	// Get source and range
@@ -712,8 +747,39 @@ void setDrumSample(MIDICable& cable, JsonDeserializer& reader) {
 
 	Error loadError = holder->loadFile(false, true, true, CLUSTER_ENQUEUE, nullptr, false);
 	if (loadError != Error::NONE) {
-		jWriter.writeAttribute("error", "Failed to load sample file");
+		// Provide more descriptive error messages
+		const char* errorMsg = "Failed to load sample file";
+		switch (loadError) {
+		case Error::FILE_NOT_FOUND:
+			errorMsg = "File not found";
+			break;
+		case Error::FILE_UNREADABLE:
+			errorMsg = "File unreadable or not found";
+			break;
+		case Error::FILE_UNSUPPORTED:
+			errorMsg = "File format not supported";
+			break;
+		case Error::FILE_CORRUPTED:
+			errorMsg = "File corrupted";
+			break;
+		case Error::INSUFFICIENT_RAM:
+			errorMsg = "Insufficient RAM to load file";
+			break;
+		case Error::FILE_TOO_BIG:
+			errorMsg = "File too large";
+			break;
+		case Error::SD_CARD_NOT_PRESENT:
+			errorMsg = "SD card not present";
+			break;
+		case Error::FOLDER_DOESNT_EXIST:
+			errorMsg = "Folder does not exist";
+			break;
+		default:
+			break;
+		}
+		jWriter.writeAttribute("error", errorMsg);
 		jWriter.writeAttribute("loadError", (int32_t)loadError);
+		jWriter.writeAttribute("path", filePath.get());
 		jWriter.closeTag(true);
 		smSysex::sendMsg(cable, jWriter);
 		return;
