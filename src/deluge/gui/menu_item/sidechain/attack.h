@@ -67,6 +67,20 @@ public:
 		return !is_reverb_sidechain_ || AudioEngine::reverbSidechainVolume >= 0;
 	}
 
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		// Only notify for non-reverb sidechain (reverb sidechain is global, not per-sound)
+		if (is_reverb_sidechain_) {
+			return nullptr;
+		}
+		// Use the actual sidechain attack value (convert from menu index)
+		const auto sidechain = getSidechain(is_reverb_sidechain_);
+		*valueOut = sidechain->attack;
+		return "sidechainAttack";
+	}
+
 	void getColumnLabel(StringBuf& label) override {
 		label.append(deluge::l10n::get(l10n::String::STRING_FOR_ATTACK_SHORT));
 	}

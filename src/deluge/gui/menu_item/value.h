@@ -17,8 +17,10 @@
 
 #pragma once
 
+#include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
 #include "hid/display/display.h"
+#include "io/midi/sysex/synth_sysex.h"
 #include "menu_item.h"
 #include "util/misc.h"
 
@@ -75,6 +77,20 @@ void Value<T>::selectEncoderAction(int32_t offset) {
 	}
 
 	writeCurrentValue();
+
+	// Notify SysEx subscribers of non-parameter property changes
+	// This automatically handles notifications for menu items that override getNonParamPropertyName()
+	// Use 'this' (the menu item being changed) rather than getCurrentMenuItem() to ensure we're
+	// notifying for the correct item
+	// Note: Multi-value properties (like delay sync, osc transpose) handle notifications in writeCurrentValue()
+	// to avoid double-checking subscribers, but single-value properties use this general hook for consistency
+	if (SynthSysex::hasParameterSubscribers() && getCurrentUI() == &soundEditor) {
+		int32_t value;
+		const char* propName = this->getNonParamPropertyName(&value);
+		if (propName) {
+			SynthSysex::notifyNonParamPropertyChanged(propName, value);
+		}
+	}
 
 	// For MenuItems referring to an AutoParam (so UnpatchedParam and PatchedParam), ideally we wouldn't want to render
 	// the display here, because that'll happen soon anyway due to a setting of TIMER_DISPLAY_AUTOMATION.

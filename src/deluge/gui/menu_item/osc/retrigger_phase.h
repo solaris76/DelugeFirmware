@@ -57,6 +57,22 @@ public:
 		*getValueAddress() = value;
 	}
 
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		static char paramName[16];
+		::snprintf(paramName, sizeof(paramName), "osc%dRetrigPhase", source_id_ + 1);
+		uint32_t value = *getValueAddress();
+		if (value == 0xFFFFFFFF) {
+			*valueOut = -1;
+		}
+		else {
+			*valueOut = (int32_t)value;
+		}
+		return paramName;
+	}
+
 	void drawValue() override {
 		if (this->getValue() < 0) {
 			display->setText(l10n::get(l10n::String::STRING_FOR_DISABLED), false, 255, true);

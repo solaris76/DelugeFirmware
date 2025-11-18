@@ -19,6 +19,7 @@
 #include "definitions_cxx.hpp"
 #include "gui/menu_item/selection.h"
 #include "gui/ui/sound_editor.h"
+#include "io/midi/sysex/synth_sysex.h"
 #include "model/drum/drum.h"
 #include "model/instrument/kit.h"
 #include "model/song/song.h"
@@ -120,6 +121,15 @@ public:
 		else {
 			soundEditor.currentSound->polyphonic = current_value;
 		}
+	}
+
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		// Use the menu item's current value, which was just set by selectEncoderAction
+		*valueOut = static_cast<int32_t>(this->getValue<PolyphonyMode>());
+		return "polyphonic";
 	}
 
 	deluge::vector<std::string_view> getOptions(OptType optType) override {

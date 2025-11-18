@@ -61,6 +61,14 @@ public:
 			soundEditor.currentSound->setNumUnison(current_value, modelStack);
 		}
 	}
+
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		*valueOut = soundEditor.currentSound->numUnison;
+		return "unisonNum";
+	}
 	[[nodiscard]] int32_t getMinValue() const override { return 1; }
 	[[nodiscard]] int32_t getMaxValue() const override { return kMaxNumVoicesUnison; }
 	[[nodiscard]] bool showColumnLabel() const override { return false; }

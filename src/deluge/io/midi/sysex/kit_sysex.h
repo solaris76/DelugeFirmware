@@ -77,4 +77,7 @@ void notifyDrumChanged(int32_t drumIndex);
 void notifyKitChanged();
 void notifyDrumParameterChanged(int32_t drumIndex, char const* paramName, int32_t value);
 
+// Check if there are any drum parameter subscribers (called internally)
+bool hasDrumParameterSubscribers();
+
 } // namespace KitSysex

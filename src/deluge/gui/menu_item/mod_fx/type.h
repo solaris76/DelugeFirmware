@@ -61,6 +61,15 @@ public:
 		}
 	}
 
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentModControllable) {
+			return nullptr;
+		}
+		// Use the menu item's current value, which was just set by selectEncoderAction
+		*valueOut = static_cast<int32_t>(this->getValue<ModFXType>());
+		return "modFXType";
+	}
+
 	deluge::vector<std::string_view> getOptions(OptType optType) override {
 		(void)optType;
 		return modfx::getModNames();

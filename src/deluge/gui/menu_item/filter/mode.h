@@ -22,6 +22,7 @@
 #include "gui/menu_item/selection.h"
 #include "gui/ui/sound_editor.h"
 #include "model/instrument/kit.h"
+#include "model/mod_controllable/filters/filter_config.h"
 #include "model/mod_controllable/mod_controllable_audio.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
@@ -58,6 +59,21 @@ public:
 			info.setMode(current_value);
 		}
 	}
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentModControllable) {
+			return nullptr;
+		}
+		// Use the actual filter mode value from the sound (after writeCurrentValue has updated it)
+		if (info.getSlot() == FilterSlot::LPF) {
+			*valueOut = static_cast<int32_t>(soundEditor.currentModControllable->lpfMode);
+			return "lpfMode";
+		}
+		else {
+			*valueOut = static_cast<int32_t>(soundEditor.currentModControllable->hpfMode);
+			return "hpfMode";
+		}
+	}
+
 	bool wrapAround() override { return display->have7SEG(); }
 	deluge::vector<std::string_view> getOptions(OptType optType) override {
 		using enum l10n::String;

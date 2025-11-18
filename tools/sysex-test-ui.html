@@ -834,6 +834,8 @@
     let drumParamSubscriptionActive = false;
     let accordionDragInProgress = false;
     let logFloating = false;
+    let currentParameters = {}; // Store current parameter values for change detection
+    let parameterSubscriptionActive = false;
     const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     const SCALE_NAME_LOOKUP = {
       0: 'MAJOR',
@@ -919,7 +921,7 @@
       document.getElementById('getParametersBtn').addEventListener('click', () => sendCommand({getParameters: {}}));
       document.getElementById('clearParamsBtn').addEventListener('click', clearParametersDisplay);
       document.getElementById('setParameterBtn').addEventListener('click', setParameterValue);
-      document.getElementById('subscribeParamsBtn').addEventListener('click', () => sendCommand({subscribeParameters: {}}));
+      document.getElementById('subscribeParamsBtn').addEventListener('click', toggleParameterSubscription);
       document.getElementById('setTempoBtn').addEventListener('click', setTempo);
       document.getElementById('getTransportBtn').addEventListener('click', () => sendCommand({getTransportState: {}}));
       document.getElementById('subscribeTransportBtn').addEventListener('click', () => sendCommand({subscribeTransport: {}}));
@@ -1072,6 +1074,7 @@
       document.getElementById('paramValueInput').disabled = false;
       document.getElementById('setParameterBtn').disabled = false;
       document.getElementById('subscribeParamsBtn').disabled = false;
+      updateParameterSubscribeButton();
 
       // Enable kit controls
       document.getElementById('getKitInfoBtn').disabled = false;
@@ -1151,6 +1154,8 @@
       if (scaleField) scaleField.disabled = true;
       drumParamSubscriptionActive = false;
       updateDrumParamSubscribeButton();
+      parameterSubscriptionActive = false;
+      updateParameterSubscribeButton();
     }
 
     function sendCommand(jsonObj) {
@@ -1173,52 +1178,114 @@
 
     function handleMidiMessage(event) {
       if (event.data[0] !== 0xF0) return;
+
       try {
         const data = new Uint8Array(event.data);
 
-        // Debug: Log first few bytes of any SysEx message
-        const debugBytes = Array.from(data.slice(0, 10)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-        console.log(`[MIDI IN] First 10 bytes: ${debugBytes}...`);
+        // Verify message ends with SysEx terminator
+        if (data[data.length - 1] !== 0xF7) {
+          console.warn('[MIDI IN] Message missing terminator, might be fragmented');
+          // Still try to process, but log warning
+        }
 
         // Verify Deluge manufacturer ID
-        if (data[1] !== 0x00 || data[2] !== 0x21 || data[3] !== 0x7B || data[4] !== 0x01) {
+        if (data.length < 7 || data[1] !== 0x00 || data[2] !== 0x21 || data[3] !== 0x7B || data[4] !== 0x01) {
           console.log('[MIDI IN] Not a Deluge message, ignoring');
           return;
         }
 
-        // Check command byte
+        // Check command byte (0x05 = JSON response)
         if (data[5] !== 0x05) {
-          console.log('Unexpected command byte:', data[5].toString(16));
+          console.log('[MIDI IN] Unexpected command byte:', data[5].toString(16), '- ignoring');
+          return;
         }
 
-        const payload = event.data.slice(7, -1);
-        const jsonStr = new TextDecoder().decode(payload);
+        // Extract payload (skip header: F0 00 21 7B 01 05 [seq], ends with F7)
+        // Payload starts at index 7 (after seq byte) and ends before F7
+        const payloadStart = 7;
+        const payloadEnd = data[data.length - 1] === 0xF7 ? data.length - 1 : data.length;
 
-        console.log(`[MIDI IN] Payload length: ${payload.length} bytes`);
-        console.log(`[MIDI IN] JSON starts with: "${jsonStr.substring(0, 100)}"`);
-        console.log(`[MIDI IN] JSON ends with: "...${jsonStr.substring(jsonStr.length - 50)}"`);
+        if (payloadEnd <= payloadStart) {
+          console.warn('[MIDI IN] Invalid payload length');
+          return;
+        }
 
-        // DEBUG: Show corruption details
-        if (!jsonStr.startsWith('{')) {
-          const rawHex = Array.from(payload.slice(0, 30)).map(b => b.toString(16).padStart(2,'0')).join(' ');
-          log(`✗ CORRUPT! Hex: ${rawHex}`, 'error');
-          log(`✗ Text: "${jsonStr.substring(0, 50)}"`, 'error');
+        const payload = data.slice(payloadStart, payloadEnd);
+        const jsonStr = new TextDecoder('utf-8', { fatal: false }).decode(payload);
+
+        // Validate JSON string before parsing
+        if (!jsonStr || jsonStr.trim().length === 0) {
+          console.warn('[MIDI IN] Empty payload');
+          return;
+        }
+
+        // Check for valid JSON start
+        const trimmedJson = jsonStr.trim();
+        if (!trimmedJson.startsWith('{')) {
+          // Try to find JSON start if message got corrupted
+          const jsonStart = trimmedJson.indexOf('{');
+          if (jsonStart > 0) {
+            console.warn(`[MIDI IN] JSON doesn't start at beginning, found at position ${jsonStart}`);
+            const cleanedJson = trimmedJson.substring(jsonStart);
+            try {
+              const response = JSON.parse(cleanedJson);
+              handleResponse(response);
+              return;
+            } catch (e) {
+              // Fall through to error handling
+            }
+          }
+
+          const rawHex = Array.from(payload.slice(0, Math.min(50, payload.length)))
+            .map(b => b.toString(16).padStart(2, '0')).join(' ');
+          log(`✗ Invalid JSON start. Hex: ${rawHex}`, 'error');
+          log(`✗ Text preview: "${trimmedJson.substring(0, 100)}"`, 'error');
           console.error('[MIDI IN] Message does not start with {');
           return;
         }
 
+        // Try to parse JSON
         try {
-        const response = JSON.parse(jsonStr);
-          log(`◀ Received: ${jsonStr.substring(0, 200)}${jsonStr.length > 200 ? '...' : ''}`, 'received');
-          console.log('[MIDI IN] Parsed successfully:', Object.keys(response));
-        handleResponse(response);
+          const response = JSON.parse(trimmedJson);
+
+          // Only log full message if it's not too long (to avoid spam)
+          if (trimmedJson.length <= 200) {
+            log(`◀ Received: ${trimmedJson}`, 'received');
+          } else {
+            log(`◀ Received: ${trimmedJson.substring(0, 150)}...`, 'received');
+          }
+
+          handleResponse(response);
         } catch (parseError) {
+          // Enhanced error reporting
+          const errorPos = parseError.message.match(/position (\d+)/);
+          const pos = errorPos ? parseInt(errorPos[1]) : -1;
+
+          let errorContext = '';
+          if (pos > 0 && pos < trimmedJson.length) {
+            const start = Math.max(0, pos - 30);
+            const end = Math.min(trimmedJson.length, pos + 30);
+            errorContext = trimmedJson.substring(start, end);
+            const markerPos = pos - start;
+            errorContext = errorContext.substring(0, markerPos) + '❌' + errorContext.substring(markerPos);
+          }
+
           console.error('[MIDI IN] JSON parse failed:', parseError.message);
-          console.error('[MIDI IN] JSON snippet:', jsonStr.substring(0, 500));
+          console.error('[MIDI IN] JSON length:', trimmedJson.length);
+          console.error('[MIDI IN] Error position:', pos);
+          if (errorContext) {
+            console.error('[MIDI IN] Context:', errorContext);
+          }
+          console.error('[MIDI IN] Full JSON:', trimmedJson);
+
           log(`✗ Parse error: ${parseError.message}`, 'error');
+          if (errorContext) {
+            log(`✗ Context: ...${errorContext}...`, 'error');
+          }
         }
       } catch (error) {
-        log(`✗ Parse error: ${error.message}`, 'error');
+        log(`✗ Message handling error: ${error.message}`, 'error');
+        console.error('[MIDI IN] Unexpected error:', error);
       }
     }
 
@@ -1345,6 +1412,10 @@
       if (response['^parameters']) {
         const paramCount = Object.keys(response['^parameters']).length;
         log(`✓ Received ${paramCount} parameters`, 'success');
+
+        // Store current parameters for change detection
+        Object.assign(currentParameters, response['^parameters']);
+
         displayParameters(response['^parameters']);
         storeLatestJson(response);
 
@@ -1373,18 +1444,30 @@
 
       if (response['^parametersSubscribed']) {
         log('✓ Subscribed to parameter changes', 'success');
+        parameterSubscriptionActive = true;
+        updateParameterSubscribeButton();
       }
 
       if (response['^parametersUnsubscribed']) {
         log('✓ Unsubscribed from parameter changes', 'success');
+        parameterSubscriptionActive = false;
+        updateParameterSubscribeButton();
       }
 
       if (response['^parameterChanged']) {
         const pc = response['^parameterChanged'];
+        const paramName = pc.name || `kind=${pc.kind}_id=${pc.id}`;
+        const paramValue = pc.value;
+
+        // Update stored parameter value
+        currentParameters[paramName] = paramValue;
+
+        // Update the display in real-time
+        updateParameterInDisplay(paramName, paramValue);
+
+        // Log the change
         const paramLabel = pc.name ? pc.name : `kind=${pc.kind} id=${pc.id}`;
-        log(`🔄 Parameter changed: ${paramLabel} = ${pc.value}`, 'info');
-        // Refresh display when subscribed parameter changes
-        sendCommand({getParameters: {}});
+        log(`🔄 Parameter changed: ${paramLabel} = ${paramValue}`, 'info');
       }
 
       // Clip responses
@@ -2557,7 +2640,7 @@
           const isNumber = typeof value === 'number';
           const clickable = isNumber ? `cursor: pointer; text-decoration: underline dotted;` : '';
           const onClick = isNumber ? `onclick="document.getElementById('paramNameSelect').value='${key}'; document.getElementById('paramValueInput').value='${value}'; updateParamValueHint(); document.getElementById('paramNameSelect').scrollIntoView({behavior: 'smooth', block: 'center'});"` : '';
-          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50; ${clickable}" ${onClick} title="${isNumber ? 'Click to edit' : ''}">${value}</span></div>`;
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span class="param-value" data-param-name="${key}" style="color: #4caf50; ${clickable}" ${onClick} title="${isNumber ? 'Click to edit' : ''}">${value}</span></div>`;
           displayTotalParams++;
         });
         html += `</div>`;
@@ -2569,7 +2652,7 @@
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🔊 UNISON</div>`;
         Object.entries(grouped.unison).forEach(([key, value]) => {
           const onClick = `onclick="document.getElementById('paramNameSelect').value='${key}'; document.getElementById('paramValueInput').value='${value}'; updateParamValueHint(); document.getElementById('paramNameSelect').scrollIntoView({behavior: 'smooth', block: 'center'});"`;
-          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50; cursor: pointer; text-decoration: underline dotted;" ${onClick} title="Click to edit">${value}</span></div>`;
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span class="param-value" data-param-name="${key}" style="color: #4caf50; cursor: pointer; text-decoration: underline dotted;" ${onClick} title="Click to edit">${value}</span></div>`;
           displayTotalParams++;
         });
         html += `</div>`;
@@ -2590,7 +2673,7 @@
               const filename = value.substring(value.lastIndexOf('/') + 1);
               displayValue = `<span style="color: #888;">${value.substring(0, value.lastIndexOf('/') + 1)}</span><span style="color: #ffa500; font-weight: bold;">${filename}</span>`;
             }
-            html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="color: #4caf50;">${displayValue}</span></div>`;
+            html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span class="param-value" data-param-name="${key}" style="color: #4caf50;">${displayValue}</span></div>`;
             displayTotalParams++;
           });
           html += `</div>`;
@@ -2600,7 +2683,7 @@
       // Osc2 Sync
       if (grouped.other.osc2Sync !== undefined) {
         html += `<div style="margin-bottom: 15px;">`;
-        html += `<div style="padding: 2px 0;"><span style="color: #aaa;">osc2Sync:</span> <span style="color: ${grouped.other.osc2Sync ? '#4caf50' : '#f44336'};">${grouped.other.osc2Sync ? 'ON' : 'OFF'}</span></div>`;
+        html += `<div style="padding: 2px 0;"><span style="color: #aaa;">osc2Sync:</span> <span class="param-value" data-param-name="osc2Sync" style="color: ${grouped.other.osc2Sync ? '#4caf50' : '#f44336'};">${grouped.other.osc2Sync ? 'ON' : 'OFF'}</span></div>`;
         html += `</div>`;
         displayTotalParams++;
       }
@@ -2633,7 +2716,7 @@
             matchingParams.forEach(([key, value]) => {
               const hexValue = value < 0 ? `0x${(value >>> 0).toString(16).toUpperCase()}` : `0x${value.toString(16).toUpperCase()}`;
               const onClick = `onclick="document.getElementById('paramNameSelect').value='${key}'; document.getElementById('paramValueInput').value='${hexValue}'; updateParamValueHint(); document.getElementById('paramNameSelect').scrollIntoView({behavior: 'smooth', block: 'center'});"`;
-              html += `<div style="padding: 1px 0; font-size: 10px;"><span style="color: #666;">${key}:</span> <span style="color: #667eea; font-family: 'Courier New'; cursor: pointer; text-decoration: underline dotted;" ${onClick} title="Click to edit">${hexValue}</span></div>`;
+              html += `<div style="padding: 1px 0; font-size: 10px;"><span style="color: #666;">${key}:</span> <span class="param-value" data-param-name="${key}" style="color: #667eea; font-family: 'Courier New'; cursor: pointer; text-decoration: underline dotted;" ${onClick} title="Click to edit">${hexValue}</span></div>`;
               displayTotalParams++;
             });
           }
@@ -2651,7 +2734,7 @@
         Object.entries(grouped.unpatched).forEach(([key, value]) => {
           const hexValue = value < 0 ? `0x${(value >>> 0).toString(16).toUpperCase()}` : `0x${value.toString(16).toUpperCase()}`;
           const onClick = `onclick="document.getElementById('paramNameSelect').value='${key}'; document.getElementById('paramValueInput').value='${hexValue}'; updateParamValueHint(); document.getElementById('paramNameSelect').scrollIntoView({behavior: 'smooth', block: 'center'});"`;
-          html += `<div style="padding: 1px 0; font-size: 10px; break-inside: avoid;"><span style="color: #aaa;">${key}:</span> <span style="color: #667eea; cursor: pointer; text-decoration: underline dotted;" ${onClick} title="Click to edit">${hexValue}</span></div>`;
+          html += `<div style="padding: 1px 0; font-size: 10px; break-inside: avoid;"><span style="color: #aaa;">${key}:</span> <span class="param-value" data-param-name="${key}" style="color: #667eea; cursor: pointer; text-decoration: underline dotted;" ${onClick} title="Click to edit">${hexValue}</span></div>`;
           displayTotalParams++;
         });
         html += `</div></div>`;
@@ -2662,7 +2745,7 @@
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🔧 FILTERS</div>`;
         Object.entries(grouped.filters).forEach(([key, value]) => {
-          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="background: #333; padding: 2px 6px; border-radius: 3px; color: #4caf50;">${value}</span></div>`;
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span class="param-value" data-param-name="${key}" style="background: #333; padding: 2px 6px; border-radius: 3px; color: #4caf50;">${value}</span></div>`;
           displayTotalParams++;
         });
         html += `</div>`;
@@ -2674,7 +2757,7 @@
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">🌀 LFOs</div>`;
         html += `<div style="padding-left: 10px;">`;
         Object.entries(grouped.lfos).forEach(([key, value]) => {
-          html += `<div style="padding: 1px 0; font-size: 10px;"><span style="color: #666;">${key}:</span> <span style="color: #4caf50;">${value}</span></div>`;
+          html += `<div style="padding: 1px 0; font-size: 10px;"><span style="color: #666;">${key}:</span> <span class="param-value" data-param-name="${key}" style="color: #4caf50;">${value}</span></div>`;
           displayTotalParams++;
         });
         html += `</div></div>`;
@@ -2685,7 +2768,7 @@
         html += `<div style="margin-bottom: 15px;">`;
         html += `<div style="color: #667eea; font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 2px solid #667eea; padding-bottom: 3px;">✨ MOD FX</div>`;
         Object.entries(grouped.modFX).forEach(([key, value]) => {
-          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span style="background: #333; padding: 2px 6px; border-radius: 3px; color: #4caf50;">${value}</span></div>`;
+          html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> <span class="param-value" data-param-name="${key}" style="background: #333; padding: 2px 6px; border-radius: 3px; color: #4caf50;">${value}</span></div>`;
           displayTotalParams++;
         });
         html += `</div>`;
@@ -2698,9 +2781,11 @@
         Object.entries(grouped.other).forEach(([key, value]) => {
           let displayValue = value;
           if (key === 'osc2Sync' || key === 'delayPingPong' || key === 'delayAnalog') {
-            displayValue = `<span style="color: ${value ? '#4caf50' : '#f44336'};">${value ? 'ON' : 'OFF'}</span>`;
+            displayValue = `<span class="param-value" data-param-name="${key}" style="color: ${value ? '#4caf50' : '#f44336'};">${value ? 'ON' : 'OFF'}</span>`;
           } else if (typeof value === 'number' && key.includes('sidechain') && !key.includes('Send')) {
-            displayValue = `<span style="color: #667eea;">${value}</span>`;
+            displayValue = `<span class="param-value" data-param-name="${key}" style="color: #667eea;">${value}</span>`;
+          } else {
+            displayValue = `<span class="param-value" data-param-name="${key}" style="color: #4caf50;">${value}</span>`;
           }
           html += `<div style="padding: 2px 0; padding-left: 10px;"><span style="color: #aaa;">${key}:</span> ${displayValue}</div>`;
           displayTotalParams++;
@@ -2720,6 +2805,101 @@
 
     function clearParametersDisplay() {
       document.getElementById('parametersDisplay').innerHTML = '<div style="color: #888;">Parameters will appear here</div>';
+      currentParameters = {};
+    }
+
+    function toggleParameterSubscription() {
+      if (parameterSubscriptionActive) {
+        sendCommand({unsubscribeParameters: {}});
+      } else {
+        sendCommand({subscribeParameters: {}});
+      }
+    }
+
+    function updateParameterSubscribeButton() {
+      const btn = document.getElementById('subscribeParamsBtn');
+      if (!btn) return;
+      btn.textContent = parameterSubscriptionActive ? 'Unsubscribe' : 'Subscribe';
+      btn.style.background = parameterSubscriptionActive ? '#4caf50' : '#667eea';
+    }
+
+    function updateParameterInDisplay(paramName, newValue) {
+      const display = document.getElementById('parametersDisplay');
+      if (!display || !display.innerHTML || display.innerHTML.includes('will appear here')) {
+        // Display not initialized yet, refresh it
+        sendCommand({getParameters: {}});
+        return;
+      }
+
+      // Find the parameter element in the display using data attribute
+      const paramElements = display.querySelectorAll(`[data-param-name="${paramName}"]`);
+
+      if (paramElements.length === 0) {
+        // Parameter not found in display, might be a new one - refresh
+        sendCommand({getParameters: {}});
+        return;
+      }
+
+      // Format the new value based on type
+      let displayValue = newValue;
+      if (typeof newValue === 'number') {
+        // Check if it's a boolean-like value (0 or 1)
+        if (newValue === 0 || newValue === 1) {
+          // For boolean params, check if they should show ON/OFF
+          if (paramName.includes('Sync') || paramName.includes('PingPong') || paramName.includes('Analog')) {
+            displayValue = newValue ? 'ON' : 'OFF';
+          } else {
+            displayValue = newValue.toString();
+          }
+        } else if (newValue < 0 || newValue > 0x7FFFFFFF) {
+          displayValue = `0x${(newValue >>> 0).toString(16).toUpperCase()}`;
+        } else {
+          displayValue = newValue.toString();
+        }
+      }
+
+      // Update all matching elements (parameter might appear in multiple places)
+      paramElements.forEach(elem => {
+        const oldValue = elem.textContent.trim();
+
+        // Only update if value actually changed
+        if (oldValue !== displayValue.toString()) {
+          // Store original styles
+          const originalBg = elem.style.background || '';
+          const originalColor = elem.style.color || '';
+          const originalPadding = elem.style.padding || '';
+          const originalBorderRadius = elem.style.borderRadius || '';
+          const originalFontWeight = elem.style.fontWeight || '';
+
+          // Add highlight animation
+          elem.style.transition = 'all 0.3s';
+          elem.style.background = '#4caf50';
+          elem.style.color = '#fff';
+          elem.style.padding = elem.style.padding || '2px 6px';
+          elem.style.borderRadius = elem.style.borderRadius || '3px';
+          elem.style.fontWeight = 'bold';
+
+          // Update the value
+          elem.textContent = displayValue;
+
+          // Update color for boolean params
+          if (paramName.includes('Sync') || paramName.includes('PingPong') || paramName.includes('Analog')) {
+            elem.style.color = newValue ? '#fff' : '#fff';
+          }
+
+          // Remove highlight after animation
+          setTimeout(() => {
+            elem.style.transition = 'all 0.5s';
+            elem.style.background = originalBg;
+            elem.style.color = originalColor || (paramName.includes('Sync') || paramName.includes('PingPong') || paramName.includes('Analog')
+              ? (newValue ? '#4caf50' : '#f44336')
+              : (elem.classList.contains('param-value') && elem.style.color.includes('#667eea') ? '#667eea' : '#4caf50'));
+            elem.style.padding = originalPadding;
+            elem.style.borderRadius = originalBorderRadius;
+            elem.style.fontWeight = originalFontWeight;
+          }, 1000);
+        }
+      });
     }
 
     // Kit display functions

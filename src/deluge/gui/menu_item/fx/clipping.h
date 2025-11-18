@@ -52,6 +52,15 @@ public:
 			soundEditor.currentModControllable->clippingAmount = current_value;
 		}
 	}
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentModControllable) {
+			return nullptr;
+		}
+		// Use the menu item's current value, which was just set by selectEncoderAction
+		*valueOut = this->getValue();
+		return "clippingAmount";
+	}
+
 	[[nodiscard]] int32_t getMaxValue() const override { return 15; }
 	[[nodiscard]] RenderingStyle getRenderingStyle() const override { return BAR; }
 };

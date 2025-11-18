@@ -55,6 +55,15 @@ public:
 		}
 	}
 
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentModControllable) {
+			return nullptr;
+		}
+		// Use the menu item's current value, which was just set by selectEncoderAction
+		*valueOut = static_cast<int32_t>(this->getValue<::FilterRoute>());
+		return "filterRoute";
+	}
+
 	deluge::vector<std::string_view> getOptions(OptType optType) override {
 		// Despite SHORT optType we use a long string for this menu specifically cause it occupies 4 slots
 		return {optType == OptType::SHORT ? "HPF > LPF" : "HPF2LPF",

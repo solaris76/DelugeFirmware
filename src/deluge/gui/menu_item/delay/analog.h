@@ -49,6 +49,15 @@ public:
 			soundEditor.currentModControllable->delay.analog = current_value;
 		}
 	}
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentModControllable) {
+			return nullptr;
+		}
+		// Use the menu item's current value, which was just set by selectEncoderAction
+		*valueOut = this->getValue() ? 1 : 0;
+		return "delayAnalog";
+	}
+
 	deluge::vector<std::string_view> getOptions(OptType optType) override {
 		using enum l10n::String;
 		return {l10n::getView(STRING_FOR_DIGITAL),

@@ -75,6 +75,22 @@ public:
 		}
 	}
 
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		static char paramName[16];
+		::snprintf(paramName, sizeof(paramName), "osc%dType", sourceId_ + 1);
+		// Use the menu item's current value, which was just set by selectEncoderAction
+		// Need to account for DX7 offset if applicable
+		auto oscType = this->getValue<OscType>();
+		if (!mayUseDx() && static_cast<int32_t>(oscType) >= static_cast<int32_t>(OscType::DX7)) {
+			oscType = static_cast<OscType>(static_cast<int32_t>(oscType) + 1);
+		}
+		*valueOut = static_cast<int32_t>(oscType);
+		return paramName;
+	}
+
 	[[nodiscard]] std::string_view getTitle() const override { return FormattedTitle::title(); }
 
 	deluge::vector<std::string_view> getOptions(OptType optType) override {

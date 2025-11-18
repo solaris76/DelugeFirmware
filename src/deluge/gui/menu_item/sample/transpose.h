@@ -18,6 +18,7 @@
 #include "gui/menu_item/formatted_title.h"
 #include "gui/menu_item/source/transpose.h"
 #include "gui/ui/sound_editor.h"
+#include "io/midi/sysex/synth_sysex.h"
 #include "model/instrument/kit.h"
 #include "model/model_stack.h"
 #include "model/song/song.h"
@@ -108,6 +109,19 @@ public:
 			ModelStackWithSoundFlags* modelStack = soundEditor.getCurrentModelStack(modelStackMemory)->addSoundFlags();
 
 			soundEditor.currentSound->recalculateAllVoicePhaseIncrements(modelStack);
+		}
+
+		// Notify SysEx subscribers of both osc transpose and cents properties
+		// The menu item combines transpose and cents, but getParameters reports them separately
+		if (SynthSysex::hasParameterSubscribers()) {
+			int32_t transpose, cents;
+			computeFinalValuesForTranspose(this->getValue(), &transpose, &cents);
+			static char transposeName[32];
+			static char centsName[32];
+			::snprintf(transposeName, sizeof(transposeName), "osc%dTranspose", source_id_ + 1);
+			::snprintf(centsName, sizeof(centsName), "osc%dCents", source_id_ + 1);
+			SynthSysex::notifyNonParamPropertyChanged(transposeName, transpose);
+			SynthSysex::notifyNonParamPropertyChanged(centsName, cents);
 		}
 	}
 

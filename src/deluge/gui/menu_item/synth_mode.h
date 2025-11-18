@@ -57,6 +57,15 @@ public:
 		view.setKnobIndicatorLevels();
 	}
 
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		// Use the menu item's current value, which was just set by selectEncoderAction
+		*valueOut = static_cast<int32_t>(this->getValue<::SynthMode>());
+		return "mode";
+	}
+
 	deluge::vector<std::string_view> getOptions(OptType optType) override {
 		(void)optType;
 		return {

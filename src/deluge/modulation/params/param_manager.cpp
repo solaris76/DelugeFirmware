@@ -18,7 +18,6 @@
 #include "modulation/params/param_manager.h"
 #include "definitions_cxx.hpp"
 #include "gui/views/view.h"
-#include "io/midi/sysex/param_stream.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
 #include "model/model_stack.h"
@@ -458,8 +457,10 @@ void ParamManager::notifyParamModifiedInSomeWay(ModelStackWithAutoParam const* m
 
 	if (currentValueChanged) {
 		view.notifyParamAutomationOccurred(this);
-		SysexParamStream::handleParamChange(modelStack);
 	}
+
+	// Note: SysEx parameter change notifications are handled at the ParamCollection level
+	// to ensure all parameter changes (select encoder, mod knobs, automation, etc.) are reported.
 }
 
 void ParamManagerForTimeline::shiftHorizontally(ModelStackWithThreeMainThings* modelStack, int32_t amount,

@@ -17,6 +17,9 @@
 
 #include "modulation/params/param_collection.h"
 #include "definitions_cxx.hpp"
+#include "io/midi/sysex/kit_sysex.h"
+#include "io/midi/sysex/param_stream.h"
+#include "io/midi/sysex/synth_sysex.h"
 #include "model/model_stack.h"
 #include "modulation/automation/auto_param.h"
 #include "modulation/params/param_manager.h"
@@ -37,10 +40,20 @@ ParamCollection::~ParamCollection() {
 void ParamCollection::notifyParamModifiedInSomeWay(ModelStackWithAutoParam const* modelStack, int32_t oldValue,
                                                    bool automationChanged, bool automatedBefore, bool automatedNow) {
 
-	bool currentValueChanged = (oldValue != modelStack->autoParam->getCurrentValue());
+	int32_t currentValue = modelStack->autoParam->getCurrentValue();
+	bool currentValueChanged = (oldValue != currentValue);
+
 	if (currentValueChanged || automationChanged) {
 		modelStack->paramManager->notifyParamModifiedInSomeWay(modelStack, currentValueChanged, automationChanged,
 		                                                       automatedNow);
+	}
+
+	// Always notify SysEx subscribers when there are subscribers, whenever notifyParamModifiedInSomeWay is called.
+	// This ensures parameter changes via select encoder (and other UI methods) are reported,
+	// not just mod knob changes. We check here at the ParamCollection level to catch all cases.
+	// handleParamChange will get the current value itself, so we don't need to check currentValueChanged here.
+	if (SynthSysex::hasParameterSubscribers() || KitSysex::hasDrumParameterSubscribers()) {
+		SysexParamStream::handleParamChange(modelStack);
 	}
 
 	if (automationChanged && automatedNow) {

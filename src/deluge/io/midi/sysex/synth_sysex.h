@@ -48,4 +48,11 @@ void unsubscribeParameters(MIDICable& cable, JsonDeserializer& reader);
 // Notify subscribers of parameter change (called internally)
 void notifyParameterChanged(int32_t paramKind, int32_t paramId, const char* paramName, int32_t value);
 
+// Check if there are any parameter subscribers (called internally)
+bool hasParameterSubscribers();
+
+// Notify subscribers of a non-parameter property change (e.g., polyphonic, mode, transpose, etc.)
+// This is for properties that are not AutoParams but are still reported in getParameters
+void notifyNonParamPropertyChanged(const char* paramName, int32_t value);
+
 } // namespace SynthSysex

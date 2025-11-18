@@ -50,6 +50,14 @@ public:
 			soundEditor.currentSound->setUnisonStereoSpread(current_value);
 		}
 	}
+
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		*valueOut = soundEditor.currentSound->unisonStereoSpread;
+		return "unisonSpread";
+	}
 	[[nodiscard]] int32_t getMaxValue() const override { return kMaxUnisonStereoSpread; }
 };
 

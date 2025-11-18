@@ -1242,6 +1242,11 @@ void notifyKitChanged() {
 	});
 }
 
+// Check if there are any drum parameter subscribers
+bool hasDrumParameterSubscribers() {
+	return drumParamSubscribers.size() > 0;
+}
+
 void notifyDrumParameterChanged(int32_t drumIndex, char const* paramName, int32_t value) {
 	if (drumParamSubscribers.size() == 0 || !paramName) {
 		return;

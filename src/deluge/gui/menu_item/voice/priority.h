@@ -51,6 +51,25 @@ public:
 			*soundEditor.currentPriority = current_value;
 		}
 	}
+
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		// Use the menu item's current value, which was just set by selectEncoderAction
+		switch (this->getValue<VoicePriority>()) {
+		case VoicePriority::LOW:
+			*valueOut = 0;
+			break;
+		case VoicePriority::MEDIUM:
+			*valueOut = 1;
+			break;
+		case VoicePriority::HIGH:
+			*valueOut = 2;
+			break;
+		}
+		return "voicePriority";
+	}
 	deluge::vector<std::string_view> getOptions(OptType optType) override {
 		return {
 		    l10n::getView(l10n::String::STRING_FOR_LOW),

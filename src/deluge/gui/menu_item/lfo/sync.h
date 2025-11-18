@@ -17,6 +17,7 @@
 #pragma once
 #include "gui/menu_item/sync_level.h"
 #include "gui/ui/sound_editor.h"
+#include "io/midi/sysex/synth_sysex.h"
 #include "model/drum/drum.h"
 #include "model/instrument/kit.h"
 #include "model/song/song.h"
@@ -66,6 +67,19 @@ public:
 			// would be enough?
 			soundEditor.currentSound->resyncGlobalLFOs();
 			soundEditor.currentSound->setupPatchingForAllParamManagers(currentSong);
+		}
+
+		// Notify SysEx subscribers of both LFO sync properties
+		// LFO sync combines syncType and syncLevel, but getParameters reports them separately
+		if (SynthSysex::hasParameterSubscribers()) {
+			::SyncType syncType = syncValueToSyncType(current_value);
+			::SyncLevel syncLevel = syncValueToSyncLevel(current_value);
+			static char syncTypeName[32];
+			static char syncLevelName[32];
+			::snprintf(syncTypeName, sizeof(syncTypeName), "lfo%dSyncType", lfoId_ + 1);
+			::snprintf(syncLevelName, sizeof(syncLevelName), "lfo%dSyncLevel", lfoId_ + 1);
+			SynthSysex::notifyNonParamPropertyChanged(syncTypeName, static_cast<int32_t>(syncType));
+			SynthSysex::notifyNonParamPropertyChanged(syncLevelName, static_cast<int32_t>(syncLevel));
 		}
 	}
 

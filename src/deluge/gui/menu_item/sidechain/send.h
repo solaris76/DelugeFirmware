@@ -60,6 +60,15 @@ public:
 			soundEditor.currentSound->sideChainSendLevel = current_value;
 		}
 	}
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		// Use the actual sidechain send value
+		*valueOut = soundEditor.currentSound->sideChainSendLevel;
+		return "sidechainSend";
+	}
+
 	[[nodiscard]] int32_t getMaxValue() const override { return kMaxMenuValue; }
 	[[nodiscard]] RenderingStyle getRenderingStyle() const override { return BAR; }
 	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) override {

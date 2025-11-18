@@ -17,6 +17,7 @@
 #pragma once
 #include "gui/menu_item/sync_level.h"
 #include "gui/ui/sound_editor.h"
+#include "io/midi/sysex/synth_sysex.h"
 #include "model/drum/drum.h"
 #include "model/instrument/kit.h"
 #include "model/song/song.h"
@@ -52,6 +53,15 @@ public:
 		else {
 			soundEditor.currentModControllable->delay.syncType = syncValueToSyncType(current_value);
 			soundEditor.currentModControllable->delay.syncLevel = syncValueToSyncLevel(current_value);
+		}
+
+		// Notify SysEx subscribers of both delay sync properties
+		// Delay sync combines syncType and syncLevel, but getParameters reports them separately
+		if (SynthSysex::hasParameterSubscribers()) {
+			::SyncType syncType = syncValueToSyncType(current_value);
+			::SyncLevel syncLevel = syncValueToSyncLevel(current_value);
+			SynthSysex::notifyNonParamPropertyChanged("delaySyncType", static_cast<int32_t>(syncType));
+			SynthSysex::notifyNonParamPropertyChanged("delaySyncLevel", static_cast<int32_t>(syncLevel));
 		}
 	}
 };

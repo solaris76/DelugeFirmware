@@ -428,6 +428,11 @@ void unsubscribeParameters(MIDICable& cable, JsonDeserializer& reader) {
 	SysexCommon::sendResponse(cable, jWriter);
 }
 
+// Check if there are any parameter subscribers
+bool hasParameterSubscribers() {
+	return parameterSubscribers.size() > 0;
+}
+
 // Notify subscribers of parameter change
 void notifyParameterChanged(int32_t paramKind, int32_t paramId, const char* paramName, int32_t value) {
 	if (parameterSubscribers.size() == 0 || !paramName) {
@@ -441,6 +446,27 @@ void notifyParameterChanged(int32_t paramKind, int32_t paramId, const char* para
 		paramNotifyWriter.writeOpeningTag("^parameterChanged", false, true);
 		paramNotifyWriter.writeAttribute("kind", paramKind);
 		paramNotifyWriter.writeAttribute("id", paramId);
+		paramNotifyWriter.writeAttribute("name", paramName);
+		paramNotifyWriter.writeAttribute("value", value);
+		paramNotifyWriter.closeTag(true);
+		smSysex::sendMsg(destination, paramNotifyWriter);
+	});
+}
+
+// Notify subscribers of a non-parameter property change (e.g., polyphonic, mode, transpose, etc.)
+// This is for properties that are not AutoParams but are still reported in getParameters
+void notifyNonParamPropertyChanged(const char* paramName, int32_t value) {
+	if (parameterSubscribers.size() == 0 || !paramName) {
+		return;
+	}
+
+	parameterSubscribers.forEach([&](MIDICable& destination) {
+		paramNotifyWriter.reset();
+		paramNotifyWriter.setMemoryBased();
+		smSysex::startDirect(paramNotifyWriter);
+		paramNotifyWriter.writeOpeningTag("^parameterChanged", false, true);
+		paramNotifyWriter.writeAttribute("kind", (int32_t)0); // Use 0 for non-parameter properties
+		paramNotifyWriter.writeAttribute("id", (int32_t)0);   // Use 0 for non-parameter properties
 		paramNotifyWriter.writeAttribute("name", paramName);
 		paramNotifyWriter.writeAttribute("value", value);
 		paramNotifyWriter.closeTag(true);

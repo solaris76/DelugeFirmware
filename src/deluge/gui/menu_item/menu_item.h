@@ -130,6 +130,11 @@ public:
 	/// Like readValueAgain, but does not redraw.
 	virtual void readCurrentValue() {}
 
+	/// Get non-parameter property name and value for SysEx notifications (returns nullptr if not applicable)
+	/// Override this in menu items that modify non-parameter Sound properties (e.g., polyphonic, mode, oscType, etc.)
+	/// Returns the property name (as reported in getParameters) and sets valueOut to the current value
+	virtual const char* getNonParamPropertyName(int32_t* valueOut) { return nullptr; }
+
 	/// @}
 	/// @name Patching support
 	/// @{

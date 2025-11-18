@@ -58,6 +58,14 @@ public:
 			soundEditor.currentSound->setUnisonDetune(current_value, modelStack);
 		}
 	}
+
+	const char* getNonParamPropertyName(int32_t* valueOut) override {
+		if (!soundEditor.currentSound) {
+			return nullptr;
+		}
+		*valueOut = soundEditor.currentSound->unisonDetune;
+		return "unisonDetune";
+	}
 	[[nodiscard]] int32_t getMaxValue() const override { return kMaxUnisonDetune; }
 
 	void renderInHorizontalMenu(const HorizontalMenuSlotParams& slot) override {
