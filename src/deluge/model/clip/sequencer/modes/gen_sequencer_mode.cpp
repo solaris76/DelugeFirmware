@@ -139,11 +139,7 @@ int32_t GenSequencerMode::getRandomNoteFromRange() const {
 	if (numScaleNotes_ == 0)
 		return 0;
 
-	int32_t range = noteTypeRange_;
-	if (range < 0)
-		range = 0;
-	if (range > 15)
-		range = 15;
+	int32_t range = clampFader(noteTypeRange_);
 
 	// Map fader position (0-15) to number of notes in range
 	// Position 0 = 1 note, Position 15 = all notes (up to 2 octaves)
@@ -173,12 +169,7 @@ int32_t GenSequencerMode::getRandomNoteFromRange() const {
 
 int32_t GenSequencerMode::getSequenceLength() const {
 	// Sequence length is stored as fader position (0-15), map to 1-16
-	int32_t faderPos = sequenceLength_;
-	if (faderPos < 0)
-		faderPos = 0;
-	if (faderPos > 15)
-		faderPos = 15;
-
+	int32_t faderPos = clampFader(sequenceLength_);
 	// Map 0-15 to 1-16
 	return faderPos + 1;
 }
@@ -419,28 +410,12 @@ bool GenSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 	// y7: Note type range - fader behavior (pressing any pad x sets range to 0-x)
 	if (y == 7) {
 		if (x >= 0 && x < kDisplayWidth) {
-			// Set fader position to x (0-15)
-			noteTypeRange_ = x;
-			if (noteTypeRange_ > 15)
-				noteTypeRange_ = 15;
-			if (noteTypeRange_ < 0)
-				noteTypeRange_ = 0;
-
-			// Mark sequence for regeneration
+			noteTypeRange_ = clampFader(x);
 			sequenceNeedsRegeneration_ = true;
 
 			if (display) {
 				char buffer[32];
-				// Calculate actual number of notes in range
-				int32_t numNotesInRange;
-				if (noteTypeRange_ == 0) {
-					numNotesInRange = 1;
-				}
-				else {
-					numNotesInRange = 1 + ((noteTypeRange_ * (numScaleNotes_ - 1)) / 15);
-					if (numNotesInRange > numScaleNotes_)
-						numNotesInRange = numScaleNotes_;
-				}
+				int32_t numNotesInRange = calculateNumNotesInRange(noteTypeRange_);
 				snprintf(buffer, sizeof(buffer), "Note range: %d", numNotesInRange);
 				display->displayPopup(std::string_view(buffer));
 			}
@@ -452,20 +427,12 @@ bool GenSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 	// y6: Note density - fader behavior (pressing any pad x sets density to position x)
 	else if (y == 6) {
 		if (x >= 0 && x < kDisplayWidth) {
-			// Set fader position to x (0-15), maps to 0-100%
-			noteDensity_ = x;
-			if (noteDensity_ > 15)
-				noteDensity_ = 15;
-			if (noteDensity_ < 0)
-				noteDensity_ = 0;
-
-			// Mark sequence for regeneration
+			noteDensity_ = clampFader(x);
 			sequenceNeedsRegeneration_ = true;
 
 			if (display) {
-				int32_t percent = getNoteDensityPercent();
 				char buffer[32];
-				snprintf(buffer, sizeof(buffer), "Note Density: %d%%", percent);
+				snprintf(buffer, sizeof(buffer), "Note Density: %d%%", getNoteDensityPercent());
 				display->displayPopup(std::string_view(buffer));
 			}
 
@@ -476,20 +443,12 @@ bool GenSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 	// y5: Sequence length - fader behavior (pressing any pad x sets length to x+1)
 	else if (y == 5) {
 		if (x >= 0 && x < kDisplayWidth) {
-			// Set fader position to x (0-15), maps to 1-16
-			sequenceLength_ = x;
-			if (sequenceLength_ > 15)
-				sequenceLength_ = 15;
-			if (sequenceLength_ < 0)
-				sequenceLength_ = 0;
-
-			// Mark sequence for regeneration
+			sequenceLength_ = clampFader(x);
 			sequenceNeedsRegeneration_ = true;
 
 			if (display) {
-				int32_t length = getSequenceLength();
 				char buffer[32];
-				snprintf(buffer, sizeof(buffer), "Seq Length: %d", length);
+				snprintf(buffer, sizeof(buffer), "Seq Length: %d", getSequenceLength());
 				display->displayPopup(std::string_view(buffer));
 			}
 
@@ -500,17 +459,11 @@ bool GenSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 	// y4: Velocity spread - fader behavior (pressing any pad x sets spread to position x)
 	else if (y == 4) {
 		if (x >= 0 && x < kDisplayWidth) {
-			// Set fader position to x (0-15), maps to 0-127
-			velocitySpread_ = x;
-			if (velocitySpread_ > 15)
-				velocitySpread_ = 15;
-			if (velocitySpread_ < 0)
-				velocitySpread_ = 0;
+			velocitySpread_ = clampFader(x);
 
 			if (display) {
-				int32_t spread = getVelocitySpread();
 				char buffer[32];
-				snprintf(buffer, sizeof(buffer), "Velocity Spread: %d", spread);
+				snprintf(buffer, sizeof(buffer), "Velocity Spread: %d", getVelocitySpread());
 				display->displayPopup(std::string_view(buffer));
 			}
 
@@ -521,17 +474,11 @@ bool GenSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 	// y3: Gate length - fader behavior (pressing any pad x sets gate length to position x)
 	else if (y == 3) {
 		if (x >= 0 && x < kDisplayWidth) {
-			// Set fader position to x (0-15), maps to 0-100%
-			gateLength_ = x;
-			if (gateLength_ > 15)
-				gateLength_ = 15;
-			if (gateLength_ < 0)
-				gateLength_ = 0;
+			gateLength_ = clampFader(x);
 
 			if (display) {
-				int32_t percent = getGateLengthPercent();
 				char buffer[32];
-				snprintf(buffer, sizeof(buffer), "Gate Length: %d%%", percent);
+				snprintf(buffer, sizeof(buffer), "Gate Length: %d%%", getGateLengthPercent());
 				display->displayPopup(std::string_view(buffer));
 			}
 
@@ -541,6 +488,16 @@ bool GenSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 	}
 
 	return false;
+}
+
+int32_t GenSequencerMode::calculateNumNotesInRange(int32_t faderPosition) const {
+	if (faderPosition == 0) {
+		return 1;
+	}
+	int32_t numNotesInRange = 1 + ((faderPosition * (numScaleNotes_ - 1)) / kFaderMax);
+	if (numNotesInRange > numScaleNotes_)
+		numNotesInRange = numScaleNotes_;
+	return numNotesInRange;
 }
 
 int32_t GenSequencerMode::processPlayback(void* modelStackPtr, int32_t absolutePlaybackPos) {
@@ -701,16 +658,11 @@ bool GenSequencerMode::recallScene(const void* buffer, size_t size) {
 	gateLength_ = scene->gateLength;
 
 	// Clamp values
-	if (noteTypeRange_ < 0) noteTypeRange_ = 0;
-	if (noteTypeRange_ > 15) noteTypeRange_ = 15;
-	if (noteDensity_ < 0) noteDensity_ = 0;
-	if (noteDensity_ > 15) noteDensity_ = 15;
-	if (sequenceLength_ < 0) sequenceLength_ = 0;
-	if (sequenceLength_ > 15) sequenceLength_ = 15;
-	if (velocitySpread_ < 0) velocitySpread_ = 0;
-	if (velocitySpread_ > 15) velocitySpread_ = 15;
-	if (gateLength_ < 0) gateLength_ = 0;
-	if (gateLength_ > 15) gateLength_ = 15;
+	noteTypeRange_ = clampFader(noteTypeRange_);
+	noteDensity_ = clampFader(noteDensity_);
+	sequenceLength_ = clampFader(sequenceLength_);
+	velocitySpread_ = clampFader(velocitySpread_);
+	gateLength_ = clampFader(gateLength_);
 
 	// Regenerate sequence with restored parameters
 	sequenceNeedsRegeneration_ = true;
@@ -756,29 +708,19 @@ Error GenSequencerMode::readFromFile(Deserializer& reader) {
 			currentStep_ = reader.readTagOrAttributeValueInt();
 		}
 		else if (!strcmp(tagName, "noteTypeRange")) {
-			noteTypeRange_ = reader.readTagOrAttributeValueInt();
-			if (noteTypeRange_ < 0) noteTypeRange_ = 0;
-			if (noteTypeRange_ > 15) noteTypeRange_ = 15;
+			noteTypeRange_ = clampFader(reader.readTagOrAttributeValueInt());
 		}
 		else if (!strcmp(tagName, "noteDensity")) {
-			noteDensity_ = reader.readTagOrAttributeValueInt();
-			if (noteDensity_ < 0) noteDensity_ = 0;
-			if (noteDensity_ > 15) noteDensity_ = 15;
+			noteDensity_ = clampFader(reader.readTagOrAttributeValueInt());
 		}
 		else if (!strcmp(tagName, "sequenceLength")) {
-			sequenceLength_ = reader.readTagOrAttributeValueInt();
-			if (sequenceLength_ < 0) sequenceLength_ = 0;
-			if (sequenceLength_ > 15) sequenceLength_ = 15;
+			sequenceLength_ = clampFader(reader.readTagOrAttributeValueInt());
 		}
 		else if (!strcmp(tagName, "velocitySpread")) {
-			velocitySpread_ = reader.readTagOrAttributeValueInt();
-			if (velocitySpread_ < 0) velocitySpread_ = 0;
-			if (velocitySpread_ > 15) velocitySpread_ = 15;
+			velocitySpread_ = clampFader(reader.readTagOrAttributeValueInt());
 		}
 		else if (!strcmp(tagName, "gateLength")) {
-			gateLength_ = reader.readTagOrAttributeValueInt();
-			if (gateLength_ < 0) gateLength_ = 0;
-			if (gateLength_ > 15) gateLength_ = 15;
+			gateLength_ = clampFader(reader.readTagOrAttributeValueInt());
 		}
 		else {
 			// Unknown tag - let the caller handle it
@@ -851,9 +793,7 @@ void GenSequencerMode::evolveNotes(int32_t mutationRate) {
 		if (random(99) < 50) {
 			int32_t change = (isHighRate) ? (random(3) - 1) : (random(2) - 1); // -1, 0, or +1 (or -1 to +1 for high rate)
 			int32_t oldValue = noteTypeRange_;
-			noteTypeRange_ += change;
-			if (noteTypeRange_ < 0) noteTypeRange_ = 0;
-			if (noteTypeRange_ > 15) noteTypeRange_ = 15;
+			noteTypeRange_ = clampFader(noteTypeRange_ + change);
 			if (noteTypeRange_ != oldValue) parametersChanged = true;
 		}
 
@@ -861,9 +801,7 @@ void GenSequencerMode::evolveNotes(int32_t mutationRate) {
 		if (random(99) < 40) {
 			int32_t change = random(2) - 1; // -1, 0, or +1
 			int32_t oldValue = noteDensity_;
-			noteDensity_ += change;
-			if (noteDensity_ < 0) noteDensity_ = 0;
-			if (noteDensity_ > 15) noteDensity_ = 15;
+			noteDensity_ = clampFader(noteDensity_ + change);
 			if (noteDensity_ != oldValue) parametersChanged = true;
 		}
 
@@ -871,9 +809,7 @@ void GenSequencerMode::evolveNotes(int32_t mutationRate) {
 		if (random(99) < 30) {
 			int32_t change = random(2) - 1; // -1, 0, or +1
 			int32_t oldValue = sequenceLength_;
-			sequenceLength_ += change;
-			if (sequenceLength_ < 0) sequenceLength_ = 0;
-			if (sequenceLength_ > 15) sequenceLength_ = 15;
+			sequenceLength_ = clampFader(sequenceLength_ + change);
 			if (sequenceLength_ != oldValue) parametersChanged = true;
 		}
 
@@ -881,9 +817,7 @@ void GenSequencerMode::evolveNotes(int32_t mutationRate) {
 		if (random(99) < 25) {
 			int32_t change = random(2) - 1; // -1, 0, or +1
 			int32_t oldValue = velocitySpread_;
-			velocitySpread_ += change;
-			if (velocitySpread_ < 0) velocitySpread_ = 0;
-			if (velocitySpread_ > 15) velocitySpread_ = 15;
+			velocitySpread_ = clampFader(velocitySpread_ + change);
 			if (velocitySpread_ != oldValue) parametersChanged = true;
 		}
 
@@ -891,9 +825,7 @@ void GenSequencerMode::evolveNotes(int32_t mutationRate) {
 		if (random(99) < 25) {
 			int32_t change = random(2) - 1; // -1, 0, or +1
 			int32_t oldValue = gateLength_;
-			gateLength_ += change;
-			if (gateLength_ < 0) gateLength_ = 0;
-			if (gateLength_ > 15) gateLength_ = 15;
+			gateLength_ = clampFader(gateLength_ + change);
 			if (gateLength_ != oldValue) parametersChanged = true;
 		}
 

@@ -86,6 +86,8 @@ public:
 private:
 	static constexpr int32_t kMaxScaleNotes = 32; // Enough for 2 octaves of most scales (max 24 for chromatic)
 	static constexpr int32_t kMaxSequenceLength = 16;
+	static constexpr int32_t kFaderMax = 15;     // Maximum fader position (0-15)
+	static constexpr int32_t kFaderMin = 0;      // Minimum fader position
 
 	// Single set of parameters for the entire generative sequencer
 	int32_t noteTypeRange_ = 0;    // 0-15: rightmost enabled pad in y7 (fader position)
@@ -124,6 +126,10 @@ private:
 	int32_t getVelocitySpread() const; // Convert fader position (0-15) to velocity spread (0-127)
 	int32_t getGateLengthPercent() const; // Convert fader position (0-15) to percentage (0-100%)
 	void advanceStep(int32_t direction);
+	
+	// Helper functions
+	static int32_t clampFader(int32_t value) { return (value < kFaderMin) ? kFaderMin : ((value > kFaderMax) ? kFaderMax : value); }
+	int32_t calculateNumNotesInRange(int32_t faderPosition) const;
 };
 
 } // namespace deluge::model::clip::sequencer::modes
