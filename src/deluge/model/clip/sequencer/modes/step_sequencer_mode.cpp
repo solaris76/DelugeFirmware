@@ -18,6 +18,7 @@
 #include "model/clip/sequencer/modes/step_sequencer_mode.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
+#include "hid/buttons.h"
 #include "hid/display/display.h"
 #include "model/clip/instrument_clip.h"
 #include "model/clip/sequencer/sequencer_mode_manager.h"
@@ -340,6 +341,12 @@ bool StepSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 	// Let base class handle control columns (x16-x17)
 	if (x >= kDisplayWidth) {
 		return SequencerMode::handlePadPress(x, y, velocity);
+	}
+
+	// If Shift is pressed, don't handle pad presses - let instrument clip view handle it
+	// (for editing synth parameters, etc.)
+	if (Buttons::isShiftButtonPressed()) {
+		return false;
 	}
 
 	// Only handle main grid pads (x0-x15) and presses (not releases)
