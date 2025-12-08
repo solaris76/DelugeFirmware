@@ -20,6 +20,7 @@
 #include "gui/views/instrument_clip_view.h"
 #include "hid/buttons.h"
 #include "hid/display/display.h"
+#include "hid/led/pad_leds.h"
 #include "model/clip/instrument_clip.h"
 #include "model/clip/sequencer/sequencer_mode_manager.h"
 #include "model/model_stack.h"
@@ -48,6 +49,14 @@ void GenSequencerMode::initialize() {
 	ticksPerSixteenthNote_ = 0;
 	lastAbsolutePlaybackPos_ = 0;
 	sequenceNeedsRegeneration_ = true;
+
+	// Clear the white progress column from normal clip mode
+	// (set all tick squares to 255 = not displayed)
+	uint8_t tickSquares[kDisplayHeight];
+	uint8_t colours[kDisplayHeight];
+	memset(tickSquares, 255, kDisplayHeight); // 255 = not displayed
+	memset(colours, 0, kDisplayHeight);
+	PadLEDs::setTickSquares(tickSquares, colours);
 
 	// Update scale notes first
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];
