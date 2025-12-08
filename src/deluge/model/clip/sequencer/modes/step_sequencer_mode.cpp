@@ -18,7 +18,9 @@
 #include "model/clip/sequencer/modes/step_sequencer_mode.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
+#include "hid/buttons.h"
 #include "hid/display/display.h"
+#include "hid/led/pad_leds.h"
 #include "model/clip/instrument_clip.h"
 #include "model/clip/sequencer/sequencer_mode_manager.h"
 #include "model/instrument/melodic_instrument.h"
@@ -43,6 +45,14 @@ void StepSequencerMode::initialize() {
 	activeNoteCode_ = -1;
 	ticksPerSixteenthNote_ = 0;
 	lastAbsolutePlaybackPos_ = 0;
+
+	// Clear the white progress column from normal clip mode
+	// (set all tick squares to 255 = not displayed)
+	uint8_t tickSquares[kDisplayHeight];
+	uint8_t colours[kDisplayHeight];
+	memset(tickSquares, 255, kDisplayHeight); // 255 = not displayed
+	memset(colours, 0, kDisplayHeight);
+	PadLEDs::setTickSquares(tickSquares, colours);
 
 	// Only initialize noteScrollOffset if not already set (preserve loaded data)
 	if (noteScrollOffset_ == 0) {
@@ -70,10 +80,18 @@ void StepSequencerMode::cleanup() {
 		stopNote(modelStackWithTimelineCounter, activeNoteCode_);
 	}
 
+	// Reset all state to prevent leaks
 	initialized_ = false;
 	currentStep_ = 0;
 	activeNoteCode_ = -1;
 	numScaleNotes_ = 0;
+	noteScrollOffset_ = 0;
+	lastAbsolutePlaybackPos_ = 0;
+	ticksPerSixteenthNote_ = 0;
+	pingPongDirection_ = 1;
+
+	// Clear scale notes array (defensive cleanup)
+	memset(scaleNotes_, 0, sizeof(scaleNotes_));
 }
 
 void StepSequencerMode::updateScaleNotes(void* modelStackPtr) {
@@ -271,8 +289,8 @@ bool StepSequencerMode::renderPads(uint32_t whichRows, RGB* image,
 
 			// y0: Gate type pad
 			if (y == 0) {
-				if (isCurrentStep) {
-					// Current step highlighted in red
+				if (isCurrentStep && step.gateType != GateType::SKIP) {
+					// Current step highlighted in red (but not for SKIP steps)
 					color = RGB{255, 0, 0};
 				}
 				else {
@@ -292,11 +310,23 @@ bool StepSequencerMode::renderPads(uint32_t whichRows, RGB* image,
 			}
 			// y1: Octave down
 			else if (y == 1) {
-				color = (step.octave < 0) ? RGB{0, 128, 255} : RGB{16, 16, 32};
+				if (step.octave < 0) {
+					color = RGB{0, 128, 255}; // Blue when octave is set
+				}
+				else {
+					// Bright white only when step type is ON, dim otherwise
+					color = (step.gateType == GateType::ON) ? RGB{255, 255, 255} : RGB{16, 16, 32};
+				}
 			}
 			// y2: Octave up
 			else if (y == 2) {
-				color = (step.octave > 0) ? RGB{0, 128, 255} : RGB{16, 16, 32};
+				if (step.octave > 0) {
+					color = RGB{0, 128, 255}; // Blue when octave is set
+				}
+				else {
+					// Bright white only when step type is ON, dim otherwise
+					color = (step.gateType == GateType::ON) ? RGB{255, 255, 255} : RGB{16, 16, 32};
+				}
 			}
 			// y3-y7: Note pads (5 notes with scrolling)
 			else if (y >= 3 && y <= 7) {
@@ -305,8 +335,8 @@ bool StepSequencerMode::renderPads(uint32_t whichRows, RGB* image,
 
 				if (actualNoteIndex < numScaleNotes_ && actualNoteIndex == step.noteIndex) {
 					// This is the selected note
-					if (isCurrentStep) {
-						// Current playing step - show in red
+					if (isCurrentStep && step.gateType != GateType::SKIP) {
+						// Current playing step - show in red (but not for SKIP steps)
 						color = RGB{255, 0, 0};
 					}
 					else {
@@ -318,6 +348,20 @@ bool StepSequencerMode::renderPads(uint32_t whichRows, RGB* image,
 					// Unselected notes are black/off
 					color = RGB{0, 0, 0};
 				}
+			}
+
+			// Apply dimming based on gate type
+			// SKIP: dim entire column (all pads)
+			if (step.gateType == GateType::SKIP) {
+				color.r = (color.r * 1) / 10; // Dim to 10% brightness
+				color.g = (color.g * 1) / 10;
+				color.b = (color.b * 1) / 10;
+			}
+			// OFF: dim only note pads (y3-y7)
+			else if (step.gateType == GateType::OFF && y >= 3 && y <= 7) {
+				color.r = (color.r * 1) / 10; // Dim to 10% brightness
+				color.g = (color.g * 1) / 10;
+				color.b = (color.b * 1) / 10;
 			}
 
 			image[y * imageWidth + x] = color;
@@ -340,6 +384,12 @@ bool StepSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) {
 	// Let base class handle control columns (x16-x17)
 	if (x >= kDisplayWidth) {
 		return SequencerMode::handlePadPress(x, y, velocity);
+	}
+
+	// If Shift is pressed, don't handle pad presses - let instrument clip view handle it
+	// (for editing synth parameters, etc.)
+	if (Buttons::isShiftButtonPressed()) {
+		return false;
 	}
 
 	// Only handle main grid pads (x0-x15) and presses (not releases)
@@ -424,6 +474,12 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 		ticksPerSixteenthNote_ = modelStack->song->getSixteenthNoteLength();
 	}
 
+	// Reset to first step when playback starts (at position 0 or when last position was reset)
+	if (absolutePlaybackPos == 0 || lastAbsolutePlaybackPos_ == 0) {
+		currentStep_ = 0;
+		pingPongDirection_ = 1; // Reset ping pong direction
+	}
+
 	// Apply clock divider to timing
 	// Positive = slower (/2, /4), Negative = faster (*2, *4)
 	int32_t adjustedTicksPerStep = ticksPerSixteenthNote_;
@@ -464,25 +520,38 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 				activeNoteCode_ = noteCode;
 			}
 
+			// Refresh UI to show current step before advancing
+			uiNeedsRendering(&instrumentClipView, kGateRow | kNoteRows, 0);
 			advanceStep(effects.direction);
 			break;
 		}
 		else if (step.gateType == GateType::OFF) {
 			// Silent step - count duration but don't play
+			// Refresh UI to show current step before advancing
+			uiNeedsRendering(&instrumentClipView, kGateRow | kNoteRows, 0);
 			advanceStep(effects.direction);
 			break;
 		}
 		else { // SKIP
-			// Skip this step immediately, check next
+			// Skip this step immediately, advance to next
 			advanceStep(effects.direction);
 			stepsChecked++;
+			// Refresh UI after advancing from SKIP to show the new current step
+			uiNeedsRendering(&instrumentClipView, kGateRow | kNoteRows, 0);
+			// If the next step after SKIP is ON or OFF, return early so it gets its full duration
+			// (if it's another SKIP, we'll continue the loop)
+			if (stepsChecked < kNumSteps) {
+				const Step& nextStep = steps_[currentStep_];
+				if (nextStep.gateType != GateType::SKIP) {
+					// Next step is ON or OFF - return early so it shows before being processed
+					lastAbsolutePlaybackPos_ = absolutePlaybackPos;
+					return ticksPerSixteenthNote_;
+				}
+			}
 		}
 	}
 
 	lastAbsolutePlaybackPos_ = absolutePlaybackPos;
-
-	// Refresh only the rows that show playback position (gate + notes)
-	uiNeedsRendering(&instrumentClipView, kGateRow | kNoteRows, 0);
 
 	return ticksPerSixteenthNote_;
 }

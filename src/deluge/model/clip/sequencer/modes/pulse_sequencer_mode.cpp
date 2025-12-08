@@ -16,7 +16,9 @@
 #include "model/clip/sequencer/modes/pulse_sequencer_mode.h"
 #include "gui/ui/ui.h"
 #include "gui/views/instrument_clip_view.h"
+#include "hid/buttons.h"
 #include "hid/display/display.h"
+#include "hid/led/pad_leds.h"
 #include "model/clip/instrument_clip.h"
 #include "model/clip/sequencer/sequencer_mode_manager.h"
 #include "model/instrument/melodic_instrument.h"
@@ -38,6 +40,14 @@ void PulseSequencerMode::initialize() {
 	initialized_ = true;
 	ticksPerSixteenthNote_ = 0;
 
+	// Clear the white progress column from normal clip mode
+	// (set all tick squares to 255 = not displayed)
+	uint8_t tickSquares[kDisplayHeight];
+	uint8_t colours[kDisplayHeight];
+	memset(tickSquares, 255, kDisplayHeight); // 255 = not displayed
+	memset(colours, 0, kDisplayHeight);
+	PadLEDs::setTickSquares(tickSquares, colours);
+
 	// Initialize scale notes first so we know how many notes are in the scale
 	updateScaleNotes();
 
@@ -57,6 +67,9 @@ void PulseSequencerMode::initialize() {
 		sequencerState_.noteGatePos[i] = 0;
 		sequencerState_.noteActive[i] = false;
 	}
+
+	// Initialize refresh tick
+	sequencerState_.lastRefreshTick = 0;
 
 	// Only initialize performance controls if not already set (preserve loaded data)
 	if (performanceControls_.numStages == 0) {
@@ -78,7 +91,25 @@ void PulseSequencerMode::cleanup() {
 		stopAllNotes(modelStackWithTimelineCounter);
 	}
 
+	// Reset all state to prevent leaks
 	initialized_ = false;
+	ticksPerSixteenthNote_ = 0;
+	lastAbsolutePlaybackPos_ = 0;
+
+	// Reset sequencer state
+	sequencerState_.currentPulse = 0;
+	sequencerState_.lastPlayedStage = -1;
+	sequencerState_.totalPatternLength = 0;
+	sequencerState_.gatePadFlashing = false;
+	sequencerState_.flashStartTime = 0;
+	sequencerState_.lastRefreshTick = 0;
+
+	// Clear all note tracking slots
+	for (int32_t i = 0; i < kMaxNoteSlots; i++) {
+		sequencerState_.noteCodeActive[i] = -1;
+		sequencerState_.noteGatePos[i] = 0;
+		sequencerState_.noteActive[i] = false;
+	}
 }
 
 void PulseSequencerMode::updateScaleNotes() {
@@ -618,9 +649,8 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 
 	// Always refresh the current stage's gate and note pads during playback for smooth tracking
 	// This ensures the red indicator is visible even with slow clock dividers
-	static uint32_t lastRefreshTick = 0;
 	uint32_t currentTick = playbackHandler.getCurrentInternalTickCount();
-	if (currentTick - lastRefreshTick > 10) { // Refresh every 10 ticks for smooth updates
+	if (currentTick - sequencerState_.lastRefreshTick > 10) { // Refresh every 10 ticks for smooth updates
 		int32_t gateLineY = getGateLineY();
 		uint32_t rowsToRefresh = (1 << gateLineY);
 
@@ -630,7 +660,7 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 		}
 
 		uiNeedsRendering(&instrumentClipView, rowsToRefresh, 0);
-		lastRefreshTick = currentTick;
+		sequencerState_.lastRefreshTick = currentTick;
 	}
 
 	return ticksUntilNextDivision(absolutePlaybackPos, ticksPerPeriod);
@@ -737,29 +767,43 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 		}
 	}
 
-	if (freeSlot >= 0) {
-		// Apply probability check
-		if (!shouldPlayBasedOnProbability(stageData.probability)) {
-			return; // Don't play this note
+	// If all slots are full, find the oldest note (earliest gate position) and reuse its slot
+	if (freeSlot < 0) {
+		uint32_t oldestGatePos = sequencerState_.noteGatePos[0];
+		freeSlot = 0;
+		for (int32_t i = 1; i < kMaxNoteSlots; i++) {
+			if (sequencerState_.noteGatePos[i] < oldestGatePos) {
+				oldestGatePos = sequencerState_.noteGatePos[i];
+				freeSlot = i;
+			}
 		}
-
-		// Apply velocity spread
-		uint8_t baseVelocity = 100;
-		uint8_t velocity = applyVelocitySpread(baseVelocity, stageData.velocitySpread);
-
-		// Apply gate length to note duration
-		noteLength = (noteLength * stageData.gateLength) / 100;
-		if (noteLength < 1)
-			noteLength = 1; // Ensure at least 1 tick
-
-		// Send note-on (Deluge convention: pass length but we still track note-off ourselves)
-		playNote(modelStackPtr, note, velocity, noteLength);
-
-		// Track for automatic note-off
-		sequencerState_.noteCodeActive[freeSlot] = note;
-		sequencerState_.noteGatePos[freeSlot] = clip->lastProcessedPos + noteLength;
-		sequencerState_.noteActive[freeSlot] = true;
+		// Stop the oldest note before reusing its slot
+		if (sequencerState_.noteCodeActive[freeSlot] >= 0) {
+			stopNote(modelStackPtr, sequencerState_.noteCodeActive[freeSlot]);
+		}
 	}
+
+	// Apply probability check
+	if (!shouldPlayBasedOnProbability(stageData.probability)) {
+		return; // Don't play this note
+	}
+
+	// Apply velocity spread
+	uint8_t baseVelocity = 100;
+	uint8_t velocity = applyVelocitySpread(baseVelocity, stageData.velocitySpread);
+
+	// Apply gate length to note duration
+	noteLength = (noteLength * stageData.gateLength) / 100;
+	if (noteLength < 1)
+		noteLength = 1; // Ensure at least 1 tick
+
+	// Send note-on (Deluge convention: pass length but we still track note-off ourselves)
+	playNote(modelStackPtr, note, velocity, noteLength);
+
+	// Track for automatic note-off
+	sequencerState_.noteCodeActive[freeSlot] = note;
+	sequencerState_.noteGatePos[freeSlot] = clip->lastProcessedPos + noteLength;
+	sequencerState_.noteActive[freeSlot] = true;
 }
 
 void PulseSequencerMode::switchNoteOff(void* modelStackPtr, int32_t noteSlot) {
@@ -968,6 +1012,12 @@ bool PulseSequencerMode::handlePadPress(int32_t x, int32_t y, int32_t velocity) 
 	// Control columns (x16-x17) - delegate to base class (handles both presses and releases)
 	if (x >= kDisplayWidth) {
 		return SequencerMode::handlePadPress(x, y, velocity);
+	}
+
+	// If Shift is pressed, don't handle pad presses - let instrument clip view handle it
+	// (for editing synth parameters, etc.)
+	if (Buttons::isShiftButtonPressed()) {
+		return false;
 	}
 
 	// Only handle presses (not releases) for mode-specific controls
