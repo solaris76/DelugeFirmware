@@ -593,8 +593,8 @@ changeOutputType:
 					// If load button held, go into LoadInstrumentPresetUI
 					if (Buttons::isButtonPressed(deluge::hid::button::LOAD)) {
 
-						// Can't do that for MIDI or CV Clips though
-						if (newOutputType == OutputType::MIDI_OUT || newOutputType == OutputType::CV) {
+						// Can't do that for CV Clips though
+						if (newOutputType == OutputType::CV) {
 							goto doActualSimpleChange;
 						}
 
