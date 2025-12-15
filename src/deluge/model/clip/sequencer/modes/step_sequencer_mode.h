@@ -19,9 +19,11 @@
 
 #include "gui/l10n/l10n.h"
 #include "model/clip/sequencer/sequencer_mode.h"
+#include "model/iterance/iterance.h"
 #include <array>
 
 namespace deluge::model::clip::sequencer::modes {
+
 
 /**
  * Step Sequencer Mode - Analog-style 16-step sequencer
@@ -87,8 +89,14 @@ public:
 	// Pattern persistence
 	void writeToFile(Serializer& writer, bool includeScenes = true) override;
 	Error readFromFile(Deserializer& reader) override;
+	bool copyFrom(SequencerMode* other) override;
 
-private:
+	// Handle select encoder for probability adjustment (when note pad is held)
+	// Public so InstrumentClipView can call it
+	bool handleSelectEncoder(int32_t offset);
+
+protected:
+	// Made protected for accessor functions (used by shared encoder helpers)
 	static constexpr int32_t kNumSteps = 16; // x0-x15
 	static constexpr int32_t kMaxScaleNotes = 32;
 
@@ -101,28 +109,56 @@ private:
 
 	// Per-step data
 	struct Step {
-		GateType gateType{GateType::ON};
-		int32_t octave{0};    // -3 to +3
-		int32_t noteIndex{0}; // Index into scale notes array
+		GateType gateType{GateType::OFF};
+		int8_t octave{0};       // -3 to +3 (optimized from int32_t)
+		uint8_t noteIndex{0};   // Index into scale notes array (0-31, optimized from int32_t)
+		uint8_t velocity{100};  // Note velocity 1-127 (default 100)
+		uint8_t gateLength{75}; // Gate length as percentage 1-100 (default 75%)
+		uint8_t probability{20}; // Probability to play 0-20 (0-100% in 5% increments, default 20 = 100%)
+		Iterance iterance{kDefaultIteranceValue}; // Iterance (default OFF)
 	};
 
 	// State
 	bool initialized_ = false;
 	std::array<Step, kNumSteps> steps_;
 
-	// Scale notes cache
-	int32_t scaleNotes_[kMaxScaleNotes];
-	int32_t numScaleNotes_ = 0;
-	int32_t noteScrollOffset_ = 0; // Scroll offset for note pads (y3-y7)
 
 	// Timing
 	int32_t ticksPerSixteenthNote_ = 0;
-	int32_t currentStep_ = 0; // 0-15, which step we're on
+	uint8_t currentStep_ = 0;         // 0-15, which step we're on (optimized from int32_t)
 	int32_t lastAbsolutePlaybackPos_ = 0;
-	int32_t pingPongDirection_ = 1; // 1=forward, -1=backward (for ping pong mode)
+	int8_t pingPongDirection_ = 1;    // 1=forward, -1=backward (optimized from int32_t)
+
+	// State for additional play order modes
+	uint8_t pedalNextStep_ = 1;       // For PEDAL mode: next step to visit after returning to 0 (optimized from int32_t)
+	bool skip2OddPhase_ = true;       // For SKIP_2 mode: phase tracking
+	bool pendulumGoingUp_ = true;    // For PENDULUM mode: direction
+	uint8_t pendulumLow_ = 0;         // For PENDULUM mode: low bound (optimized from int32_t)
+	uint8_t pendulumHigh_ = 1;        // For PENDULUM mode: high bound (optimized from int32_t)
+	bool spiralFromLow_ = true;      // For SPIRAL mode: direction
+	uint8_t spiralLow_ = 0;           // For SPIRAL mode: low bound (optimized from int32_t)
+	uint8_t spiralHigh_ = 15;         // For SPIRAL mode: high bound (optimized from int32_t)
 
 	// Currently playing note (for note-off)
-	int32_t activeNoteCode_ = -1;
+	int16_t activeNoteCode_ = -1;     // -1 to 127 (optimized from int32_t)
+
+	// Active step count (1-16) - steps beyond this are dimmed and not played
+	uint8_t numActiveSteps_ = 16;     // Optimized from int32_t
+
+	// Iterance tracking - repeat count for iterance evaluation
+	int32_t repeatCount_ = 0;        // How many times we've looped through the pattern
+
+	// Pad hold tracking (for velocity/gate length adjustment)
+	int8_t heldPadX_ = -1;            // X coordinate of held note pad, or -1 if none (optimized from int32_t)
+	int8_t heldPadY_ = -1;            // Y coordinate of held note pad, or -1 if none (optimized from int32_t)
+
+	// Scale notes cache
+	int32_t scaleNotes_[kMaxScaleNotes];
+	uint8_t numScaleNotes_ = 0;       // 0-32 (optimized from int32_t)
+	uint8_t noteScrollOffset_ = 0;    // Scroll offset for note pads (optimized from int32_t)
+
+	// Override horizontal encoder to handle Shift + encoder for step count adjustment
+	bool handleHorizontalEncoder(int32_t offset, bool encoderPressed) override;
 
 	// Helpers
 	void updateScaleNotes(void* modelStackPtr);
@@ -133,6 +169,19 @@ private:
 	RGB getNoteGradientColor(int32_t yPos) const; // y3=blue, y7=magenta
 	void displayOctaveValue(int32_t octave);
 	void advanceStep(int32_t direction); // Advance step based on direction mode
+
+	// Helper: Dim color to 20% brightness with minimum of 2 to prevent flickering
+	static void dimColor(RGB& color);
+
+	// Helper: Clamp all state variables to active step range
+	void clampStateToActiveRange();
+
+	// Helper: Check if a valid note pad is currently held (inline for performance)
+	[[gnu::always_inline]] inline bool isNotePadHeld() const {
+		return heldPadX_ >= 0 && static_cast<int32_t>(heldPadX_) < kNumSteps && heldPadY_ >= 3 && heldPadY_ <= 7;
+	}
+
+	// Display and utility helpers now use base class implementations
 
 	// Default pattern management
 	bool isDefaultPattern() const;

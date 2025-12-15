@@ -20,6 +20,7 @@
 #include "gui/l10n/l10n.h"
 #include "hid/led/pad_leds.h"
 #include "model/clip/sequencer/sequencer_mode.h"
+#include "model/iterance/iterance.h"
 #include <array>
 
 namespace deluge::model::clip::sequencer::modes {
@@ -35,6 +36,7 @@ constexpr int32_t kOctaveDownRow = 1; // Relative to gate line
 constexpr int32_t kOctaveUpRow = 2;
 constexpr int32_t kNotesStartRow = 3;
 
+
 class PulseSequencerMode : public SequencerMode {
 public:
 	l10n::String name() override { return l10n::String::STRING_FOR_PULSE_SEQ; }
@@ -46,8 +48,8 @@ public:
 	bool supportsCV() override { return true; }
 	bool supportsAudio() override { return false; }
 
-	// Pulse Sequencer doesn't support DIRECTION (no step-based playback)
-	bool supportsControlType(ControlType type) override { return type != ControlType::DIRECTION; }
+	// Pulse Sequencer supports all control types (direction, clock divider, transpose, octave)
+	bool supportsControlType(ControlType type) override { return true; }
 
 	void initialize() override;
 	void cleanup() override;
@@ -67,7 +69,13 @@ protected:
 	// Override vertical encoder for view scrolling (mode-specific)
 	bool handleModeSpecificVerticalEncoder(int32_t offset) override;
 
+	// Override horizontal encoder for velocity adjustment (when note pad held)
+	bool handleHorizontalEncoder(int32_t offset, bool encoderPressed) override;
+
 public:
+	// Handle select encoder for probability adjustment (when note pad is held)
+	// Public so InstrumentClipView can call it
+	bool handleSelectEncoder(int32_t offset);
 	// Override playback to generate pulsed notes
 	int32_t processPlayback(void* modelStack, int32_t absolutePlaybackPos) override;
 
@@ -86,36 +94,29 @@ public:
 	// Pattern persistence
 	void writeToFile(Serializer& writer, bool includeScenes = true) override;
 	Error readFromFile(Deserializer& reader) override;
+	bool copyFrom(SequencerMode* other) override;
 
 	// Gate types enum
-	enum class GateType : int32_t { OFF = 0, SINGLE = 1, MULTIPLE = 2, HELD = 3 };
+	enum class GateType : int32_t { OFF = 0, SINGLE = 1, MULTIPLE = 2, HELD = 3, SKIP = 4 };
 
-	// Play order presets enum
-	enum class PlayOrder : int32_t {
-		FORWARDS = 0,
-		BACKWARDS = 1,
-		PING_PONG = 2,
-		RANDOM = 3,
-		PEDAL = 4,
-		SKIP_2 = 5,
-		PENDULUM = 6,
-		SPIRAL = 7
-	};
-
-private:
+protected:
+	// Made protected for accessor functions (used by shared encoder helpers)
 	bool initialized_ = false;
 	int32_t ticksPerSixteenthNote_ = 0;
 	int32_t lastAbsolutePlaybackPos_ = 0; // Track for position indicator
 
 	// Stage data (8 stages, one per column)
+	// Optimized types to match StepSequencerMode memory efficiency
 	struct StageData {
 		GateType gateType = GateType::OFF;
-		int32_t noteIndex = 0;      // Index in current scale
-		int32_t octave = 0;         // Octave offset from base
-		int32_t pulseCount = 1;     // 1-8, default is 1
-		int32_t velocitySpread = 0; // 0-127, randomization amount
-		int32_t probability = 100;  // 0-100%, chance to play
-		int32_t gateLength = 50;    // 0-100%, note length as % of period
+		uint8_t noteIndex = 0;      // Index in current scale (0-31, optimized from int32_t)
+		int8_t octave = 0;          // Octave offset from base (-3 to +3, optimized from int32_t)
+		uint8_t pulseCount = 1;     // 1-8, default is 1 (optimized from int32_t)
+		uint8_t velocity = 100;     // Note velocity 1-127 (default 100, optimized from int32_t)
+		uint8_t velocitySpread = 0; // 0-127, randomization amount (optimized from int32_t)
+		uint8_t probability = 20;   // 0-20 (0-100% in 5% increments, default 20 = 100%, optimized from int32_t)
+		uint8_t gateLength = 50;    // 0-100%, note length as % of period (optimized from int32_t)
+		Iterance iterance{kDefaultIteranceValue}; // Iterance (default OFF)
 	};
 
 	std::array<StageData, kMaxStages> stages_;
@@ -125,6 +126,7 @@ private:
 		int32_t currentPulse = 0;
 		int32_t lastPlayedStage = -1;
 		int32_t totalPatternLength = 8;
+		int32_t repeatCount_ = 0; // Track how many times we've looped through the pattern (for iterance)
 
 		// Visual feedback
 		bool gatePadFlashing = false;
@@ -138,16 +140,11 @@ private:
 		std::array<bool, kMaxNoteSlots> noteActive;
 	} sequencerState_;
 
-	// Performance controls
+	// Performance controls (only stage-specific controls, others use control columns)
 	struct {
-		int32_t transpose = 0;
-		int32_t octave = 0;
-		int32_t clockDivider = 2;
 		int32_t numStages = 8;
-		PlayOrder playOrder = PlayOrder::FORWARDS;
 		int32_t pingPongDirection = 1;
 		int32_t currentStage = 0;
-		std::array<bool, kMaxStages> stageEnabled = {true, true, true, true, true, true, true, true};
 
 		// Play order state variables (instance-based, not static)
 		int32_t pedalNextStage = 1;
@@ -167,6 +164,10 @@ private:
 		int32_t numScaleNotes = 0;  // How many notes in current scale
 	} displayState_;
 
+	// Pad hold tracking (for velocity/gate length/probability adjustment)
+	int8_t heldPadX_ = -1;            // X coordinate of held note pad, or -1 if none
+	int8_t heldPadY_ = -1;            // Y coordinate of held note pad, or -1 if none
+
 	// Core sequencer methods
 	void generateNotes(void* modelStack);
 	void playNoteForStage(void* modelStack, int32_t stage);
@@ -185,7 +186,27 @@ private:
 	void showStagePopup(int32_t stage, const char* format, ...);
 	RGB dimColorIfDisabled(RGB color, int32_t stage) const;
 	RGB getOctaveColor(int32_t octave) const;
-	int32_t cycleValue(int32_t current, const int32_t* values, int32_t count) const;
+	int32_t calculateNoteCode(int32_t stage, int32_t noteIndexInScale, const CombinedEffects& effects) const;
+
+	// Helper: Check if a note pad is currently held
+	// Note: This only checks that a pad is held in the valid range (x0-7, y >= 3)
+	// We don't check against current gateLineY because it can change with scrolling
+	// The pad was pressed at a specific Y coordinate, and that coordinate is stored in heldPadY_
+	[[gnu::always_inline]] inline bool isNotePadHeld() const {
+		// Check X coordinate: must be 0-7 (valid stage range for pulse sequencer)
+		if (heldPadX_ < 0 || heldPadX_ >= kMaxStages) {
+			return false;
+		}
+		// Check Y coordinate: must be >= 3 (note pads are always at y3 or above, regardless of scrolling)
+		// Note pads start at gateLineY + 3, and gateLineY is at least 0, so note pads are always at y3+
+		if (heldPadY_ < 3) {
+			return false;
+		}
+		// Valid note pad coordinates
+		return true;
+	}
+
+	// Display and utility helpers now use base class implementations
 
 	// Rendering sub-methods
 	void renderPulseCounts(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
@@ -196,10 +217,6 @@ private:
 	                      int32_t imageWidth, int32_t gateLineY);
 	void renderNotePads(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
 	                    int32_t imageWidth, int32_t gateLineY);
-	void renderRightSideControls(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
-	                             int32_t imageWidth);
-	void renderPlaybackIndicator(uint32_t whichRows, RGB* image, uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth],
-	                             int32_t imageWidth, int32_t gateLineY);
 
 	// Play order advancement methods
 	void advanceForwards(int32_t& nextStage);
@@ -212,21 +229,10 @@ private:
 	void advanceSpiral();
 
 	// Pad input handlers
-	void handleGateType(int32_t stage);
-	void handleNoteSelection(int32_t stage);
-	void handleOctaveAdjustment(int32_t stage, int32_t direction);
-	void handlePulseCount(int32_t stage, int32_t position);
-	void handleVelocitySpread(int32_t stage);
-	void handleProbability(int32_t stage);
-	void handleGateLength(int32_t stage);
-	void handleStageCountChange(int32_t numStages);
-	void handlePlayOrderChange(int32_t playOrderIndex);
-	void handleClockDividerChange(int32_t dividerMode);
-	void handleTransposeChange(int32_t direction);
-	void handleOctaveChange(int32_t direction);
-	void handleStageToggle(int32_t stage);
+		void handleGateType(int32_t stage);
+		void handleOctaveAdjustment(int32_t stage, int32_t direction);
+		void handlePulseCount(int32_t stage, int32_t position);
 	void resetToDefaults();
-	void resetPerformanceControls();
 	void randomizeSequence();
 	void evolveSequence();
 
