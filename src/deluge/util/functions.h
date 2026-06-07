@@ -155,6 +155,9 @@ char const* oscTypeToString(OscType osctype);
 OscType stringToOscType(char const* string);
 
 char const* lfoTypeToString(LFOType oscType);
+char const* automationLaneTypeToString(AutomationLaneType laneType);
+char const* getAutomationLaneTypeShortName(AutomationLaneType laneType);
+AutomationLaneType stringToAutomationLaneType(char const* string);
 LFOType stringToLFOType(char const* string);
 
 char const* synthModeToString(SynthMode synthMode);
