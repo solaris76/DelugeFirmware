@@ -101,6 +101,20 @@ constexpr int32_t kEditPadPressBufferSize = 8;
 
 constexpr int32_t kNumModButtons = 8;
 
+/** Automation lane generator type, mapped 1:1 to mod buttons M1–M8 in the automation editor. */
+enum class AutomationLaneType : uint8_t {
+	MANUAL = 0,
+	SINE = 1,
+	SQUARE = 2,
+	TRIANGLE = 3,
+	SAW = 4,
+	RANDOM = 5,
+	SAMPLE_AND_HOLD = 6,
+	PULSE = 7,
+};
+
+constexpr int32_t kNumAutomationLaneTypes = util::to_underlying(AutomationLaneType::PULSE) + 1;
+
 // Display information (actually pads, not the display proper)
 constexpr int32_t kDisplayHeight = 8;
 constexpr int32_t kDisplayHeightMagnitude = 3;

@@ -2495,6 +2495,77 @@ followOnAction:
 	ClipNavigationTimelineView::modEncoderAction(whichModEncoder, offset);
 }
 
+void AutomationView::modButtonLaneTypeAction(uint8_t whichButton, bool on) {
+	if (!on || whichButton >= kNumModButtons) {
+		return;
+	}
+
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithAutoParam* modelStackWithParam = nullptr;
+
+	if (onArrangerView) {
+		ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+		    currentSong->setupModelStackWithSongAsTimelineCounter(modelStackMemory);
+		modelStackWithParam =
+		    currentSong->getModelStackWithParam(modelStackWithThreeMainThings, currentSong->lastSelectedParamID);
+	}
+	else {
+		ModelStackWithTimelineCounter* modelStackWithTimelineCounter =
+		    currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+		Clip* clip = getCurrentClip();
+		modelStackWithParam = getModelStackWithParamForClip(modelStackWithTimelineCounter, clip);
+	}
+
+	if (!modelStackWithParam || !modelStackWithParam->autoParam) {
+		return;
+	}
+
+	AutomationLaneType newType = static_cast<AutomationLaneType>(whichButton);
+	modelStackWithParam->autoParam->setAutomationLaneType(newType, modelStackWithParam);
+
+	if (!onArrangerView) {
+		modelStackWithParam->getTimelineCounter()->instrumentBeenEdited();
+	}
+
+	display->displayPopup(getAutomationLaneTypeShortName(newType));
+
+	int32_t knobPosLeft = kNoSelection;
+	if (modelStackWithParam->autoParam->isGeneratorLane()) {
+		knobPosLeft = modelStackWithParam->autoParam->getShapeAmount();
+	}
+	else if (modelStackWithParam->autoParam->isAutomated()) {
+		knobPosLeft = getAutomationParameterKnobPos(modelStackWithParam, view.modPos) + kKnobPosOffset;
+	}
+
+	renderDisplay(knobPosLeft, kNoSelection, true);
+	setAutomationKnobIndicatorLevels(modelStackWithParam, knobPosLeft, kNoSelection);
+	uiNeedsRendering(this);
+}
+
+int32_t AutomationView::getSelectedAutomationLaneTypeButton() {
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithAutoParam* modelStackWithParam = nullptr;
+
+	if (onArrangerView) {
+		ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
+		    currentSong->setupModelStackWithSongAsTimelineCounter(modelStackMemory);
+		modelStackWithParam =
+		    currentSong->getModelStackWithParam(modelStackWithThreeMainThings, currentSong->lastSelectedParamID);
+	}
+	else {
+		ModelStackWithTimelineCounter* modelStackWithTimelineCounter =
+		    currentSong->setupModelStackWithCurrentClip(modelStackMemory);
+		Clip* clip = getCurrentClip();
+		modelStackWithParam = getModelStackWithParamForClip(modelStackWithTimelineCounter, clip);
+	}
+
+	if (!modelStackWithParam || !modelStackWithParam->autoParam) {
+		return 0;
+	}
+
+	return util::to_underlying(modelStackWithParam->autoParam->getAutomationLaneType());
+}
+
 // used to copy paste automation or to delete automation of the current selected parameter
 void AutomationView::modEncoderButtonAction(uint8_t whichModEncoder, bool on) {
 

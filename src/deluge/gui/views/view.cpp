@@ -1488,10 +1488,14 @@ static const uint32_t modButtonUIModes[] = {UI_MODE_AUDITIONING,
 void View::modButtonAction(uint8_t whichButton, bool on) {
 	RootUI* rootUI = getRootUI();
 
-	// ignore modButtonAction when in the Automation View Automation Editor
+	// Automation editor: mod buttons select lane generator type
 	if ((rootUI == &automationView) && automationView.inAutomationEditor()) {
 		// exception for arranger view and pressing mod button 0 so you can toggle VU meter
 		if (!(automationView.onArrangerView && whichButton == 0)) {
+			if (on) {
+				automationView.modButtonLaneTypeAction(whichButton, on);
+				setModLedStates();
+			}
 			return;
 		}
 	}
@@ -1654,9 +1658,10 @@ void View::setModLedStates() {
 		if (itsTheSong && on && modKnobMode == 0 && view.displayVUMeter) {
 			indicator_leds::blinkLed(indicator_leds::modLed[i]);
 		}
-		// if you're in the Automation View Automation Editor, turn off Mod LED's
+		// if you're in the Automation View Automation Editor, show active lane type
 		else if ((getRootUI() == &automationView) && automationView.inAutomationEditor()) {
-			indicator_leds::setLedState(indicator_leds::modLed[i], false);
+			int32_t laneTypeButton = automationView.getSelectedAutomationLaneTypeButton();
+			indicator_leds::setLedState(indicator_leds::modLed[i], i == laneTypeButton);
 		}
 		// otherwise update mod led's to reflect current mod led selection
 		else {

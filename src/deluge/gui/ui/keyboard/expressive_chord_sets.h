@@ -40,7 +40,7 @@ constexpr size_t kExpressiveChordSetCount = 7;
 struct ExpressiveChordSlot {
 	const Chord* chord;
 	uint8_t voicingIndex;
-	/// Semitones above middle C (60) before clip transpose / noteOffset.
+	/// MIDI root of this slot in the set's authored key (bottom-left pad defines the centre pitch class).
 	int8_t rootMidi;
 };
 

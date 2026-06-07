@@ -112,6 +112,8 @@ public:
 	// mod encoder action
 	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
 	void modEncoderButtonAction(uint8_t whichModEncoder, bool on) override;
+	void modButtonLaneTypeAction(uint8_t whichButton, bool on);
+	int32_t getSelectedAutomationLaneTypeButton();
 	CopiedParamAutomation copiedParamAutomation;
 
 	// Select encoder action

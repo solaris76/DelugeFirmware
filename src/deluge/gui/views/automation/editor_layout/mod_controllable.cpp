@@ -29,6 +29,7 @@
 #include "modulation/patch/patch_cable_set.h"
 #include "playback/mode/playback_mode.h"
 #include "playback/playback_handler.h"
+#include "util/functions.h"
 
 // namespace deluge::gui::views::automation::editor_layout {
 
@@ -37,6 +38,60 @@ namespace params = deluge::modulation::params;
 using namespace deluge::gui;
 
 constexpr int32_t kParamNodeWidth = 3;
+
+// Negative = multiply (faster), positive = divide (slower), 1 = clip speed.
+constexpr int8_t kAutomationClockRateSteps[] = {-32, -16, -8, -4, -2, 1, 2, 4, 8, 16, 32};
+constexpr int32_t kNumAutomationClockRateSteps = 11;
+constexpr int32_t kAutomationClockRateNeutralIndex = 5;
+constexpr int32_t kDetentsPerAutomationClockRateStep = 4;
+
+int32_t getAutomationClockRateStepIndex(int8_t rate) {
+	for (int32_t i = 0; i < kNumAutomationClockRateSteps; i++) {
+		if (kAutomationClockRateSteps[i] == rate) {
+			return i;
+		}
+	}
+	return kAutomationClockRateNeutralIndex;
+}
+
+int32_t automationClockRateToKnobIndicatorLevel(int8_t rate) {
+	int32_t index = getAutomationClockRateStepIndex(rate);
+	return (index * 128) / (kNumAutomationClockRateSteps - 1);
+}
+
+void appendAutomationClockRateToName(StringBuf& parameterName, int8_t rate) {
+	if (rate == 1) {
+		return;
+	}
+	parameterName.append(" ");
+	if (rate < -1) {
+		parameterName.append("x");
+		parameterName.appendInt(-rate);
+	}
+	else {
+		parameterName.append("/");
+		parameterName.appendInt(rate);
+	}
+}
+
+void formatAutomationClockRatePopup(int8_t rate, char* buffer) {
+	if (rate < -1) {
+		buffer[0] = 'x';
+		intToString(-rate, &buffer[1]);
+	}
+	else {
+		buffer[0] = '/';
+		intToString(rate, &buffer[1]);
+	}
+}
+
+void appendAutomationLaneTypeToName(StringBuf& parameterName, AutomationLaneType laneType) {
+	if (laneType == AutomationLaneType::MANUAL) {
+		return;
+	}
+	parameterName.append(" ");
+	parameterName.append(getAutomationLaneTypeShortName(laneType));
+}
 
 // VU meter style colours for the automation editor
 
@@ -112,8 +167,18 @@ void AutomationEditorLayoutModControllable::renderAutomationColumn(
     uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth], int32_t lengthToDisplay, int32_t xDisplay, bool isAutomated,
     int32_t xScroll, int32_t xZoom, params::Kind kind, bool isBipolar) {
 
-	uint32_t squareStart = getMiddlePosFromSquare(xDisplay, lengthToDisplay, xScroll, xZoom);
-	int32_t knobPos = getAutomationParameterKnobPos(modelStackWithParam, squareStart) + kKnobPosOffset;
+	bool isGeneratorLane =
+	    modelStackWithParam && modelStackWithParam->autoParam && modelStackWithParam->autoParam->isGeneratorLane();
+
+	// Generator preview: sample at the left edge of each column (clip pos 0 at x=0) and map the
+	// waveform to the full pad height from the bottom row upward.
+	uint32_t squareStart = isGeneratorLane ? getPosFromSquare(xDisplay, xScroll, xZoom)
+	                                       : getMiddlePosFromSquare(xDisplay, lengthToDisplay, xScroll, xZoom);
+
+	int32_t knobPos =
+	    isGeneratorLane ? modelStackWithParam->autoParam->getGeneratorLaneDisplayKnobPos(squareStart,
+	                                                                                     modelStackWithParam, isBipolar)
+	                    : getAutomationParameterKnobPos(modelStackWithParam, squareStart) + kKnobPosOffset;
 
 	// iterate through each square
 	for (int32_t yDisplay = 0; yDisplay < kDisplayHeight; yDisplay++) {
@@ -253,20 +318,6 @@ void AutomationEditorLayoutModControllable::renderAutomationUnipolarSquare(
 void AutomationEditorLayoutModControllable::renderAutomationEditorDisplayOLED(
     deluge::hid::display::oled_canvas::Canvas& canvas, Clip* clip, OutputType outputType, int32_t knobPosLeft,
     int32_t knobPosRight) {
-	// display parameter name
-	DEF_STACK_STRING_BUF(parameterName, 30);
-	getAutomationParameterName(clip, outputType, parameterName);
-
-#if OLED_MAIN_HEIGHT_PIXELS == 64
-	int32_t yPos = OLED_MAIN_TOPMOST_PIXEL + 12;
-#else
-	int32_t yPos = OLED_MAIN_TOPMOST_PIXEL + 3;
-#endif
-	canvas.drawStringCentredShrinkIfNecessary(parameterName.c_str(), yPos, kTextSpacingX, kTextSpacingY);
-
-	// display automation status
-	yPos = yPos + 12;
-
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];
 	ModelStackWithAutoParam* modelStackWithParam = nullptr;
 
@@ -282,17 +333,32 @@ void AutomationEditorLayoutModControllable::renderAutomationEditorDisplayOLED(
 		modelStackWithParam = getModelStackWithParamForClip(modelStack, clip);
 	}
 
-	char const* isAutomated;
+	// display parameter name
+	DEF_STACK_STRING_BUF(parameterName, 30);
+	getAutomationParameterName(clip, outputType, parameterName);
+
+	if (modelStackWithParam && modelStackWithParam->autoParam) {
+		appendAutomationLaneTypeToName(parameterName, modelStackWithParam->autoParam->getAutomationLaneType());
+		appendAutomationClockRateToName(parameterName, modelStackWithParam->autoParam->getAutomationClockDivider());
+	}
+
+#if OLED_MAIN_HEIGHT_PIXELS == 64
+	int32_t yPos = OLED_MAIN_TOPMOST_PIXEL + 12;
+#else
+	int32_t yPos = OLED_MAIN_TOPMOST_PIXEL + 3;
+#endif
+
+	canvas.drawStringCentredShrinkIfNecessary(parameterName.c_str(), yPos, kTextSpacingX, kTextSpacingY);
+
+	// display automation status
+	yPos = yPos + 12;
+
+	char const* isAutomated = l10n::get(l10n::String::STRING_FOR_AUTOMATION_OFF);
 
 	// check if Parameter is currently automated so that the automation status can be drawn on
 	// the screen with the Parameter Name
-	if (modelStackWithParam && modelStackWithParam->autoParam) {
-		if (modelStackWithParam->autoParam->isAutomated()) {
-			isAutomated = l10n::get(l10n::String::STRING_FOR_AUTOMATION_ON);
-		}
-		else {
-			isAutomated = l10n::get(l10n::String::STRING_FOR_AUTOMATION_OFF);
-		}
+	if (modelStackWithParam && modelStackWithParam->autoParam && modelStackWithParam->autoParam->isAutomated()) {
+		isAutomated = l10n::get(l10n::String::STRING_FOR_AUTOMATION_ON);
 	}
 
 	canvas.drawStringCentred(isAutomated, yPos, kTextSpacingX, kTextSpacingY);
@@ -723,11 +789,105 @@ bool AutomationEditorLayoutModControllable::recordAutomationSinglePadPress(int32
 	return false;
 }
 
+bool AutomationEditorLayoutModControllable::automationModEncoderActionForShapeAmount(
+    ModelStackWithAutoParam* modelStackWithParam, int32_t offset) {
+
+	if (!modelStackWithParam || !modelStackWithParam->autoParam || !modelStackWithParam->autoParam->isGeneratorLane()) {
+		return false;
+	}
+
+	int32_t amount = modelStackWithParam->autoParam->getShapeAmount();
+	amount += offset;
+	if (amount < 0) {
+		amount = 0;
+	}
+	else if (amount > 127) {
+		amount = 127;
+	}
+	modelStackWithParam->autoParam->setShapeAmount(amount);
+
+	char buffer[8];
+	buffer[0] = 'D';
+	buffer[1] = ':';
+	intToString(amount, &buffer[2]);
+	display->displayPopup(buffer);
+
+	if (!getOnArrangerView()) {
+		modelStackWithParam->getTimelineCounter()->instrumentBeenEdited();
+	}
+
+	int32_t knobPosLeft = amount;
+	renderDisplay(knobPosLeft, kNoSelection, true);
+	setAutomationKnobIndicatorLevels(modelStackWithParam, knobPosLeft, kNoSelection);
+
+	return true;
+}
+
+bool AutomationEditorLayoutModControllable::automationModEncoderActionForClockDivider(
+    ModelStackWithAutoParam* modelStackWithParam, int32_t offset) {
+
+	if (!modelStackWithParam || !modelStackWithParam->autoParam) {
+		return false;
+	}
+
+	clockRateEncoderOffset_ += offset;
+
+	int32_t indexChange = 0;
+	if (clockRateEncoderOffset_ >= kDetentsPerAutomationClockRateStep) {
+		indexChange = 1;
+	}
+	else if (clockRateEncoderOffset_ <= -kDetentsPerAutomationClockRateStep) {
+		indexChange = -1;
+	}
+	else {
+		return true;
+	}
+
+	clockRateEncoderOffset_ = 0;
+
+	int32_t index = getAutomationClockRateStepIndex(modelStackWithParam->autoParam->getAutomationClockDivider());
+	index += indexChange;
+	if (index < 0) {
+		index = 0;
+	}
+	else if (index >= kNumAutomationClockRateSteps) {
+		index = kNumAutomationClockRateSteps - 1;
+	}
+
+	int8_t newRate = kAutomationClockRateSteps[index];
+	modelStackWithParam->autoParam->setAutomationClockDivider(newRate);
+
+	char buffer[6];
+	formatAutomationClockRatePopup(newRate, buffer);
+	display->displayPopup(buffer);
+
+	if (!getOnArrangerView()) {
+		modelStackWithParam->getTimelineCounter()->instrumentBeenEdited();
+	}
+
+	int32_t knobPosLeft = kNoSelection;
+	if (modelStackWithParam->autoParam->isAutomated()) {
+		knobPosLeft = getAutomationParameterKnobPos(modelStackWithParam, view.modPos) + kKnobPosOffset;
+	}
+	renderDisplay(knobPosLeft, kNoSelection, true);
+	setAutomationKnobIndicatorLevels(modelStackWithParam, knobPosLeft, kNoSelection);
+
+	return true;
+}
+
 bool AutomationEditorLayoutModControllable::automationModEncoderActionForSelectedPad(
     ModelStackWithAutoParam* modelStackWithParam, int32_t whichModEncoder, int32_t offset, int32_t effectiveLength) {
 	Clip* clip = getCurrentClip();
 
 	if (modelStackWithParam && modelStackWithParam->autoParam) {
+
+		if (whichModEncoder == 1 && !getMultiPadPressSelected()) {
+			return automationModEncoderActionForClockDivider(modelStackWithParam, offset);
+		}
+
+		if (whichModEncoder == 0 && modelStackWithParam->autoParam->isGeneratorLane()) {
+			return automationModEncoderActionForShapeAmount(modelStackWithParam, offset);
+		}
 
 		int32_t xDisplay = 0;
 
@@ -817,6 +977,16 @@ void AutomationEditorLayoutModControllable::automationModEncoderActionForUnselec
 	Clip* clip = getCurrentClip();
 
 	if (modelStackWithParam && modelStackWithParam->autoParam) {
+
+		if (whichModEncoder == 1) {
+			automationModEncoderActionForClockDivider(modelStackWithParam, offset);
+			return;
+		}
+
+		if (whichModEncoder == 0 && modelStackWithParam->autoParam->isGeneratorLane()) {
+			automationModEncoderActionForShapeAmount(modelStackWithParam, offset);
+			return;
+		}
 
 		if (modelStackWithParam->getTimelineCounter()
 		    == view.activeModControllableModelStack.getTimelineCounterAllowNull()) {
@@ -1109,8 +1279,25 @@ void AutomationEditorLayoutModControllable::setAutomationKnobIndicatorLevels(Mod
 	bool isBlinking = indicator_leds::isKnobIndicatorBlinking(0) || indicator_leds::isKnobIndicatorBlinking(1);
 
 	if (!isBlinking) {
-		indicator_leds::setKnobIndicatorLevel(0, knobPosLeft, isBipolar);
-		indicator_leds::setKnobIndicatorLevel(1, knobPosRight, isBipolar);
+		int32_t knobPosForIndicator0 = knobPosLeft;
+		if (modelStack && modelStack->autoParam && modelStack->autoParam->isGeneratorLane()
+		    && !getMultiPadPressSelected() && knobPosRight == kNoSelection) {
+			knobPosForIndicator0 = modelStack->autoParam->getShapeAmount();
+			isBipolar = false;
+		}
+
+		indicator_leds::setKnobIndicatorLevel(0, knobPosForIndicator0, isBipolar);
+
+		int32_t knobPosForIndicator1 = knobPosRight;
+		if (knobPosRight == kNoSelection && modelStack && modelStack->autoParam && !getMultiPadPressSelected()) {
+			int8_t rate = modelStack->autoParam->getAutomationClockDivider();
+			if (rate != 1) {
+				knobPosForIndicator1 = automationClockRateToKnobIndicatorLevel(rate);
+				isBipolar = false;
+			}
+		}
+
+		indicator_leds::setKnobIndicatorLevel(1, knobPosForIndicator1, isBipolar);
 	}
 }
 
@@ -1192,6 +1379,10 @@ void AutomationEditorLayoutModControllable::handleAutomationParameterChange(
 	}
 
 	else if (modelStackWithParam && modelStackWithParam->autoParam) {
+
+		if (modelStackWithParam->autoParam->isGeneratorLane()) {
+			return;
+		}
 
 		uint32_t squareStart = getPosFromSquare(xDisplay, xScroll, xZoom);
 

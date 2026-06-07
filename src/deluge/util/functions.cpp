@@ -611,21 +611,21 @@ char const* getOutputTypeName(OutputType outputType, int32_t channel, Output* ou
 	case OutputType::MIDI_OUT:
 		if (channel < 16) {
 			// For MIDI tracks, show the selected output device instead of "MIDI"
-		// Use the provided output if available, otherwise fall back to getCurrentOutput()
-		Output* currentOutput = output;
-		if (currentOutput == nullptr) {
-			currentOutput = getCurrentOutput();
-		}
+			// Use the provided output if available, otherwise fall back to getCurrentOutput()
+			Output* currentOutput = output;
+			if (currentOutput == nullptr) {
+				currentOutput = getCurrentOutput();
+			}
 
-		if (currentOutput != nullptr && currentOutput->type == OutputType::MIDI_OUT) {
-			MIDIInstrument* midiInstrument = static_cast<MIDIInstrument*>(currentOutput);
-			uint8_t outputDevice = midiInstrument->outputDevice;
+			if (currentOutput != nullptr && currentOutput->type == OutputType::MIDI_OUT) {
+				MIDIInstrument* midiInstrument = static_cast<MIDIInstrument*>(currentOutput);
+				uint8_t outputDevice = midiInstrument->outputDevice;
 
-			if (outputDevice != 0) { // Not "ALL devices"
-				// Get device name - prefer stored name, fall back to live lookup
-				if (!midiInstrument->outputDeviceName.isEmpty()) {
-					return midiInstrument->outputDeviceName.get();
-				}
+				if (outputDevice != 0) { // Not "ALL devices"
+					// Get device name - prefer stored name, fall back to live lookup
+					if (!midiInstrument->outputDeviceName.isEmpty()) {
+						return midiInstrument->outputDeviceName.get();
+					}
 					// Fallback: get name from device index using helper function
 					auto deviceName = deluge::io::midi::getDeviceNameForIndex(outputDevice);
 					if (!deviceName.empty()) {
@@ -860,6 +860,79 @@ char const* lfoTypeToString(LFOType oscType) {
 		return "warbler";
 	default:
 		return "triangle";
+	}
+}
+
+char const* getAutomationLaneTypeShortName(AutomationLaneType laneType) {
+	switch (laneType) {
+	case AutomationLaneType::MANUAL:
+		return "MAN";
+	case AutomationLaneType::SINE:
+		return "SIN";
+	case AutomationLaneType::SQUARE:
+		return "SQR";
+	case AutomationLaneType::TRIANGLE:
+		return "TRI";
+	case AutomationLaneType::SAW:
+		return "SAW";
+	case AutomationLaneType::RANDOM:
+		return "RND";
+	case AutomationLaneType::SAMPLE_AND_HOLD:
+		return "S&H";
+	case AutomationLaneType::PULSE:
+		return "PLS";
+	default:
+		return "";
+	}
+}
+
+char const* automationLaneTypeToString(AutomationLaneType laneType) {
+	switch (laneType) {
+	case AutomationLaneType::MANUAL:
+		return "manual";
+	case AutomationLaneType::SINE:
+		return "sine";
+	case AutomationLaneType::SQUARE:
+		return "square";
+	case AutomationLaneType::TRIANGLE:
+		return "triangle";
+	case AutomationLaneType::SAW:
+		return "saw";
+	case AutomationLaneType::RANDOM:
+		return "random";
+	case AutomationLaneType::SAMPLE_AND_HOLD:
+		return "sah";
+	case AutomationLaneType::PULSE:
+		return "pulse";
+	default:
+		return "manual";
+	}
+}
+
+AutomationLaneType stringToAutomationLaneType(char const* string) {
+	if (!strcmp(string, "sine")) {
+		return AutomationLaneType::SINE;
+	}
+	else if (!strcmp(string, "square")) {
+		return AutomationLaneType::SQUARE;
+	}
+	else if (!strcmp(string, "triangle")) {
+		return AutomationLaneType::TRIANGLE;
+	}
+	else if (!strcmp(string, "saw")) {
+		return AutomationLaneType::SAW;
+	}
+	else if (!strcmp(string, "random")) {
+		return AutomationLaneType::RANDOM;
+	}
+	else if (!strcmp(string, "sah")) {
+		return AutomationLaneType::SAMPLE_AND_HOLD;
+	}
+	else if (!strcmp(string, "pulse")) {
+		return AutomationLaneType::PULSE;
+	}
+	else {
+		return AutomationLaneType::MANUAL;
 	}
 }
 

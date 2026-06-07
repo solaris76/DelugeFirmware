@@ -118,7 +118,28 @@ public:
 
 	inline void setCurrentValueBasicForSetup(int32_t value) { currentValue = value; }
 
-	inline bool isAutomated() { return (nodes.getNumElements()); }
+	inline bool isAutomated() { return nodes.getNumElements() || (automationLaneType != AutomationLaneType::MANUAL); }
+	inline bool isGeneratorLane() const { return automationLaneType != AutomationLaneType::MANUAL; }
+
+	void setAutomationLaneType(AutomationLaneType type, ModelStackWithAutoParam const* modelStack);
+	AutomationLaneType getAutomationLaneType() const { return automationLaneType; }
+	void setShapeAmount(uint8_t amount) {
+		if (amount > 127) {
+			amount = 127;
+		}
+		automationShapeAmount = amount;
+	}
+	uint8_t getShapeAmount() const { return automationShapeAmount; }
+
+	void setAutomationClockDivider(int8_t rate);
+	int8_t getAutomationClockDivider() const { return automationClockDivider; }
+	bool shouldUseAutomationClockRate(ModelStackWithAutoParam const* modelStack) const;
+	bool isAutomationClockDivided() const { return automationClockDivider > 1; }
+	bool isAutomationClockMultiplied() const { return automationClockDivider < -1; }
+	uint32_t getLaneReadPos(uint32_t clipPos, ModelStackWithAutoParam const* modelStack) const;
+	/// Pad-grid preview value (0–127 display space). Bottom-anchored for unipolar, centred for bipolar.
+	int32_t getGeneratorLaneDisplayKnobPos(uint32_t clipPos, ModelStackWithAutoParam const* modelStack,
+	                                       bool isBipolar) const;
 
 	inline void cancelOverriding() { // Will also cancel "latching".
 		renewedOverridingAtTime = 0;
@@ -130,7 +151,10 @@ public:
 	/// Current value of the AutoParam. Updated by several functions.
 	int32_t currentValue;
 	int32_t valueIncrementPerHalfTick;
-	uint32_t renewedOverridingAtTime; // If 0, it's off. If 1, it's latched until we hit some nodes / automation
+	uint32_t renewedOverridingAtTime;  // If 0, it's off. If 1, it's latched until we hit some nodes / automation
+	int8_t automationClockDivider = 1; // 1 = clip speed; >1 = divide (slower); <-1 = multiply (faster)
+	AutomationLaneType automationLaneType = AutomationLaneType::MANUAL;
+	uint8_t automationShapeAmount = 64; // generator depth (0–127); pulse width for PULSE lanes
 
 	// "Latching" happens when you start recording values, but then stops if you arrive at any pre-existing values. So
 	// it only works in empty stretches of time.
@@ -138,7 +162,16 @@ public:
 private:
 	bool deleteRedundantNodeInLinearRun(int32_t lastNodeInRunI, int32_t effectiveLength,
 	                                    bool mayLoopAroundBackToEnd = true);
-	void setupInterpolation(ParamNode* nextNode, int32_t effectiveLength, int32_t currentPos, bool reversed);
+	void setupInterpolation(ParamNode* nextNode, int32_t effectiveLength, int32_t currentPos, bool reversed,
+	                        int32_t clockRate = 1);
+	int32_t scaleLaneTicksToClipTicks(int32_t laneTicks, int32_t clipPos, int32_t effectiveLength,
+	                                  ModelStackWithAutoParam const* modelStack) const;
+	uint32_t lanePosToPhase(uint32_t lanePos, ModelStackWithAutoParam const* modelStack) const;
+	int32_t getGeneratorWaveRaw(uint32_t phase, uint32_t lanePos, int32_t loopLength) const;
+	int32_t getGeneratorInternalKnobPos(uint32_t lanePos, ModelStackWithAutoParam const* modelStack,
+	                                    bool isBipolar) const;
+	int32_t getGeneratorParamValue(uint32_t lanePos, ModelStackWithAutoParam const* modelStack) const;
+	int32_t processGeneratorCurrentPos(ModelStackWithAutoParam const* modelStack, bool reversed);
 	void homogenizeRegionTestSuccess(int32_t pos, int32_t regionEnd, int32_t startValue, bool interpolateStart,
 	                                 bool interpolateEnd);
 	void deleteNodesBeyondPos(int32_t pos);

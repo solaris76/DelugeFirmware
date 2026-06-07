@@ -59,9 +59,9 @@
 #include "model/action/action_logger.h"
 #include "model/clip/clip.h"
 #include "model/clip/instrument_clip.h"
-#include "model/clip/sequencer/sequencer_mode.h"
-#include "model/clip/sequencer/modes/step_sequencer_mode.h"
 #include "model/clip/sequencer/modes/pulse_sequencer_mode.h"
+#include "model/clip/sequencer/modes/step_sequencer_mode.h"
+#include "model/clip/sequencer/sequencer_mode.h"
 #include "model/consequence/consequence_instrument_clip_multiply.h"
 #include "model/consequence/consequence_note_array_change.h"
 #include "model/consequence/consequence_note_row_horizontal_shift.h"
@@ -1693,6 +1693,25 @@ ramError:
 				reader.exitTag(tagName);
 			}
 		}
+		else if (!strcmp(tagName, "acidSequencer")) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (!sequencerModeName.isEmpty() && sequencerModeName.equals("acid_seq")) {
+				if (!clip->hasSequencerMode() || clip->getSequencerModeName() != "acid_seq") {
+					clip->setSequencerMode("acid_seq");
+				}
+				auto* mode = clip->getSequencerMode();
+				if (mode) {
+					Error error = mode->readFromFile(reader);
+					if (error != Error::NONE) {
+						return error;
+					}
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
+			}
+		}
 		else if (!strcmp(tagName, "controlColumns")) {
 			InstrumentClip* clip = getCurrentInstrumentClip();
 			if (!sequencerModeName.isEmpty() && clip->hasSequencerMode()) {
@@ -1906,8 +1925,8 @@ void InstrumentClipView::selectEncoderAction(int8_t offset) {
 				if (stepMode->handleSelectEncoder(offset)) {
 					return;
 				}
-				// Sequencer mode didn't handle it (no valid pad held) - only allow preset changing if NOT in UI_MODE_NOTES_PRESSED
-				// This prevents blank/invalid pads from triggering iterance/prob
+				// Sequencer mode didn't handle it (no valid pad held) - only allow preset changing if NOT in
+				// UI_MODE_NOTES_PRESSED This prevents blank/invalid pads from triggering iterance/prob
 				if (currentUIMode != UI_MODE_NOTES_PRESSED) {
 					InstrumentClipMinder::selectEncoderAction(offset);
 				}
@@ -1915,12 +1934,11 @@ void InstrumentClipView::selectEncoderAction(int8_t offset) {
 			}
 			// Check for pulse sequencer
 			else if (clip->getSequencerModeName() == "pulse_seq") {
-				auto* pulseMode = static_cast<deluge::model::clip::sequencer::modes::PulseSequencerMode*>(sequencerMode);
+				auto* pulseMode =
+				    static_cast<deluge::model::clip::sequencer::modes::PulseSequencerMode*>(sequencerMode);
 				if (pulseMode->handleSelectEncoder(offset)) {
 					return;
 				}
-				// Sequencer mode didn't handle it (no valid pad held) - only allow preset changing if NOT in UI_MODE_NOTES_PRESSED
-				// This prevents blank/invalid pads (x8-x15) from triggering iterance/prob
 				if (currentUIMode != UI_MODE_NOTES_PRESSED) {
 					InstrumentClipMinder::selectEncoderAction(offset);
 				}
