@@ -864,6 +864,79 @@ char const* lfoTypeToString(LFOType oscType) {
 	}
 }
 
+char const* getAutomationLaneTypeShortName(AutomationLaneType laneType) {
+	switch (laneType) {
+	case AutomationLaneType::MANUAL:
+		return "MAN";
+	case AutomationLaneType::SINE:
+		return "SIN";
+	case AutomationLaneType::SQUARE:
+		return "SQR";
+	case AutomationLaneType::TRIANGLE:
+		return "TRI";
+	case AutomationLaneType::SAW:
+		return "SAW";
+	case AutomationLaneType::RANDOM:
+		return "RND";
+	case AutomationLaneType::SAMPLE_AND_HOLD:
+		return "S&H";
+	case AutomationLaneType::PULSE:
+		return "PLS";
+	default:
+		return "";
+	}
+}
+
+char const* automationLaneTypeToString(AutomationLaneType laneType) {
+	switch (laneType) {
+	case AutomationLaneType::MANUAL:
+		return "manual";
+	case AutomationLaneType::SINE:
+		return "sine";
+	case AutomationLaneType::SQUARE:
+		return "square";
+	case AutomationLaneType::TRIANGLE:
+		return "triangle";
+	case AutomationLaneType::SAW:
+		return "saw";
+	case AutomationLaneType::RANDOM:
+		return "random";
+	case AutomationLaneType::SAMPLE_AND_HOLD:
+		return "sah";
+	case AutomationLaneType::PULSE:
+		return "pulse";
+	default:
+		return "manual";
+	}
+}
+
+AutomationLaneType stringToAutomationLaneType(char const* string) {
+	if (!strcmp(string, "sine")) {
+		return AutomationLaneType::SINE;
+	}
+	else if (!strcmp(string, "square")) {
+		return AutomationLaneType::SQUARE;
+	}
+	else if (!strcmp(string, "triangle")) {
+		return AutomationLaneType::TRIANGLE;
+	}
+	else if (!strcmp(string, "saw")) {
+		return AutomationLaneType::SAW;
+	}
+	else if (!strcmp(string, "random")) {
+		return AutomationLaneType::RANDOM;
+	}
+	else if (!strcmp(string, "sah")) {
+		return AutomationLaneType::SAMPLE_AND_HOLD;
+	}
+	else if (!strcmp(string, "pulse")) {
+		return AutomationLaneType::PULSE;
+	}
+	else {
+		return AutomationLaneType::MANUAL;
+	}
+}
+
 LFOType stringToLFOType(char const* string) {
 	if (!strcmp(string, "square")) {
 		return LFOType::SQUARE;

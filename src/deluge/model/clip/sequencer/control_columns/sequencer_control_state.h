@@ -53,6 +53,12 @@ public:
 	// Initialize with default control types
 	void initialize();
 
+	// Acid Seq: eight sequence slots on sidebar (x17), clock + direction on x16
+	void initializeAcidSeqSidebar();
+
+	// True when sidebar still has the generic 2-scene factory layout (safe to upgrade for Acid Seq)
+	bool hasGenericSequencerSidebar() const;
+
 	// Rendering
 	void render(RGB image[][kDisplayWidth + kSideBarWidth], uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]);
 

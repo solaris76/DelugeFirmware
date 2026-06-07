@@ -32,13 +32,17 @@
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
 #include "modulation/automation/copied_param_automation.h"
+#include "modulation/params/param.h"
 #include "modulation/params/param_collection.h"
 #include "modulation/params/param_node.h"
+
+namespace params = deluge::modulation::params;
 #include "playback/mode/playback_mode.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "storage/storage_manager.h"
 #include "util/functions.h"
+#include "util/waves.h"
 #include <math.h>
 
 #define SAMPLES_TO_CLEAR_AFTER_RECORD 8820          // 200ms
@@ -59,6 +63,102 @@ AutoParam::AutoParam() {
 
 void AutoParam::init() {
 	nodes.init();
+	automationClockDivider = 1;
+	automationLaneType = AutomationLaneType::MANUAL;
+	automationShapeAmount = 64;
+}
+
+void AutoParam::setAutomationLaneType(AutomationLaneType type, ModelStackWithAutoParam const* modelStack) {
+	bool automatedBefore = isAutomated();
+	automationLaneType = type;
+	if (modelStack) {
+		bool automatedNow = isAutomated();
+		if (automatedBefore != automatedNow) {
+			modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, getCurrentValue(), false,
+			                                                          automatedBefore, automatedNow);
+		}
+	}
+}
+
+namespace {
+
+constexpr int8_t kValidAutomationClockRates[] = {-32, -16, -8, -4, -2, 1, 2, 4, 8, 16, 32};
+
+int8_t snapAutomationClockRate(int8_t rate) {
+	if (rate == 0 || rate == 1 || rate == -1) {
+		return 1;
+	}
+
+	int8_t closest = 1;
+	int32_t closestDistance = 255;
+	for (int8_t validRate : kValidAutomationClockRates) {
+		int32_t distance = rate >= validRate ? rate - validRate : validRate - rate;
+		if (distance < closestDistance) {
+			closestDistance = distance;
+			closest = validRate;
+		}
+	}
+	return closest;
+}
+
+} // namespace
+
+void AutoParam::setAutomationClockDivider(int8_t rate) {
+	automationClockDivider = snapAutomationClockRate(rate);
+}
+
+bool AutoParam::shouldUseAutomationClockRate(ModelStackWithAutoParam const* modelStack) const {
+	return (automationClockDivider > 1 || automationClockDivider < -1) && !modelStack->isCurrentlyPlayingReversed();
+}
+
+uint32_t AutoParam::getLaneReadPos(uint32_t clipPos, ModelStackWithAutoParam const* modelStack) const {
+	int32_t loopLength = modelStack->getLoopLength();
+	if (loopLength <= 0 || automationClockDivider == 1) {
+		return clipPos;
+	}
+
+	int32_t repeatCount = modelStack->getRepeatCount();
+	int64_t absoluteTicks = (int64_t)repeatCount * loopLength + clipPos;
+
+	if (automationClockDivider > 1) {
+		return (uint32_t)((absoluteTicks / automationClockDivider) % loopLength);
+	}
+
+	if (automationClockDivider < -1) {
+		int32_t multiplier = -automationClockDivider;
+		return (uint32_t)((absoluteTicks * multiplier) % loopLength);
+	}
+
+	return clipPos;
+}
+
+int32_t AutoParam::scaleLaneTicksToClipTicks(int32_t laneTicks, int32_t clipPos, int32_t effectiveLength,
+                                             ModelStackWithAutoParam const* modelStack) const {
+	if (laneTicks == 2147483647 || automationClockDivider == 1) {
+		return laneTicks;
+	}
+
+	if (automationClockDivider < -1) {
+		int32_t multiplier = -automationClockDivider;
+		int32_t clipTicks = (laneTicks + multiplier - 1) / multiplier;
+		if (clipTicks < 1) {
+			clipTicks = 1;
+		}
+		return clipTicks;
+	}
+
+	if (automationClockDivider <= 1) {
+		return laneTicks;
+	}
+
+	int32_t repeatCount = modelStack->getRepeatCount();
+	int64_t absoluteTicks = (int64_t)repeatCount * effectiveLength + clipPos;
+	int32_t phase = absoluteTicks % automationClockDivider;
+	int32_t clipTicks = laneTicks * automationClockDivider - phase;
+	if (clipTicks < 1) {
+		clipTicks = 1;
+	}
+	return clipTicks;
 }
 
 void AutoParam::cloneFrom(AutoParam* otherParam, bool copyAutomation) {
@@ -69,6 +169,9 @@ void AutoParam::cloneFrom(AutoParam* otherParam, bool copyAutomation) {
 		nodes.init();
 	}
 	currentValue = otherParam->currentValue;
+	automationClockDivider = otherParam->automationClockDivider;
+	automationLaneType = otherParam->automationLaneType;
+	automationShapeAmount = otherParam->automationShapeAmount;
 	resetInterpolationIncrement();
 	renewedOverridingAtTime = 0;
 }
@@ -381,6 +484,8 @@ void AutoParam::deleteAutomation(Action* action, ModelStackWithAutoParam const* 
 
 	resetInterpolationIncrement();
 	renewedOverridingAtTime = 0;
+	automationLaneType = AutomationLaneType::MANUAL;
+	automationShapeAmount = 64;
 
 	if (shouldNotify && wasAutomated) {
 		modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, getCurrentValue(), true, true, false);
@@ -393,20 +498,172 @@ void AutoParam::deleteAutomationBasicForSetup() {
 	nodes.empty();
 	resetInterpolationIncrement();
 	renewedOverridingAtTime = 0;
+	automationLaneType = AutomationLaneType::MANUAL;
+	automationShapeAmount = 64;
 }
 
 #define OVERRIDE_DURATION_MAGNITUDE_INTERPOLATING 15 // Means 2^x audio samples in length
 
+uint32_t AutoParam::lanePosToPhase(uint32_t lanePos, ModelStackWithAutoParam const* modelStack) const {
+	int32_t loopLength = modelStack->getLoopLength();
+	if (loopLength <= 0) {
+		return 0;
+	}
+	return (uint32_t)(((uint64_t)lanePos << 32) / loopLength);
+}
+
+int32_t AutoParam::getGeneratorWaveRaw(uint32_t phase, uint32_t lanePos, int32_t loopLength) const {
+	switch (automationLaneType) {
+	case AutomationLaneType::SINE:
+		return getSine(phase);
+
+	case AutomationLaneType::SQUARE:
+		return getSquare(phase);
+
+	case AutomationLaneType::TRIANGLE:
+		return getTriangle(phase);
+
+	case AutomationLaneType::SAW:
+		return static_cast<int32_t>(phase);
+
+	case AutomationLaneType::RANDOM: {
+		uint32_t hash = phase ^ (lanePos * 2654435761u);
+		return static_cast<int32_t>(hash);
+	}
+
+	case AutomationLaneType::SAMPLE_AND_HOLD: {
+		constexpr int32_t kNumHolds = 16;
+		int32_t holdIndex = loopLength > 0 ? static_cast<int32_t>(((uint64_t)lanePos * kNumHolds) / loopLength) : 0;
+		uint32_t hash = holdIndex * 1597334677u;
+		return static_cast<int32_t>(hash);
+	}
+
+	case AutomationLaneType::PULSE: {
+		uint32_t phaseWidth =
+		    automationShapeAmount
+		        ? static_cast<uint32_t>((static_cast<uint64_t>(automationShapeAmount) * 2147483648u) / 127)
+		        : 1;
+		return getSquare(phase, phaseWidth);
+	}
+
+	default:
+		return 0;
+	}
+}
+
+int32_t AutoParam::getGeneratorInternalKnobPos(uint32_t lanePos, ModelStackWithAutoParam const* modelStack,
+                                               bool isBipolar) const {
+	int32_t loopLength = modelStack->getLoopLength();
+	if (loopLength <= 0) {
+		loopLength = 1;
+	}
+
+	uint32_t phase = lanePosToPhase(lanePos, modelStack);
+	int32_t wave = getGeneratorWaveRaw(phase, lanePos, loopLength);
+	int32_t waveKnob = static_cast<int32_t>(wave >> 25);
+
+	int32_t depth = automationShapeAmount;
+	if (automationLaneType == AutomationLaneType::PULSE) {
+		depth = 127;
+	}
+
+	if (isBipolar) {
+		int32_t centered = (waveKnob * depth) / 127;
+		if (centered < -64) {
+			centered = -64;
+		}
+		else if (centered > 63) {
+			centered = 63;
+		}
+		return centered;
+	}
+
+	// Unipolar: anchor at minimum (internal -64 / MIDI CC 0), peak at maximum (internal +63 / CC 127).
+	int32_t internalKnob = ((waveKnob + 64) * depth) / 127 - 64;
+	if (internalKnob < -64) {
+		internalKnob = -64;
+	}
+	else if (internalKnob > 63) {
+		internalKnob = 63;
+	}
+	return internalKnob;
+}
+
+int32_t AutoParam::getGeneratorParamValue(uint32_t lanePos, ModelStackWithAutoParam const* modelStack) const {
+	params::Kind kind = modelStack->paramCollection->getParamKind();
+	bool isBipolar = params::isParamBipolar(kind, modelStack->paramId);
+	int32_t internalKnob = getGeneratorInternalKnobPos(lanePos, modelStack, isBipolar);
+
+	return modelStack->paramCollection->knobPosToParamValue(internalKnob,
+	                                                        const_cast<ModelStackWithAutoParam*>(modelStack));
+}
+
+int32_t AutoParam::getGeneratorLaneDisplayKnobPos(uint32_t clipPos, ModelStackWithAutoParam const* modelStack,
+                                                  bool isBipolar) const {
+	if (!isGeneratorLane()) {
+		return 0;
+	}
+
+	int32_t internalKnob = getGeneratorInternalKnobPos(clipPos, modelStack, isBipolar);
+	return internalKnob + 64;
+}
+
+int32_t AutoParam::processGeneratorCurrentPos(ModelStackWithAutoParam const* modelStack, bool reversed) {
+	if (reversed) {
+		return 2147483647;
+	}
+
+	int32_t clipPos = modelStack->getLastProcessedPos();
+	bool useClockRate = shouldUseAutomationClockRate(modelStack);
+
+	if (isAutomationClockDivided()) {
+		int32_t repeatCount = modelStack->getRepeatCount();
+		int64_t absoluteTicks = (int64_t)repeatCount * modelStack->getLoopLength() + clipPos;
+		int32_t phase = absoluteTicks % automationClockDivider;
+		if (phase != 0) {
+			return automationClockDivider - phase;
+		}
+	}
+
+	uint32_t lanePos = useClockRate ? getLaneReadPos(clipPos, modelStack) : clipPos;
+	int32_t newValue = getGeneratorParamValue(lanePos, modelStack);
+	int32_t oldValue = currentValue;
+	if (newValue != oldValue) {
+		currentValue = newValue;
+		modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, oldValue, false, true, true);
+	}
+
+	return isAutomationClockDivided() ? automationClockDivider : 1;
+}
+
 int32_t AutoParam::processCurrentPos(ModelStackWithAutoParam const* modelStack, bool reversed, bool didPinpong,
                                      bool mayInterpolate, bool mustUpdateValueAtEveryNode) {
+
+	if (isGeneratorLane()) {
+		return processGeneratorCurrentPos(modelStack, reversed);
+	}
 
 	// If no automation...
 	if (!nodes.getNumElements()) {
 		return 2147483647;
 	}
 
-	int32_t currentPos = modelStack->getLastProcessedPos();
+	int32_t clipPos = modelStack->getLastProcessedPos();
 	int32_t effectiveLength = modelStack->getLoopLength();
+	bool useClockRate = shouldUseAutomationClockRate(modelStack);
+
+	// Clock-divided lanes only advance on clip tick boundaries aligned to the divider.
+	// Without this, MIDI (and other non-interpolating) params re-hit the same lane node every clip tick.
+	if (isAutomationClockDivided()) {
+		int32_t repeatCount = modelStack->getRepeatCount();
+		int64_t absoluteTicks = (int64_t)repeatCount * effectiveLength + clipPos;
+		int32_t phase = absoluteTicks % automationClockDivider;
+		if (phase != 0) {
+			return automationClockDivider - phase;
+		}
+	}
+
+	uint32_t currentPos = useClockRate ? getLaneReadPos(clipPos, modelStack) : clipPos;
 
 	// Find next node - here or further along in our direction
 	int32_t searchDirection = -(int32_t)reversed;
@@ -430,6 +687,9 @@ int32_t AutoParam::processCurrentPos(ModelStackWithAutoParam const* modelStack, 
 		}
 		if (howFarUntilThisNode < 0) {
 			howFarUntilThisNode += effectiveLength;
+		}
+		if (useClockRate) {
+			return scaleLaneTicksToClipTicks(howFarUntilThisNode, clipPos, effectiveLength, modelStack);
 		}
 		return howFarUntilThisNode;
 	}
@@ -743,7 +1003,8 @@ adjustNodeJustReached:
 
 	if (mayInterpolate) {
 		if ((reversed ? nodeJustReached : nextNodeInOurDirection)->interpolated) {
-			setupInterpolation(modelStack, nextNodeInOurDirection, effectiveLength, currentPos, reversed);
+			setupInterpolation(modelStack, nextNodeInOurDirection, effectiveLength, currentPos, reversed,
+			                   automationClockDivider != 1 ? automationClockDivider : 1);
 		}
 	}
 
@@ -768,6 +1029,9 @@ getOut:
 		}
 	}
 
+	if (useClockRate) {
+		return scaleLaneTicksToClipTicks(ticksTilNextNode, clipPos, effectiveLength, modelStack);
+	}
 	return ticksTilNextNode;
 }
 
@@ -800,7 +1064,7 @@ bool AutoParam::useFloatInterpolation(ModelStackWithAutoParam const* modelStack)
 
 // You now much check before calling this that interpolation should happen at all
 void AutoParam::setupInterpolation(ModelStackWithAutoParam const* modelStack, ParamNode* nextNodeInOurDirection,
-                                   int32_t effectiveLength, int32_t currentPos, bool reversed) {
+                                   int32_t effectiveLength, int32_t currentPos, bool reversed, int32_t clockRate) {
 
 	if (renewedOverridingAtTime == 1) {
 		return; // If it's latched-until-next-node-hit, we're not allowed to interpolate.
@@ -821,9 +1085,21 @@ void AutoParam::setupInterpolation(ModelStackWithAutoParam const* modelStack, Pa
 		ticksTilNextNode += effectiveLength;
 	}
 
+	int32_t clipTicksSpan = ticksTilNextNode;
+	if (clockRate > 1) {
+		clipTicksSpan *= clockRate;
+	}
+	else if (clockRate < -1) {
+		int32_t multiplier = -clockRate;
+		clipTicksSpan = (ticksTilNextNode + multiplier - 1) / multiplier;
+		if (clipTicksSpan < 1) {
+			clipTicksSpan = 1;
+		}
+	}
+
 	bool use_float_interpolation = useFloatInterpolation(modelStack);
 
-	calculateInterpolationIncrement(halfDistance, ticksTilNextNode, use_float_interpolation);
+	calculateInterpolationIncrement(halfDistance, clipTicksSpan, use_float_interpolation);
 
 	// If automation still overridden (at least to some extent), limit how fast interpolation can occur
 	if (renewedOverridingAtTime) {
@@ -1456,6 +1732,11 @@ int32_t AutoParam::getValuePossiblyAtPos(int32_t pos, ModelStackWithAutoParam* m
 // going.
 int32_t AutoParam::getValueAtPos(uint32_t pos, ModelStackWithAutoParam const* modelStack, bool reversed) {
 
+	if (isGeneratorLane()) {
+		uint32_t readPos = shouldUseAutomationClockRate(modelStack) ? getLaneReadPos(pos, modelStack) : pos;
+		return getGeneratorParamValue(readPos, modelStack);
+	}
+
 	if (!nodes.getNumElements()) {
 		return currentValue;
 	}
@@ -1506,12 +1787,20 @@ returnLeftNodeValue:
 
 // Returns whether a change was made to currentValue
 bool AutoParam::grabValueFromPos(uint32_t pos, ModelStackWithAutoParam const* modelStack) {
+	if (isGeneratorLane()) {
+		int32_t oldValue = currentValue;
+		uint32_t readPos = shouldUseAutomationClockRate(modelStack) ? getLaneReadPos(pos, modelStack) : pos;
+		currentValue = getGeneratorParamValue(readPos, modelStack);
+		return (currentValue != oldValue);
+	}
+
 	if (!nodes.getNumElements()) {
 		return false;
 	}
 
 	int32_t oldValue = currentValue;
-	currentValue = getValueAtPos(pos, modelStack);
+	uint32_t readPos = shouldUseAutomationClockRate(modelStack) ? getLaneReadPos(pos, modelStack) : pos;
+	currentValue = getValueAtPos(readPos, modelStack);
 	return (currentValue != oldValue);
 }
 
@@ -1519,12 +1808,20 @@ void AutoParam::setPlayPos(uint32_t pos, ModelStackWithAutoParam const* modelSta
 
 	resetInterpolationIncrement(); // We may calculate this, below
 	renewedOverridingAtTime = 0;
+
+	if (isGeneratorLane()) {
+		uint32_t readPos = shouldUseAutomationClockRate(modelStack) ? getLaneReadPos(pos, modelStack) : pos;
+		currentValue = getGeneratorParamValue(readPos, modelStack);
+		return;
+	}
+
 	if (nodes.getNumElements()) {
+		uint32_t readPos = shouldUseAutomationClockRate(modelStack) ? getLaneReadPos(pos, modelStack) : pos;
 		int32_t oldValue = currentValue;
-		currentValue = getValueAtPos(pos, modelStack, reversed);
+		currentValue = getValueAtPos(readPos, modelStack, reversed);
 
 		// Get next node
-		int32_t rightI = nodes.search(pos + (int32_t)!reversed, GREATER_OR_EQUAL);
+		int32_t rightI = nodes.search(readPos + (int32_t)!reversed, GREATER_OR_EQUAL);
 		if (rightI == nodes.getNumElements()) {
 			rightI = 0;
 		}
@@ -1543,7 +1840,8 @@ void AutoParam::setPlayPos(uint32_t pos, ModelStackWithAutoParam const* modelSta
 			}
 
 			// Setup interpolation from the pos we're at now
-			setupInterpolation(modelStack, nextNodeOurDirection, modelStack->getLoopLength(), pos, reversed);
+			setupInterpolation(modelStack, nextNodeOurDirection, modelStack->getLoopLength(), readPos, reversed,
+			                   automationClockDivider != 1 ? automationClockDivider : 1);
 		}
 
 		modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, oldValue, false, true, true);
@@ -2002,6 +2300,20 @@ void AutoParam::writeToFile(Serializer& writer, bool writeAutomation, int32_t* v
 			intToHex(pos, buffer);
 			writer.write(buffer);
 		}
+
+		if (automationClockDivider != 1) {
+			writer.write(":");
+			intToHex(static_cast<uint8_t>(automationClockDivider), buffer, 2);
+			writer.write(buffer + 6);
+		}
+
+		if (automationLaneType != AutomationLaneType::MANUAL || automationShapeAmount != 64) {
+			writer.write("|");
+			intToHex(util::to_underlying(automationLaneType), buffer, 2);
+			writer.write(buffer + 6);
+			intToHex(automationShapeAmount, buffer, 2);
+			writer.write(buffer + 6);
+		}
 	}
 }
 
@@ -2119,6 +2431,28 @@ Error AutoParam::readFromFile(Deserializer& reader, int32_t readAutomationUpToPo
 			node->interpolated = interpolated;
 
 			numElementsToAllocateFor--;
+		}
+	}
+
+	if (reader.getNumCharsRemainingInValueBeforeEndOfCluster() >= 3) {
+		char const* suffix = reader.readNextCharsOfTagOrAttributeValue(3);
+		if (suffix && suffix[0] == ':') {
+			int8_t rate = static_cast<int8_t>(hexToIntFixedLength(&suffix[1], 2));
+			setAutomationClockDivider(rate);
+		}
+	}
+
+	if (reader.getNumCharsRemainingInValueBeforeEndOfCluster() >= 5) {
+		char const* laneSuffix = reader.readNextCharsOfTagOrAttributeValue(5);
+		if (laneSuffix && laneSuffix[0] == '|') {
+			int32_t laneType = hexToIntFixedLength(&laneSuffix[1], 2);
+			if (laneType >= 0 && laneType < kNumAutomationLaneTypes) {
+				automationLaneType = static_cast<AutomationLaneType>(laneType);
+			}
+			int32_t shapeAmount = hexToIntFixedLength(&laneSuffix[3], 2);
+			if (shapeAmount >= 0 && shapeAmount <= 127) {
+				automationShapeAmount = shapeAmount;
+			}
 		}
 	}
 

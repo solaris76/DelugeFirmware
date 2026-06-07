@@ -107,6 +107,27 @@ void SequencerControlState::initialize() {
 	pads_[15].valueIndex = 0;
 }
 
+bool SequencerControlState::hasGenericSequencerSidebar() const {
+	return pads_[8].type == ControlType::SCENE && pads_[9].type == ControlType::SCENE
+	       && pads_[10].type == ControlType::NONE && pads_[14].type == ControlType::RANDOM;
+}
+
+void SequencerControlState::initializeAcidSeqSidebar() {
+	initialize();
+	pads_[0].type = ControlType::CLOCK_DIV;
+	pads_[0].valueIndex = 0;
+	pads_[1].type = ControlType::DIRECTION;
+	pads_[1].valueIndex = 0;
+	for (int32_t y = 0; y < 8; y++) {
+		pads_[8 + y].type = ControlType::SCENE;
+		pads_[8 + y].valueIndex = y;
+		pads_[8 + y].active = false;
+		pads_[8 + y].sceneValid = false;
+	}
+	pads_[14].type = ControlType::NONE;
+	pads_[15].type = ControlType::RESET;
+}
+
 int32_t SequencerControlState::getPadIndex(int32_t x, int32_t y) const {
 	if (x == kDisplayWidth) {
 		// x16 column

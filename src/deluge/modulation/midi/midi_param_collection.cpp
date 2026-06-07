@@ -29,6 +29,7 @@
 #include "modulation/midi/midi_param.h"
 #include "processing/engines/audio_engine.h"
 #include "storage/storage_manager.h"
+#include "util/functions.h"
 
 MIDIParamCollection::MIDIParamCollection(ParamCollectionSummary* summary)
     : ParamCollection(sizeof(MIDIParamCollection), summary) {
@@ -359,6 +360,18 @@ void MIDIParamCollection::writeToFile(Serializer& writer) {
 			writer.writeOpeningTag("value", false);
 			midiParam->param.writeToFile(writer, true);
 			writer.writeClosingTag("value", false);
+
+			if (midiParam->param.getAutomationClockDivider() != 1) {
+				writer.writeTag("clockDivider", midiParam->param.getAutomationClockDivider());
+			}
+
+			if (midiParam->param.getAutomationLaneType() != AutomationLaneType::MANUAL) {
+				writer.writeTag("laneType", automationLaneTypeToString(midiParam->param.getAutomationLaneType()));
+			}
+
+			if (midiParam->param.getShapeAmount() != 64) {
+				writer.writeTag("shapeAmount", midiParam->param.getShapeAmount());
+			}
 
 			writer.writeClosingTag("param");
 		}

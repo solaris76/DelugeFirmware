@@ -82,6 +82,8 @@ public:
 	                                              int32_t offset, int32_t effectiveLength);
 	void automationModEncoderActionForUnselectedPad(ModelStackWithAutoParam* modelStackWithParam,
 	                                                int32_t whichModEncoder, int32_t offset, int32_t effectiveLength);
+	bool automationModEncoderActionForClockDivider(ModelStackWithAutoParam* modelStackWithParam, int32_t offset);
+	bool automationModEncoderActionForShapeAmount(ModelStackWithAutoParam* modelStackWithParam, int32_t offset);
 
 	// Mod Encoder Button Action
 	void copyAutomation(ModelStackWithAutoParam* modelStackWithParam, Clip* clip, int32_t xScroll, int32_t xZoom);
@@ -117,6 +119,8 @@ private:
 	                                   bool modEncoderAction = false);
 	int32_t calculateAutomationKnobPosForModEncoderTurn(ModelStackWithAutoParam* modelStackWithParam, int32_t knobPos,
 	                                                    int32_t offset);
+
+	int8_t clockRateEncoderOffset_ = 0;
 };
 //}; // namespace deluge::gui::views::automation::editor_layout
 

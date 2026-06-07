@@ -1703,6 +1703,25 @@ ramError:
 				reader.exitTag(tagName);
 			}
 		}
+		else if (!strcmp(tagName, "acidSequencer")) {
+			InstrumentClip* clip = getCurrentInstrumentClip();
+			if (!sequencerModeName.isEmpty() && sequencerModeName.equals("acid_seq")) {
+				if (!clip->hasSequencerMode() || clip->getSequencerModeName() != "acid_seq") {
+					clip->setSequencerMode("acid_seq");
+				}
+				auto* mode = clip->getSequencerMode();
+				if (mode) {
+					Error error = mode->readFromFile(reader);
+					if (error != Error::NONE) {
+						return error;
+					}
+					uiNeedsRendering(&instrumentClipView, 0xFFFFFFFF, 0xFFFFFFFF);
+				}
+			}
+			else {
+				reader.exitTag(tagName);
+			}
+		}
 		else if (!strcmp(tagName, "controlColumns")) {
 			InstrumentClip* clip = getCurrentInstrumentClip();
 			if (!sequencerModeName.isEmpty() && clip->hasSequencerMode()) {
