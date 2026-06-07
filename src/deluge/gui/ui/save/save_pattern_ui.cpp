@@ -42,6 +42,7 @@ static constexpr const char* PATTERN_RHYTHMIC_DRUM_DEFAULT_FOLDER = "PATTERNS/RH
 static constexpr const char* PATTERN_MELODIC_DEFAULT_FOLDER = "PATTERNS/MELODIC";
 static constexpr const char* PATTERN_SEQUENCER_STEP_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/STEP";
 static constexpr const char* PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/PULSE";
+static constexpr const char* PATTERN_SEQUENCER_ACID_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/ACID";
 
 SavePatternUI savePatternUI{};
 
@@ -76,6 +77,11 @@ bool SavePatternUI::opened() {
 		return false;
 	}
 	error = createFoldersRecursiveIfNotExists(PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER);
+	if (error != Error::NONE) {
+		display->displayError(error);
+		return false;
+	}
+	error = createFoldersRecursiveIfNotExists(PATTERN_SEQUENCER_ACID_DEFAULT_FOLDER);
 	if (error != Error::NONE) {
 		display->displayError(error);
 		return false;
@@ -124,6 +130,10 @@ doReturnFalse:
 			else if (sequencerModeName == "pulse_seq") {
 				defaultDir = std::string(PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER);
 				title = "Save Pulse Pattern";
+			}
+			else if (sequencerModeName == "acid_seq") {
+				defaultDir = std::string(PATTERN_SEQUENCER_ACID_DEFAULT_FOLDER);
+				title = "Save Acid Pattern";
 			}
 			else {
 				// Fallback for unknown sequencer modes

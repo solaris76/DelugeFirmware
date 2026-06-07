@@ -97,7 +97,9 @@ bool KeyboardLayoutExpressiveChords::isSpreadPad(int32_t x, int32_t y, int32_t* 
 int32_t KeyboardLayoutExpressiveChords::computeSlotRoot(int32_t chordIndex, const ExpressiveChordSet& set) {
 	KeyboardStateExpressiveChords& state = getState().expressiveChords;
 	const ExpressiveChordSlot& slot0 = set.slots[kExpressiveRootChordIndex];
-	int32_t refRoot = slot0.rootMidi + state.transpose;
+	// Sets are authored with a tonal centre on the bottom-left pad; shift that centre to the song root.
+	int32_t anchorPc = mod(slot0.rootMidi, kOctaveSize);
+	int32_t refRoot = slot0.rootMidi + state.transpose + getRootNote() - anchorPc;
 
 	if (chordIndex == kExpressiveRootChordIndex) {
 		return refRoot;

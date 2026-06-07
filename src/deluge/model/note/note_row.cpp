@@ -3329,6 +3329,25 @@ finishedNormalStuff:
 							}
 							reader.exitTag("value");
 						}
+						else if (!strcmp(tagName, "clockDivider")) {
+							if (param) {
+								param->setAutomationClockDivider(reader.readTagOrAttributeValueInt());
+							}
+							reader.exitTag("clockDivider");
+						}
+						else if (!strcmp(tagName, "laneType")) {
+							if (param) {
+								param->setAutomationLaneType(
+								    stringToAutomationLaneType(reader.readTagOrAttributeValue()), nullptr);
+							}
+							reader.exitTag("laneType");
+						}
+						else if (!strcmp(tagName, "shapeAmount")) {
+							if (param) {
+								param->setShapeAmount(reader.readTagOrAttributeValueInt());
+							}
+							reader.exitTag("shapeAmount");
+						}
 						else {
 							reader.exitTag(tagName);
 						}
