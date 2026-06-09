@@ -223,6 +223,11 @@ void RuntimeFeatureSettings::init() {
 	                  STRING_FOR_COMMUNITY_FEATURE_SHOW_BATTERY_LEVEL, "showBatteryLevel",
 	                  RuntimeFeatureStateToggle::On);
 
+	// Launchpad grid mirror
+	SetupOnOffSetting(settings[RuntimeFeatureSettingType::EnableLaunchpadGridMirror],
+	                  STRING_FOR_COMMUNITY_FEATURE_LAUNCHPAD_GRID_MIRROR, "enableLaunchpadGridMirror",
+	                  RuntimeFeatureStateToggle::Off);
+
 	// Generator CC output rate
 	SetupGeneratorCcOutputSetting(settings[RuntimeFeatureSettingType::GeneratorCcOutput],
 	                              STRING_FOR_COMMUNITY_FEATURE_GENERATOR_CC_OUTPUT, "generatorCcOutput",
