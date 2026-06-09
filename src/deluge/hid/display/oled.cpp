@@ -147,8 +147,8 @@ void OLED::setupPopup(PopupType type, int32_t width, int32_t height, std::option
 		fault_handler_print_freeze_pointers(0, 0, regLR, regSP);
 		::freezeWithError("D003");
 	}
-	if (popupMaxY < 0 || popupMinY < 0 || popupMaxY < popupMinY || popupMinY > OLED_MAIN_WIDTH_PIXELS
-	    || popupMaxY > OLED_MAIN_WIDTH_PIXELS) {
+	if (popupMaxY < 0 || popupMinY < 0 || popupMaxY < popupMinY || popupMinY > OLED_MAIN_HEIGHT_PIXELS
+	    || popupMaxY > OLED_MAIN_HEIGHT_PIXELS) {
 
 		uint32_t regLR = 0;
 		uint32_t regSP = 0;
@@ -448,7 +448,6 @@ size_t getWidthPixels(std::string_view text, size_t height) {
 TextLineBreakdown::TextLineBreakdown(std::string_view text, size_t char_height, size_t max_pixels_per_line)
     : max_width_per_line{max_pixels_per_line} {
 	size_t line_width = 0;
-	size_t last_char_spacing = 0;
 
 	for (const char* c = text.begin(); c != text.end(); ++c) {
 		// If we hit a newline character, we need to break the line
@@ -459,13 +458,15 @@ TextLineBreakdown::TextLineBreakdown(std::string_view text, size_t char_height, 
 			// add the current line to the lines vector
 			auto t = text.substr(0, end_idx);
 			auto l = getWidthPixels(t, char_height);
-			if (l > max_pixels_per_line) {
-				FREEZE_WITH_ERROR("P002");
-			}
-			lines.push_back({
+			TextLine line{
 			    .text = t,
 			    .pixel_width = l,
-			});
+			};
+			while (!line.text.empty() && line.pixel_width > max_pixels_per_line) {
+				line.text = line.text.substr(0, line.text.size() - 1);
+				line.pixel_width = getWidthPixels(line.text, char_height);
+			}
+			lines.push_back(line);
 
 			// remove the text up to and including the newline
 			text.remove_prefix(end_idx + 1);
@@ -484,19 +485,32 @@ TextLineBreakdown::TextLineBreakdown(std::string_view text, size_t char_height, 
 		if (line_width + char_width > max_width_per_line) {
 
 			// search for the latest word break character (space or underscore)
-			size_t end_idx = text.find_last_of(" _", std::distance(text.begin(), c));
+			size_t pos = std::distance(text.begin(), c);
+			size_t end_idx = text.find_last_of(" _", pos);
 
-			// get the text up to the word break character
-			std::string_view text_upto_word_start = text.substr(0, end_idx);
+			std::string_view line_text;
+			if (end_idx == std::string_view::npos || end_idx == 0) {
+				line_text = (pos == 0) ? text.substr(0, 1) : text.substr(0, pos);
+			}
+			else {
+				line_text = text.substr(0, end_idx);
+			}
 
-			// add the line to the lines vector
-			lines.push_back({
-			    .text = text_upto_word_start,
-			    .pixel_width = getWidthPixels(text_upto_word_start, char_height),
-			});
-
-			// remove the text up to the word break character
-			text.remove_prefix(end_idx + 1);
+			if (!line_text.empty()) {
+				TextLine line{
+				    .text = line_text,
+				    .pixel_width = getWidthPixels(line_text, char_height),
+				};
+				while (!line.text.empty() && line.pixel_width > max_pixels_per_line) {
+					line.text = line.text.substr(0, line.text.size() - 1);
+					line.pixel_width = getWidthPixels(line.text, char_height);
+				}
+				lines.push_back(line);
+				text.remove_prefix(line_text.size());
+				if (!text.empty() && (text[0] == ' ' || text[0] == '_')) {
+					text.remove_prefix(1);
+				}
+			}
 
 			// reset the current line width
 			line_width = 0;
@@ -512,13 +526,15 @@ TextLineBreakdown::TextLineBreakdown(std::string_view text, size_t char_height, 
 
 	// Add the last line if there is any text left
 	if (!text.empty()) {
-		lines.push_back({
+		TextLine line{
 		    .text = text,
 		    .pixel_width = getWidthPixels(text, char_height),
-		});
-	}
-	if (maxPixelWidth() > max_pixels_per_line) {
-		FREEZE_WITH_ERROR("p001");
+		};
+		while (!line.text.empty() && line.pixel_width > max_pixels_per_line) {
+			line.text = line.text.substr(0, line.text.size() - 1);
+			line.pixel_width = getWidthPixels(line.text, char_height);
+		}
+		lines.push_back(line);
 	}
 }
 
@@ -1197,7 +1213,11 @@ void OLED::freezeWithError(std::string_view text) {
 	spiTransferQueueCurrentlySending = false;
 
 	clearMainImage();
-	OLED::popupText("Operation resumed. Save to new file then reboot.", false, PopupType::GENERAL);
+	main.drawString("Resumed. Save to new", 0, OLED_MAIN_TOPMOST_PIXEL, kTextSpacingX, kTextSpacingY, 0,
+	                OLED_MAIN_WIDTH_PIXELS);
+	main.drawString("file, then reboot.", 0, OLED_MAIN_TOPMOST_PIXEL + kTextSpacingY, kTextSpacingX, kTextSpacingY, 0,
+	                OLED_MAIN_WIDTH_PIXELS);
+	markChanged();
 }
 
 extern std::string_view getErrorMessage(Error);
