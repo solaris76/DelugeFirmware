@@ -50,6 +50,7 @@ SettingToggle menuAlternativeTapTempoBehaviour(RuntimeFeatureSettingType::Altern
 SettingToggle menuHorizontalMenus(RuntimeFeatureSettingType::HorizontalMenus);
 SettingToggle menuTrimFromStartOfAudioClip(RuntimeFeatureSettingType::TrimFromStartOfAudioClip);
 SettingToggle menuShowBatteryLevel(RuntimeFeatureSettingType::ShowBatteryLevel);
+SettingToggle menuEnableLaunchpadGridMirror(RuntimeFeatureSettingType::EnableLaunchpadGridMirror);
 Setting menuGeneratorCcOutput(RuntimeFeatureSettingType::GeneratorCcOutput);
 
 std::array<MenuItem*, RuntimeFeatureSettingType::MaxElement - kNonTopLevelSettings> subMenuEntries{
@@ -76,6 +77,7 @@ std::array<MenuItem*, RuntimeFeatureSettingType::MaxElement - kNonTopLevelSettin
     &menuHorizontalMenus,
     &menuTrimFromStartOfAudioClip,
     &menuShowBatteryLevel,
+    &menuEnableLaunchpadGridMirror,
     &menuGeneratorCcOutput};
 
 Settings::Settings(l10n::String name, l10n::String title) : menu_item::Submenu(name, title, subMenuEntries) {
