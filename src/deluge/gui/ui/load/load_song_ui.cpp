@@ -312,6 +312,7 @@ void LoadSongUI::doQueueLoadNextSongIfAvailable(int8_t offset) {
 
 // Before calling this, you must set loadButtonReleased.
 void LoadSongUI::performLoad() {
+	launchpad_extension::onSongLoadStarting();
 	performingLoad = true;
 	FileItem* currentFileItem = getCurrentFileItem();
 
@@ -321,6 +322,7 @@ void LoadSongUI::performLoad() {
 		                          : Error::NO_FURTHER_FILES_THIS_DIRECTION); // Make it say "NONE" on numeric Deluge,
 		                                                                     // for consistency with old times.
 		performingLoad = false;
+		launchpad_extension::onSongLoadAborted();
 		return;
 	}
 
@@ -439,6 +441,7 @@ fail:
 		currentUIMode = UI_MODE_NONE;
 		display->removeWorkingAnimation();
 		performingLoad = false;
+		launchpad_extension::onSongLoadAborted();
 		return;
 	}
 
@@ -603,7 +606,6 @@ swapDone:
 	PadLEDs::doGreyoutInstantly(); // This will get faded out of just below
 	setUIForLoadedSong(currentSong);
 	currentUIMode = UI_MODE_NONE;
-	launchpad_extension::onSongLoaded();
 
 	display->removeWorkingAnimation();
 
@@ -623,6 +625,7 @@ swapDone:
 	}
 
 	performingLoad = false;
+	launchpad_extension::onSongLoaded();
 }
 
 ActionResult LoadSongUI::timerCallback() {
