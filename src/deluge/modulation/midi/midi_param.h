@@ -25,4 +25,7 @@ public:
 
 	uint8_t cc;
 	AutoParam param;
+	uint32_t lastGeneratorCcStepIndex = 0xFFFFFFFF;
+	uint32_t lastGeneratorCcSendSample = 0;
+	int32_t lastGeneratorCcValueSent = -1;
 };

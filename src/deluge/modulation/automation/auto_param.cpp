@@ -35,6 +35,7 @@
 #include "modulation/params/param.h"
 #include "modulation/params/param_collection.h"
 #include "modulation/params/param_node.h"
+#include "playback/playback_handler.h"
 
 namespace params = deluge::modulation::params;
 #include "playback/mode/playback_mode.h"
@@ -87,8 +88,11 @@ void AutoParam::setAutomationLaneType(AutomationLaneType type, ModelStackWithAut
 		}
 
 		if (automationStateChanged || generatorTypeChanged) {
-			modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, oldValue, automationStateChanged,
-			                                                          automatedBefore, automatedNow);
+			bool sendExternal = playbackHandler.isEitherClockActive() || automationStateChanged;
+			if (sendExternal) {
+				modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, oldValue, automationStateChanged,
+				                                                          automatedBefore, automatedNow);
+			}
 		}
 	}
 }
