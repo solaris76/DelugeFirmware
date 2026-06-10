@@ -107,6 +107,10 @@ void MidiEngine::sendAllNotesOff(MIDISource source, int32_t channel, int32_t fil
 	sendMidi(source, MIDIMessage::cc(channel, 123, 0), filter);
 }
 
+void MidiEngine::sendAllNotesOff(MIDISource source, int32_t channel, int32_t filter, uint8_t deviceFilter) {
+	sendMidi(source, MIDIMessage::cc(channel, 123, 0), filter, true, deviceFilter);
+}
+
 void MidiEngine::sendCC(MIDISource source, int32_t channel, int32_t cc, int32_t value, int32_t filter) {
 	if (value > 127) {
 		value = 127;
@@ -150,25 +154,52 @@ void MidiEngine::sendBank(MIDISource source, int32_t channel, int32_t num, int32
 	sendCC(source, channel, 0, num, filter);
 }
 
+void MidiEngine::sendBank(MIDISource source, int32_t channel, int32_t num, int32_t filter, uint8_t deviceFilter) {
+	sendCC(source, channel, 0, num, filter, deviceFilter);
+}
+
 void MidiEngine::sendSubBank(MIDISource source, int32_t channel, int32_t num, int32_t filter) {
 	sendCC(source, channel, 32, num, filter);
+}
+
+void MidiEngine::sendSubBank(MIDISource source, int32_t channel, int32_t num, int32_t filter, uint8_t deviceFilter) {
+	sendCC(source, channel, 32, num, filter, deviceFilter);
 }
 
 void MidiEngine::sendPGMChange(MIDISource source, int32_t channel, int32_t pgm, int32_t filter) {
 	sendMidi(source, MIDIMessage::programChange(channel, pgm), filter);
 }
 
+void MidiEngine::sendPGMChange(MIDISource source, int32_t channel, int32_t pgm, int32_t filter, uint8_t deviceFilter) {
+	sendMidi(source, MIDIMessage::programChange(channel, pgm), filter, true, deviceFilter);
+}
+
 void MidiEngine::sendPitchBend(MIDISource source, int32_t channel, uint16_t bend, int32_t filter) {
 	sendMidi(source, MIDIMessage::pitchBend(channel, bend), filter);
+}
+
+void MidiEngine::sendPitchBend(MIDISource source, int32_t channel, uint16_t bend, int32_t filter,
+                               uint8_t deviceFilter) {
+	sendMidi(source, MIDIMessage::pitchBend(channel, bend), filter, true, deviceFilter);
 }
 
 void MidiEngine::sendChannelAftertouch(MIDISource source, int32_t channel, uint8_t value, int32_t filter) {
 	sendMidi(source, MIDIMessage::channelAftertouch(channel, value), filter);
 }
 
+void MidiEngine::sendChannelAftertouch(MIDISource source, int32_t channel, uint8_t value, int32_t filter,
+                                       uint8_t deviceFilter) {
+	sendMidi(source, MIDIMessage::channelAftertouch(channel, value), filter, true, deviceFilter);
+}
+
 void MidiEngine::sendPolyphonicAftertouch(MIDISource source, int32_t channel, uint8_t value, uint8_t noteCode,
                                           int32_t filter) {
 	sendMidi(source, MIDIMessage::polyphonicAftertouch(channel, noteCode, value), filter);
+}
+
+void MidiEngine::sendPolyphonicAftertouch(MIDISource source, int32_t channel, uint8_t value, uint8_t noteCode,
+                                          int32_t filter, uint8_t deviceFilter) {
+	sendMidi(source, MIDIMessage::polyphonicAftertouch(channel, noteCode, value), filter, true, deviceFilter);
 }
 
 void MidiEngine::sendMidi(MIDISource source, MIDIMessage message, int32_t filter, bool sendUSB) {

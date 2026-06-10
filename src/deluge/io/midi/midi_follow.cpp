@@ -69,6 +69,29 @@ using namespace gui;
 #define MIDI_DEFAULTS_SETTINGS_DISPLAYPARAM_POPUP_TAG "popup"
 #define MIDI_DEFAULTS_CC_TAG "cc_mappings"
 
+namespace {
+
+uint8_t getOutputDeviceFilterForCable(const MIDICable* cable) {
+	if (cable == nullptr) {
+		return 0;
+	}
+	if (cable == &MIDIDeviceManager::root_din.cable) {
+		return 1;
+	}
+	if (MIDIDeviceManager::root_usb != nullptr) {
+		uint32_t usbIndex = 0;
+		for (auto& usbCable : MIDIDeviceManager::root_usb->getCables()) {
+			if (cable == &usbCable) {
+				return 2 + usbIndex;
+			}
+			usbIndex++;
+		}
+	}
+	return 0;
+}
+
+} // namespace
+
 constexpr int32_t PARAM_ID_NONE = 255;
 constexpr int32_t MIDI_CC_MUTE = 89;
 constexpr int32_t MIDI_CC_SOLO = 90;
@@ -1242,7 +1265,12 @@ void MidiFollow::sendCCForMidiFollowFeedback(int32_t channel, int32_t ccNumber, 
 
 		int32_t midiOutputFilter = midiInput.channelOrZone;
 
-		midiEngine.sendCC(this, channel, ccNumber, knobPos + kKnobPosOffset, midiOutputFilter);
+		// Feedback is for the MIDI Follow input device only — never broadcast to every output port.
+		if (MIDIDeviceManager::differentiatingInputsByDevice && midiInput.cable == nullptr) {
+			return;
+		}
+		uint8_t deviceFilter = getOutputDeviceFilterForCable(midiInput.cable);
+		midiEngine.sendCC(this, channel, ccNumber, knobPos + kKnobPosOffset, midiOutputFilter, deviceFilter);
 
 		timeLastCCSent[ccNumber] = AudioEngine::audioSampleTimer;
 	}
