@@ -821,7 +821,7 @@ startHoldingDown:
 						selectedClipPressXDisplay = xDisplay;
 						performActionOnPadRelease = true;
 						selectedClipTimePressed = AudioEngine::audioSampleTimer;
-						view.setActiveModControllableTimelineCounter(clip);
+						view.setActiveModControllableTimelineCounter(clip, false);
 						view.displayOutputName(clip->output, true, clip);
 					}
 				}
@@ -4018,7 +4018,7 @@ ActionResult SessionView::gridHandlePadsEdit(int32_t x, int32_t y, int32_t on, C
 			currentUIMode = UI_MODE_CLIP_PRESSED_IN_SONG_VIEW;
 			performActionOnPadRelease = true;
 			selectedClipTimePressed = AudioEngine::audioSampleTimer;
-			view.setActiveModControllableTimelineCounter(clip);
+			view.setActiveModControllableTimelineCounter(clip, false);
 		}
 		// Remember the second press down if empty
 		else if (gridSecondPressedX == -1 || gridSecondPressedY == -1) {
@@ -4215,9 +4215,7 @@ ActionResult SessionView::gridHandlePadsLaunch(int32_t x, int32_t y, int32_t on,
 						view.displayOutputName(clip->output, true, clip);
 						display->cancelPopup();
 
-						// this needs to be called after the current clip is set in order to ensure that
-						// if midi follow feedback is enabled, it sends feedback for the right clip
-						view.setActiveModControllableTimelineCounter(clip);
+						view.setActiveModControllableTimelineCounter(clip, false);
 					}
 				}
 
@@ -4292,9 +4290,7 @@ ActionResult SessionView::gridHandlePadsLaunchWithSelection(int32_t x, int32_t y
 			gridSelectClipForPulsing(*clip);
 			currentSong->setCurrentClip(clip);
 			view.displayOutputName(clip->output, true, clip);
-			// this needs to be called after the current clip is set in order to ensure that
-			// if midi follow feedback is enabled, it sends feedback for the right clip
-			view.setActiveModControllableTimelineCounter(clip);
+			view.setActiveModControllableTimelineCounter(clip, false);
 		}
 		// Special case, if there are already selected pads we allow immediate arming all others
 		else {

@@ -3627,16 +3627,17 @@ void InstrumentClip::sendMIDIPGM() {
 
 	int32_t outputFilter = midiInstrument->getChannel();
 	int32_t masterChannel = midiInstrument->getOutputMasterChannel();
+	uint8_t deviceFilter = midiInstrument->outputDevice;
 
 	// Send MIDI PGM if there is one...
 	if (midiBank != 128) {
-		midiEngine.sendBank(midiInstrument, masterChannel, midiBank, outputFilter);
+		midiEngine.sendBank(midiInstrument, masterChannel, midiBank, outputFilter, deviceFilter);
 	}
 	if (midiSub != 128) {
-		midiEngine.sendSubBank(midiInstrument, masterChannel, midiSub, outputFilter);
+		midiEngine.sendSubBank(midiInstrument, masterChannel, midiSub, outputFilter, deviceFilter);
 	}
 	if (midiPGM != 128) {
-		midiEngine.sendPGMChange(midiInstrument, masterChannel, midiPGM, outputFilter);
+		midiEngine.sendPGMChange(midiInstrument, masterChannel, midiPGM, outputFilter, deviceFilter);
 	}
 }
 
