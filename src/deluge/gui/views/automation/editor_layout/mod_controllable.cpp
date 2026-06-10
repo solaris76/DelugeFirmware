@@ -18,6 +18,7 @@
 #include "gui/views/automation/editor_layout/mod_controllable.h"
 #include "gui/views/instrument_clip_view.h"
 #include "gui/views/view.h"
+#include "hid/buttons.h"
 #include "hid/display/display.h"
 #include "hid/led/indicator_leds.h"
 #include "model/action/action_logger.h"
@@ -792,35 +793,59 @@ bool AutomationEditorLayoutModControllable::recordAutomationSinglePadPress(int32
 }
 
 bool AutomationEditorLayoutModControllable::automationModEncoderActionForShapeAmount(
-    ModelStackWithAutoParam* modelStackWithParam, int32_t offset) {
+    ModelStackWithAutoParam* modelStackWithParam, int32_t whichModEncoder, int32_t offset) {
 
 	if (!modelStackWithParam || !modelStackWithParam->autoParam || !modelStackWithParam->autoParam->isGeneratorLane()) {
 		return false;
 	}
 
-	int32_t amount = modelStackWithParam->autoParam->getShapeAmount();
-	amount += offset;
-	if (amount < 0) {
-		amount = 0;
-	}
-	else if (amount > 127) {
-		amount = 127;
-	}
-	modelStackWithParam->autoParam->setShapeAmount(amount);
+	AutoParam* param = modelStackWithParam->autoParam;
+	bool adjustOffset = whichModEncoder == 0 && Buttons::isButtonPressed(deluge::hid::button::MOD_ENCODER_0)
+	                    && param->shapeSupportsPhaseOffset();
 
+	int32_t displayValue = 0;
 	char buffer[8];
-	buffer[0] = 'D';
-	buffer[1] = ':';
-	intToString(amount, &buffer[2]);
+
+	if (adjustOffset) {
+		int32_t shapeOffset = param->getShapeOffset();
+		shapeOffset += offset;
+		if (shapeOffset < 0) {
+			shapeOffset = 0;
+		}
+		else if (shapeOffset > 127) {
+			shapeOffset = 127;
+		}
+		param->setShapeOffset(shapeOffset);
+		displayValue = shapeOffset;
+		buffer[0] = 'O';
+		buffer[1] = ':';
+		intToString(shapeOffset, &buffer[2]);
+	}
+	else {
+		int32_t amount = param->getShapeAmount();
+		amount += offset;
+		if (amount < 0) {
+			amount = 0;
+		}
+		else if (amount > 127) {
+			amount = 127;
+		}
+		param->setShapeAmount(amount);
+		displayValue = amount;
+		buffer[0] = 'D';
+		buffer[1] = ':';
+		intToString(amount, &buffer[2]);
+	}
+
+	param->notifyGeneratorValueAtCurrentPos(modelStackWithParam);
 	display->displayPopup(buffer);
 
 	if (!getOnArrangerView()) {
 		modelStackWithParam->getTimelineCounter()->instrumentBeenEdited();
 	}
 
-	int32_t knobPosLeft = amount;
-	renderDisplay(knobPosLeft, kNoSelection, true);
-	setAutomationKnobIndicatorLevels(modelStackWithParam, knobPosLeft, kNoSelection);
+	renderDisplay(displayValue, kNoSelection, true);
+	setAutomationKnobIndicatorLevels(modelStackWithParam, displayValue, kNoSelection);
 
 	return true;
 }
@@ -888,7 +913,7 @@ bool AutomationEditorLayoutModControllable::automationModEncoderActionForSelecte
 		}
 
 		if (whichModEncoder == 0 && modelStackWithParam->autoParam->isGeneratorLane()) {
-			return automationModEncoderActionForShapeAmount(modelStackWithParam, offset);
+			return automationModEncoderActionForShapeAmount(modelStackWithParam, whichModEncoder, offset);
 		}
 
 		int32_t xDisplay = 0;
@@ -978,7 +1003,7 @@ void AutomationEditorLayoutModControllable::automationModEncoderActionForUnselec
 		}
 
 		if (whichModEncoder == 0 && modelStackWithParam->autoParam->isGeneratorLane()) {
-			automationModEncoderActionForShapeAmount(modelStackWithParam, offset);
+			automationModEncoderActionForShapeAmount(modelStackWithParam, whichModEncoder, offset);
 			return;
 		}
 

@@ -3214,6 +3214,12 @@ expressionParam:
 					}
 					reader.exitTag("shapeAmount");
 				}
+				else if (!strcmp(tagName, "shapeOffset")) {
+					if (param) {
+						param->setShapeOffset(reader.readTagOrAttributeValueInt());
+					}
+					reader.exitTag("shapeOffset");
+				}
 				else {
 					reader.exitTag(tagName);
 				}
