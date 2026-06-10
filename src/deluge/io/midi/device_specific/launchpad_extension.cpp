@@ -446,6 +446,18 @@ void requestSync() {
 	doSync(true);
 }
 
+void requestSyncAfterViewChange() {
+	if (!featureEnabled() || launchpadQuiesced()) {
+		return;
+	}
+
+	if (launchpad_cable::getPort2() == nullptr) {
+		return;
+	}
+
+	doSync(false);
+}
+
 void forceSessionDefault(bool fullHardwareReset) {
 	if (!featureEnabled()) {
 		return;

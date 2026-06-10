@@ -1704,6 +1704,16 @@ void View::notifyParamAutomationOccurred(ParamManager* paramManager, bool update
 }
 
 void View::sendMidiFollowFeedback(ModelStackWithAutoParam* modelStackWithParam, int32_t knobPos, bool isAutomation) {
+	// Context switches (clip/session changes) can scan up to 128 CCs — debounce to avoid USB hub floods.
+	if (modelStackWithParam == nullptr && knobPos == kNoSelection) {
+		static uint32_t lastContextFeedbackSample = 0;
+		uint32_t now = AudioEngine::audioSampleTimer;
+		if (now - lastContextFeedbackSample < (kSampleRate / 10)) {
+			return;
+		}
+		lastContextFeedbackSample = now;
+	}
+
 	if (midiEngine.midiFollowFeedbackChannelType != MIDIFollowChannelType::NONE) {
 		int32_t channel =
 		    midiEngine.midiFollowChannelType[util::to_underlying(midiEngine.midiFollowFeedbackChannelType)]

@@ -102,6 +102,28 @@ static void SetupEmulatedDisplaySetting(RuntimeFeatureSetting& setting, deluge::
 	};
 }
 
+static void SetupGeneratorCcOutputSetting(RuntimeFeatureSetting& setting, deluge::l10n::String displayName,
+                                          std::string_view xmlName, RuntimeFeatureStateGeneratorCcOutput def) {
+	setting.displayName = displayName;
+	setting.xmlName = xmlName;
+	setting.value = static_cast<uint32_t>(def);
+
+	setting.options = {
+	    {
+	        .displayName = display->haveOLED() ? "Realtime" : "LIVE",
+	        .value = RuntimeFeatureStateGeneratorCcOutput::Realtime,
+	    },
+	    {
+	        .displayName = display->haveOLED() ? "Throttled" : "THRO",
+	        .value = RuntimeFeatureStateGeneratorCcOutput::Throttled,
+	    },
+	    {
+	        .displayName = display->haveOLED() ? "16th steps" : "16TH",
+	        .value = RuntimeFeatureStateGeneratorCcOutput::StepBoundaries,
+	    },
+	};
+}
+
 void RuntimeFeatureSettings::init() {
 	using enum deluge::l10n::String;
 	// Drum randomizer
@@ -205,6 +227,11 @@ void RuntimeFeatureSettings::init() {
 	SetupOnOffSetting(settings[RuntimeFeatureSettingType::EnableLaunchpadGridMirror],
 	                  STRING_FOR_COMMUNITY_FEATURE_LAUNCHPAD_GRID_MIRROR, "enableLaunchpadGridMirror",
 	                  RuntimeFeatureStateToggle::Off);
+
+	// Generator CC output rate
+	SetupGeneratorCcOutputSetting(settings[RuntimeFeatureSettingType::GeneratorCcOutput],
+	                              STRING_FOR_COMMUNITY_FEATURE_GENERATOR_CC_OUTPUT, "generatorCcOutput",
+	                              RuntimeFeatureStateGeneratorCcOutput::Realtime);
 }
 
 void RuntimeFeatureSettings::readSettingsFromFile() {

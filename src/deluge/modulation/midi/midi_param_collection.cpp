@@ -25,11 +25,75 @@
 #include "model/instrument/instrument.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/model_stack.h"
+#include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
+#include "modulation/automation/auto_param.h"
 #include "modulation/midi/midi_param.h"
+#include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "storage/storage_manager.h"
 #include "util/functions.h"
+
+namespace {
+
+static constexpr uint32_t kGeneratorCcThrottleSamples = kSampleRate / 30;
+
+MIDIParam* getMidiParamFromModelStack(ModelStackWithAutoParam const* modelStack) {
+	if (modelStack->paramCollection == nullptr) {
+		return nullptr;
+	}
+
+	auto* collection = static_cast<MIDIParamCollection*>(modelStack->paramCollection);
+	int32_t paramIndex = collection->params.searchExact(modelStack->paramId);
+	if (paramIndex < 0) {
+		return nullptr;
+	}
+
+	return collection->params.getElement(paramIndex);
+}
+
+bool shouldSendGeneratorCc(MIDIParam* midiParam, AutoParam const* param, ModelStackWithAutoParam const* modelStack,
+                           int32_t newValue, bool forceSend) {
+	if (forceSend || param == nullptr || !param->isGeneratorLane()) {
+		return true;
+	}
+
+	auto mode = static_cast<RuntimeFeatureStateGeneratorCcOutput>(
+	    runtimeFeatureSettings.get(RuntimeFeatureSettingType::GeneratorCcOutput));
+	if (mode == RuntimeFeatureStateGeneratorCcOutput::Realtime) {
+		return true;
+	}
+
+	if (midiParam == nullptr) {
+		return true;
+	}
+
+	if (mode == RuntimeFeatureStateGeneratorCcOutput::Throttled) {
+		uint32_t now = AudioEngine::audioSampleTimer;
+		if (now - midiParam->lastGeneratorCcSendSample >= kGeneratorCcThrottleSamples) {
+			midiParam->lastGeneratorCcSendSample = now;
+			midiParam->lastGeneratorCcValueSent = MIDIParamCollection::autoparamValueToCC(newValue);
+			return true;
+		}
+		return false;
+	}
+
+	uint32_t clipPos = modelStack->timelineCounterIsSet() ? modelStack->getLastProcessedPos() : 0;
+	uint32_t readPos =
+	    param->shouldUseAutomationClockRate(modelStack) ? param->getLaneReadPos(clipPos, modelStack) : clipPos;
+	uint32_t stepLen = modelStack->song != nullptr ? modelStack->song->getSixteenthNoteLength() : 1;
+	if (stepLen == 0) {
+		stepLen = 1;
+	}
+	uint32_t stepIndex = readPos / stepLen;
+	if (stepIndex != midiParam->lastGeneratorCcStepIndex) {
+		midiParam->lastGeneratorCcStepIndex = stepIndex;
+		return true;
+	}
+	return false;
+}
+
+} // namespace
 
 MIDIParamCollection::MIDIParamCollection(ParamCollectionSummary* summary)
     : ParamCollection(sizeof(MIDIParamCollection), summary) {
@@ -262,7 +326,11 @@ void MIDIParamCollection::grabValuesFromPos(uint32_t pos, ModelStackWithParamCol
 			bool shouldSend = param->grabValueFromPos(pos, modelStackWithAutoParam);
 
 			if (shouldSend) {
-				notifyParamModifiedInSomeWay(modelStackWithAutoParam, oldValue, false, true, true);
+				// Generator lanes at rest would spam CC on every UI/automation audition; send during playback only.
+				bool sendExternal = playbackHandler.isEitherClockActive() || !param->isGeneratorLane();
+				if (sendExternal) {
+					notifyParamModifiedInSomeWay(modelStackWithAutoParam, oldValue, false, true, true);
+				}
 			}
 		}
 	}
@@ -292,6 +360,12 @@ void MIDIParamCollection::notifyParamModifiedInSomeWay(ModelStackWithAutoParam c
 	    modelStack->modControllable->valueChangedEnoughToMatter(oldValue, new_v, getParamKind(), modelStack->paramId);
 
 	if (!current_value_changed && !(automationChanged && automatedNow)) {
+		return;
+	}
+
+	bool forceSend = automationChanged && automatedNow;
+	MIDIParam* midiParam = getMidiParamFromModelStack(modelStack);
+	if (!shouldSendGeneratorCc(midiParam, modelStack->autoParam, modelStack, new_v, forceSend)) {
 		return;
 	}
 

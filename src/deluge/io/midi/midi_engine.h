@@ -93,15 +93,23 @@ public:
 	void sendUsbMidi(MIDIMessage message, int32_t filter, uint8_t deviceFilter);
 
 	void sendPGMChange(MIDISource source, int32_t channel, int32_t pgm, int32_t filter);
+	void sendPGMChange(MIDISource source, int32_t channel, int32_t pgm, int32_t filter, uint8_t deviceFilter);
 	void sendAllNotesOff(MIDISource source, int32_t channel, int32_t filter);
+	void sendAllNotesOff(MIDISource source, int32_t channel, int32_t filter, uint8_t deviceFilter);
 	void sendBank(MIDISource source, int32_t channel, int32_t num, int32_t filter);
+	void sendBank(MIDISource source, int32_t channel, int32_t num, int32_t filter, uint8_t deviceFilter);
 	void sendSubBank(MIDISource source, int32_t channel, int32_t num, int32_t filter);
+	void sendSubBank(MIDISource source, int32_t channel, int32_t num, int32_t filter, uint8_t deviceFilter);
 	/// Send pitch bend
 	///
 	/// @param bend Bend amount. Only the lower 14 bits are used
 	void sendPitchBend(MIDISource source, int32_t channel, uint16_t bend, int32_t filter);
+	void sendPitchBend(MIDISource source, int32_t channel, uint16_t bend, int32_t filter, uint8_t deviceFilter);
 	void sendChannelAftertouch(MIDISource source, int32_t channel, uint8_t value, int32_t filter);
+	void sendChannelAftertouch(MIDISource source, int32_t channel, uint8_t value, int32_t filter, uint8_t deviceFilter);
 	void sendPolyphonicAftertouch(MIDISource source, int32_t channel, uint8_t value, uint8_t noteCode, int32_t filter);
+	void sendPolyphonicAftertouch(MIDISource source, int32_t channel, uint8_t value, uint8_t noteCode, int32_t filter,
+	                              uint8_t deviceFilter);
 	bool anythingInOutputBuffer();
 
 	// If bit "16" (actually bit 4) is 1, this is a program change. (Wait, still?)
