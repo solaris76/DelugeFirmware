@@ -130,6 +130,15 @@ public:
 		automationShapeAmount = amount;
 	}
 	uint8_t getShapeAmount() const { return automationShapeAmount; }
+	void setShapeOffset(uint8_t offset) {
+		if (offset > 127) {
+			offset = 127;
+		}
+		automationShapeOffset = offset;
+	}
+	uint8_t getShapeOffset() const { return automationShapeOffset; }
+	bool shapeSupportsPhaseOffset() const;
+	void notifyGeneratorValueAtCurrentPos(ModelStackWithAutoParam const* modelStack);
 
 	void setAutomationClockDivider(int8_t rate);
 	int8_t getAutomationClockDivider() const { return automationClockDivider; }
@@ -155,6 +164,7 @@ public:
 	int8_t automationClockDivider = 1; // 1 = clip speed; >1 = divide (slower); <-1 = multiply (faster)
 	AutomationLaneType automationLaneType = AutomationLaneType::MANUAL;
 	uint8_t automationShapeAmount = 64; // generator depth (0–127); pulse width for PULSE lanes
+	uint8_t automationShapeOffset = 0;  // phase offset (0–127 maps to 0–100% of loop length)
 
 	// "Latching" happens when you start recording values, but then stops if you arrive at any pre-existing values. So
 	// it only works in empty stretches of time.
@@ -167,6 +177,7 @@ private:
 	int32_t scaleLaneTicksToClipTicks(int32_t laneTicks, int32_t clipPos, int32_t effectiveLength,
 	                                  ModelStackWithAutoParam const* modelStack) const;
 	uint32_t lanePosToPhase(uint32_t lanePos, ModelStackWithAutoParam const* modelStack) const;
+	uint32_t getGeneratorLanePosWithOffset(uint32_t lanePos, ModelStackWithAutoParam const* modelStack) const;
 	int32_t getGeneratorWaveRaw(uint32_t phase, uint32_t lanePos, int32_t loopLength) const;
 	int32_t getGeneratorInternalKnobPos(uint32_t lanePos, ModelStackWithAutoParam const* modelStack,
 	                                    bool isBipolar) const;

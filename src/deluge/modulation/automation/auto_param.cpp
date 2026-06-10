@@ -66,15 +66,28 @@ void AutoParam::init() {
 	automationClockDivider = 1;
 	automationLaneType = AutomationLaneType::MANUAL;
 	automationShapeAmount = 64;
+	automationShapeOffset = 0;
 }
 
 void AutoParam::setAutomationLaneType(AutomationLaneType type, ModelStackWithAutoParam const* modelStack) {
+	AutomationLaneType oldType = automationLaneType;
 	bool automatedBefore = isAutomated();
+	int32_t oldValue = getCurrentValue();
 	automationLaneType = type;
 	if (modelStack) {
 		bool automatedNow = isAutomated();
-		if (automatedBefore != automatedNow) {
-			modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, getCurrentValue(), false,
+		bool automationStateChanged = automatedBefore != automatedNow;
+		bool generatorTypeChanged =
+		    oldType != type && (oldType != AutomationLaneType::MANUAL || type != AutomationLaneType::MANUAL);
+
+		if (isGeneratorLane()) {
+			uint32_t clipPos = modelStack->timelineCounterIsSet() ? modelStack->getLastProcessedPos() : 0;
+			uint32_t readPos = shouldUseAutomationClockRate(modelStack) ? getLaneReadPos(clipPos, modelStack) : clipPos;
+			currentValue = getGeneratorParamValue(readPos, modelStack);
+		}
+
+		if (automationStateChanged || generatorTypeChanged) {
+			modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, oldValue, automationStateChanged,
 			                                                          automatedBefore, automatedNow);
 		}
 	}
@@ -172,6 +185,7 @@ void AutoParam::cloneFrom(AutoParam* otherParam, bool copyAutomation) {
 	automationClockDivider = otherParam->automationClockDivider;
 	automationLaneType = otherParam->automationLaneType;
 	automationShapeAmount = otherParam->automationShapeAmount;
+	automationShapeOffset = otherParam->automationShapeOffset;
 
 	renewedOverridingAtTime = 0;
 }
@@ -486,6 +500,7 @@ void AutoParam::deleteAutomation(Action* action, ModelStackWithAutoParam const* 
 	renewedOverridingAtTime = 0;
 	automationLaneType = AutomationLaneType::MANUAL;
 	automationShapeAmount = 64;
+	automationShapeOffset = 0;
 
 	if (shouldNotify && wasAutomated) {
 		modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, getCurrentValue(), true, true, false);
@@ -500,9 +515,50 @@ void AutoParam::deleteAutomationBasicForSetup() {
 	renewedOverridingAtTime = 0;
 	automationLaneType = AutomationLaneType::MANUAL;
 	automationShapeAmount = 64;
+	automationShapeOffset = 0;
 }
 
 #define OVERRIDE_DURATION_MAGNITUDE_INTERPOLATING 15 // Means 2^x audio samples in length
+
+bool AutoParam::shapeSupportsPhaseOffset() const {
+	switch (automationLaneType) {
+	case AutomationLaneType::SINE:
+	case AutomationLaneType::SQUARE:
+	case AutomationLaneType::TRIANGLE:
+	case AutomationLaneType::SAW:
+	case AutomationLaneType::PULSE:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+void AutoParam::notifyGeneratorValueAtCurrentPos(ModelStackWithAutoParam const* modelStack) {
+	if (!isGeneratorLane()) {
+		return;
+	}
+
+	int32_t oldValue = currentValue;
+	uint32_t clipPos = modelStack->timelineCounterIsSet() ? modelStack->getLastProcessedPos() : 0;
+	uint32_t readPos = shouldUseAutomationClockRate(modelStack) ? getLaneReadPos(clipPos, modelStack) : clipPos;
+	currentValue = getGeneratorParamValue(readPos, modelStack);
+	modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, oldValue, false, true, true);
+}
+
+uint32_t AutoParam::getGeneratorLanePosWithOffset(uint32_t lanePos, ModelStackWithAutoParam const* modelStack) const {
+	if (automationShapeOffset == 0) {
+		return lanePos;
+	}
+
+	int32_t loopLength = modelStack->getLoopLength();
+	if (loopLength <= 0) {
+		return lanePos;
+	}
+
+	uint32_t offsetTicks = static_cast<uint32_t>(((uint64_t)automationShapeOffset * loopLength) / 127);
+	return (lanePos + offsetTicks) % static_cast<uint32_t>(loopLength);
+}
 
 uint32_t AutoParam::lanePosToPhase(uint32_t lanePos, ModelStackWithAutoParam const* modelStack) const {
 	int32_t loopLength = modelStack->getLoopLength();
@@ -558,8 +614,9 @@ int32_t AutoParam::getGeneratorInternalKnobPos(uint32_t lanePos, ModelStackWithA
 		loopLength = 1;
 	}
 
-	uint32_t phase = lanePosToPhase(lanePos, modelStack);
-	int32_t wave = getGeneratorWaveRaw(phase, lanePos, loopLength);
+	uint32_t offsetLanePos = getGeneratorLanePosWithOffset(lanePos, modelStack);
+	uint32_t phase = lanePosToPhase(offsetLanePos, modelStack);
+	int32_t wave = getGeneratorWaveRaw(phase, offsetLanePos, loopLength);
 	int32_t waveKnob = static_cast<int32_t>(wave >> 25);
 
 	int32_t depth = automationShapeAmount;
@@ -1685,7 +1742,9 @@ void AutoParam::setPlayPos(uint32_t pos, ModelStackWithAutoParam const* modelSta
 
 	if (isGeneratorLane()) {
 		uint32_t readPos = shouldUseAutomationClockRate(modelStack) ? getLaneReadPos(pos, modelStack) : pos;
+		int32_t oldValue = currentValue;
 		currentValue = getGeneratorParamValue(readPos, modelStack);
+		modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, oldValue, false, true, true);
 		return;
 	}
 
@@ -2181,12 +2240,17 @@ void AutoParam::writeToFile(Serializer& writer, bool writeAutomation, int32_t* v
 			writer.write(buffer + 6);
 		}
 
-		if (automationLaneType != AutomationLaneType::MANUAL || automationShapeAmount != 64) {
+		if (automationLaneType != AutomationLaneType::MANUAL || automationShapeAmount != 64
+		    || automationShapeOffset != 0) {
 			writer.write("|");
 			intToHex(util::to_underlying(automationLaneType), buffer, 2);
 			writer.write(buffer + 6);
 			intToHex(automationShapeAmount, buffer, 2);
 			writer.write(buffer + 6);
+			if (automationShapeOffset != 0) {
+				intToHex(automationShapeOffset, buffer, 2);
+				writer.write(buffer + 6);
+			}
 		}
 	}
 }
@@ -2317,7 +2381,8 @@ Error AutoParam::readFromFile(Deserializer& reader, int32_t readAutomationUpToPo
 	}
 
 	if (reader.getNumCharsRemainingInValueBeforeEndOfCluster() >= 5) {
-		char const* laneSuffix = reader.readNextCharsOfTagOrAttributeValue(5);
+		int32_t laneSuffixLength = reader.getNumCharsRemainingInValueBeforeEndOfCluster() >= 7 ? 7 : 5;
+		char const* laneSuffix = reader.readNextCharsOfTagOrAttributeValue(laneSuffixLength);
 		if (laneSuffix && laneSuffix[0] == '|') {
 			int32_t laneType = hexToIntFixedLength(&laneSuffix[1], 2);
 			if (laneType >= 0 && laneType < kNumAutomationLaneTypes) {
@@ -2326,6 +2391,12 @@ Error AutoParam::readFromFile(Deserializer& reader, int32_t readAutomationUpToPo
 			int32_t shapeAmount = hexToIntFixedLength(&laneSuffix[3], 2);
 			if (shapeAmount >= 0 && shapeAmount <= 127) {
 				automationShapeAmount = shapeAmount;
+			}
+			if (laneSuffixLength >= 7) {
+				int32_t shapeOffset = hexToIntFixedLength(&laneSuffix[5], 2);
+				if (shapeOffset >= 0 && shapeOffset <= 127) {
+					automationShapeOffset = shapeOffset;
+				}
 			}
 		}
 	}

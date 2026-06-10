@@ -83,7 +83,8 @@ public:
 	void automationModEncoderActionForUnselectedPad(ModelStackWithAutoParam* modelStackWithParam,
 	                                                int32_t whichModEncoder, int32_t offset, int32_t effectiveLength);
 	bool automationModEncoderActionForClockDivider(ModelStackWithAutoParam* modelStackWithParam, int32_t offset);
-	bool automationModEncoderActionForShapeAmount(ModelStackWithAutoParam* modelStackWithParam, int32_t offset);
+	bool automationModEncoderActionForShapeAmount(ModelStackWithAutoParam* modelStackWithParam, int32_t whichModEncoder,
+	                                              int32_t offset);
 
 	// Mod Encoder Button Action
 	void copyAutomation(ModelStackWithAutoParam* modelStackWithParam, Clip* clip, int32_t xScroll, int32_t xZoom);
