@@ -292,7 +292,7 @@ void MIDIParamCollection::notifyParamModifiedInSomeWay(ModelStackWithAutoParam c
 	bool current_value_changed =
 	    modelStack->modControllable->valueChangedEnoughToMatter(oldValue, new_v, getParamKind(), modelStack->paramId);
 
-	if (!current_value_changed) {
+	if (!current_value_changed && !(automationChanged && automatedNow)) {
 		return;
 	}
 
@@ -371,6 +371,10 @@ void MIDIParamCollection::writeToFile(Serializer& writer) {
 
 			if (midiParam->param.getShapeAmount() != 64) {
 				writer.writeTag("shapeAmount", midiParam->param.getShapeAmount());
+			}
+
+			if (midiParam->param.getShapeOffset() != 0) {
+				writer.writeTag("shapeOffset", midiParam->param.getShapeOffset());
 			}
 
 			writer.writeClosingTag("param");
