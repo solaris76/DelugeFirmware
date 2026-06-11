@@ -423,6 +423,9 @@ gotErrorAfterCreatingSong:
 		goto fail;
 	}
 
+	// Song file is closed — safe to load kit MIDI device definitions referenced from embedded XML.
+	StorageManager::loadPendingMidiDeviceDefinitionFilesForSong(preLoadedSong);
+
 	preLoadedSong->dirPath.set(&currentDir);
 
 	String currentFilenameWithoutExtension;
@@ -571,6 +574,8 @@ swapDone:
 			}
 		}
 	}
+
+	StorageManager::loadPendingMidiDeviceDefinitionFilesForSong(currentSong);
 
 	performingLoad = false;
 	launchpad_extension::onSongLoaded();

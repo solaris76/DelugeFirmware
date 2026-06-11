@@ -129,6 +129,10 @@ bool Kit::writeDataToFile(Serializer& writer, Clip* clipForSavingOutputOnly, Son
 	}
 	GlobalEffectableForClip::writeTagsToFile(writer, paramManager, clipForSavingOutputOnly == nullptr);
 
+	// Ensure every MIDI kit row has modKnobs/definition before serializing — never rely on load-time propagation
+	// alone, and never skip modKnobs on write because a sibling drum still has them in memory.
+	MIDIDrum::propagateSharedSettingsAcrossKit(this);
+
 	writer.writeArrayStart("soundSources"); // TODO: change this?
 	int32_t selectedDrumIndex = -1;
 	int32_t drumIndex = 0;
@@ -337,6 +341,8 @@ doReadDrum:
 		song->backUpParamManager(this, clip, &paramManager, true);
 	}
 
+	MIDIDrum::propagateSharedSettingsAcrossKit(this);
+
 	return Error::NONE;
 }
 
@@ -347,6 +353,9 @@ Error Kit::readDrumFromFile(Deserializer& reader, Song* song, Clip* clip, DrumTy
 	if (!newDrum) {
 		return Error::INSUFFICIENT_RAM;
 	}
+
+	// Set before readFromFile so MIDIDrums can reuse labels/modKnobs already loaded for this kit.
+	newDrum->kit = this;
 
 	Error error = newDrum->readFromFile(
 	    reader, song, clip,
