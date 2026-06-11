@@ -25,6 +25,7 @@
 #include "model/clip/instrument_clip.h"
 #include "model/clip/instrument_clip_minder.h"
 #include "model/drum/non_audio_drum.h"
+#include "model/instrument/kit.h"
 #include "modulation/midi/midi_param_collection.h"
 #include "modulation/params/param_set.h"
 #include "storage/storage_manager.h"
@@ -128,22 +129,26 @@ Error MIDIDrum::readFromFile(Deserializer& reader, Song* song, Clip* clip, int32
 			note = reader.readTagOrAttributeValueInt();
 			reader.exitTag("note");
 		}
-		else if (!strcmp(tagName, "outputDevice")) {
-			savedOutputDevice = static_cast<uint8_t>(reader.readTagOrAttributeValueInt());
-			reader.exitTag("outputDevice");
-		}
 		else if (!strcmp(tagName, "outputDeviceName")) {
 			reader.readTagOrAttributeValueString(&savedDeviceName);
+			outputDeviceName.set(&savedDeviceName);
 			reader.exitTag("outputDeviceName");
+		}
+		else if (!strcmp(tagName, "outputDevice")) {
+			savedOutputDevice = static_cast<uint8_t>(reader.readTagOrAttributeValueInt());
+			outputDevice = savedOutputDevice;
+			reader.exitTag("outputDevice");
 		}
 		else if (!strcmp(tagName, "modKnobs")) {
 			Error error = readModKnobAssignmentsFromFile(reader, readAutomationUpToPos);
 			if (error != Error::NONE) {
 				return error;
 			}
+			reader.exitTag();
 		}
 		else if (!strcmp(tagName, "midiDevice")) {
 			readDeviceDefinitionFile(reader, true);
+			reader.exitTag();
 		}
 		else if (NonAudioDrum::readDrumTagFromFile(reader, tagName)) {}
 		else {
@@ -345,7 +350,9 @@ bool MIDIDrum::doesAutomationExistOnMIDIParam(ModelStackWithThreeMainThings* mod
 
 // Write mod knob CC assignments to file
 void MIDIDrum::writeModKnobAssignmentsToFile(Serializer& writer) {
-	// Check if any CC assignments are set (non-default)
+	// Each drum writes its own modKnobs block. Do not skip based on kit siblings — song save walks drums in
+	// note-row order and removes them from the linked list as it goes, so sibling-based dedup only wrote modKnobs
+	// on the last drum.
 	bool hasAssignments = false;
 	for (int32_t m = 0; m < kNumModButtons * kNumPhysicalModKnobs; m++) {
 		if (modKnobCCAssignments[m] != CC_NUMBER_NONE) {
@@ -354,36 +361,38 @@ void MIDIDrum::writeModKnobAssignmentsToFile(Serializer& writer) {
 		}
 	}
 
-	// Only write if there are assignments
-	if (hasAssignments) {
-		writer.writeOpeningTag("modKnobs");
-		for (int32_t m = 0; m < kNumModButtons * kNumPhysicalModKnobs; m++) {
-			int32_t cc = modKnobCCAssignments[m];
-
-			writer.writeOpeningTagBeginning("modKnob");
-			if (cc == CC_NUMBER_NONE) {
-				writer.writeAttribute("cc", "none");
-			}
-			else if (cc == CC_NUMBER_PITCH_BEND) {
-				writer.writeAttribute("cc", "bend");
-			}
-			else if (cc == CC_NUMBER_AFTERTOUCH) {
-				writer.writeAttribute("cc", "aftertouch");
-			}
-			else if (cc == CC_NUMBER_Y_AXIS) {
-				writer.writeAttribute("cc", CC_EXTERNAL_MOD_WHEEL); // Map internal Y axis back to mod wheel
-			}
-			else {
-				writer.writeAttribute("cc", cc);
-			}
-			writer.closeTag(); // Self-closing tag since we don't write automation data here
-		}
-		writer.writeClosingTag("modKnobs");
+	if (!hasAssignments) {
+		return;
 	}
+
+	writer.writeOpeningTag("modKnobs");
+	for (int32_t m = 0; m < kNumModButtons * kNumPhysicalModKnobs; m++) {
+		int32_t cc = modKnobCCAssignments[m];
+
+		writer.writeOpeningTagBeginning("modKnob");
+		if (cc == CC_NUMBER_NONE) {
+			writer.writeAttribute("cc", "none");
+		}
+		else if (cc == CC_NUMBER_PITCH_BEND) {
+			writer.writeAttribute("cc", "bend");
+		}
+		else if (cc == CC_NUMBER_AFTERTOUCH) {
+			writer.writeAttribute("cc", "aftertouch");
+		}
+		else if (cc == CC_NUMBER_Y_AXIS) {
+			writer.writeAttribute("cc", CC_EXTERNAL_MOD_WHEEL); // Map internal Y axis back to mod wheel
+		}
+		else {
+			writer.writeAttribute("cc", cc);
+		}
+		writer.closeTag(); // Self-closing tag since we don't write automation data here
+	}
+	writer.writeClosingTag("modKnobs");
 }
 
 // Read mod knob CC assignments from file
 Error MIDIDrum::readModKnobAssignmentsFromFile(Deserializer& reader, int32_t readAutomationUpToPos) {
+	(void)readAutomationUpToPos;
 	char const* tagName;
 	int32_t m = 0;
 
@@ -393,13 +402,12 @@ Error MIDIDrum::readModKnobAssignmentsFromFile(Deserializer& reader, int32_t rea
 				return Error::FILE_CORRUPTED;
 			}
 
-			// Read the CC attribute
-			char const* ccAttribute = nullptr;
-			while (*(tagName = reader.readNextTagOrAttributeName())) {
-				if (!strcmp(tagName, "cc")) {
-					ccAttribute = reader.readTagOrAttributeValue();
+			char const* innerTag;
+			while (*(innerTag = reader.readNextTagOrAttributeName())) {
+				if (!strcmp(innerTag, "cc")) {
+					char const* ccAttribute = reader.readTagOrAttributeValue();
 
-					if (!strcasecmp(ccAttribute, "none")) {
+					if (!ccAttribute || !strcasecmp(ccAttribute, "none")) {
 						modKnobCCAssignments[m] = CC_NUMBER_NONE;
 					}
 					else if (!strcasecmp(ccAttribute, "bend")) {
@@ -410,7 +418,6 @@ Error MIDIDrum::readModKnobAssignmentsFromFile(Deserializer& reader, int32_t rea
 					}
 					else {
 						int32_t cc = stringToInt(ccAttribute);
-						// Map mod wheel to internal Y axis
 						if (cc == CC_EXTERNAL_MOD_WHEEL) {
 							cc = CC_NUMBER_Y_AXIS;
 						}
@@ -419,14 +426,22 @@ Error MIDIDrum::readModKnobAssignmentsFromFile(Deserializer& reader, int32_t rea
 
 					reader.exitTag("cc");
 				}
+				else if (!strcmp(innerTag, "value")) {
+					// Kit modKnobs only store CC assignment, not automation — skip value if present.
+					reader.exitTag("value");
+				}
 				else {
-					reader.exitTag(tagName);
+					reader.exitTag(innerTag);
 				}
 			}
+
 			m++;
 		}
-		else {
-			reader.exitTag(tagName);
+
+		// Match MIDIInstrument::readModKnobAssignmentsFromFile — parent closes each modKnob.
+		reader.exitTag();
+		if (m >= kNumModButtons * kNumPhysicalModKnobs) {
+			break;
 		}
 	}
 
@@ -486,10 +501,17 @@ void MIDIDrum::writeDeviceDefinitionFile(Serializer& writer, bool writeFileNameT
 	writer.writeOpeningTagEnd();
 
 	if (writeFileNameToPresetOrSong) {
+		// Rows 2+ often have labels copied from row 1 but no path — fix before writing song/kit XML.
+		ensureDeviceDefinitionFileNameFromKit();
 		writeDeviceDefinitionFileNameToPresetOrSong(writer);
+		// Reference the SD definition file; don't embed duplicate ccLabels in kit/song.
+		if (deviceDefinitionFileName.isEmpty()) {
+			writeCCLabelsToFile(writer);
+		}
 	}
-
-	writeCCLabelsToFile(writer);
+	else {
+		writeCCLabelsToFile(writer);
+	}
 
 	writer.writeClosingTag("midiDevice");
 }
@@ -508,16 +530,14 @@ void MIDIDrum::writeDeviceDefinitionFileNameToPresetOrSong(Serializer& writer) {
 void MIDIDrum::writeCCLabelsToFile(Serializer& writer) {
 	writer.writeOpeningTagBeginning("ccLabels");
 	for (int32_t i = 0; i < kNumRealCCNumbers; i++) {
-		if (i != CC_EXTERNAL_MOD_WHEEL) {
-			auto it = labels.find(i);
+		if (i == CC_EXTERNAL_MOD_WHEEL) {
+			continue;
+		}
+		auto it = labels.find(i);
+		if (it != labels.end() && !it->second.empty()) {
 			char ccNumber[10];
 			intToString(i, ccNumber, 1);
-			if (it != labels.end()) {
-				writer.writeAttribute(ccNumber, it->second.data());
-			}
-			else {
-				writer.writeAttribute(ccNumber, "");
-			}
+			writer.writeAttribute(ccNumber, it->second.data());
 		}
 	}
 	writer.closeTag();
@@ -526,6 +546,7 @@ void MIDIDrum::writeCCLabelsToFile(Serializer& writer) {
 Error MIDIDrum::readDeviceDefinitionFile(Deserializer& reader, bool readFromPresetOrSong) {
 	Error error = Error::FILE_UNREADABLE;
 	loadDeviceDefinitionFile = false;
+	bool hasDefinitionFileReference = false;
 
 	char const* tagName;
 
@@ -533,20 +554,37 @@ Error MIDIDrum::readDeviceDefinitionFile(Deserializer& reader, bool readFromPres
 	while (*(tagName = reader.readNextTagOrAttributeName())) {
 		if (!strcmp(tagName, "definitionFile")) {
 			readDeviceDefinitionFileNameFromPresetOrSong(reader);
+			hasDefinitionFileReference = !deviceDefinitionFileName.isEmpty();
 			// only flag definition file for loading if we aren't reading from preset or song
 			// and definition file name isn't blank
-			if (!deviceDefinitionFileName.isEmpty() && !readFromPresetOrSong) {
+			if (hasDefinitionFileReference && !readFromPresetOrSong) {
 				loadDeviceDefinitionFile = true;
 			}
 		}
 		// if we aren't reading from device definition file later, then try to read
 		// device info now
-		else if (!loadDeviceDefinitionFile) {
-			if (!strcmp(tagName, "ccLabels")) {
-				error = readCCLabelsFromFile(reader);
+		else if (!strcmp(tagName, "ccLabels")) {
+			if (!hasDefinitionFileReference) {
+				MIDIDrum* labelSource = findKitMidiDrumWithLabels();
+				if (labelSource) {
+					labels = labelSource->labels;
+					if (deviceDefinitionFileName.isEmpty() && !labelSource->deviceDefinitionFileName.isEmpty()) {
+						deviceDefinitionFileName.set(labelSource->deviceDefinitionFileName.get());
+					}
+				}
+				else {
+					error = readCCLabelsFromFile(reader);
+				}
 			}
 		}
+
+		// Match MIDIInstrument::readDeviceDefinitionFile — close each child tag.
 		reader.exitTag();
+	}
+
+	// Defer SD load until kit/song file is closed — opening another file mid-parse corrupts the read.
+	if (readFromPresetOrSong && hasDefinitionFileReference && labels.empty()) {
+		loadDeviceDefinitionFile = true;
 	}
 
 	return error;
@@ -577,7 +615,10 @@ Error MIDIDrum::readCCLabelsFromFile(Deserializer& reader) {
 			continue;
 		}
 
-		labels[cc] = reader.readTagOrAttributeValue();
+		char const* value = reader.readTagOrAttributeValue();
+		if (value && value[0] != '\0') {
+			labels[cc] = value;
+		}
 
 		error = Error::NONE;
 
@@ -585,6 +626,88 @@ Error MIDIDrum::readCCLabelsFromFile(Deserializer& reader) {
 	}
 
 	return error;
+}
+
+MIDIDrum* MIDIDrum::findKitMidiDrumWithLabels() const {
+	if (!kit) {
+		return nullptr;
+	}
+
+	for (Drum* thisDrum = kit->firstDrum; thisDrum; thisDrum = thisDrum->next) {
+		if (thisDrum == this || thisDrum->type != DrumType::MIDI) {
+			continue;
+		}
+
+		MIDIDrum* midiDrum = static_cast<MIDIDrum*>(thisDrum);
+		if (!midiDrum->labels.empty() && sharesMidiDeviceDefinitionWith(midiDrum)) {
+			return midiDrum;
+		}
+	}
+
+	return nullptr;
+}
+
+bool MIDIDrum::sharesMidiDeviceDefinitionWith(const MIDIDrum* other) const {
+	if (!other) {
+		return false;
+	}
+
+	// Primary key: same definition file (different paths = different instruments).
+	return !strcmp(deviceDefinitionFileName.get(), other->deviceDefinitionFileName.get());
+}
+
+bool MIDIDrum::hasModKnobAssignments() const {
+	for (int32_t m = 0; m < kNumModButtons * kNumPhysicalModKnobs; m++) {
+		if (modKnobCCAssignments[m] != CC_NUMBER_NONE) {
+			return true;
+		}
+	}
+	return false;
+}
+
+MIDIDrum* MIDIDrum::findKitMidiDrumWithModKnobs() const {
+	if (!kit) {
+		return nullptr;
+	}
+
+	for (Drum* thisDrum = kit->firstDrum; thisDrum; thisDrum = thisDrum->next) {
+		if (thisDrum == this || thisDrum->type != DrumType::MIDI) {
+			continue;
+		}
+
+		MIDIDrum* midiDrum = static_cast<MIDIDrum*>(thisDrum);
+		if (midiDrum->hasModKnobAssignments()) {
+			return midiDrum;
+		}
+	}
+
+	return nullptr;
+}
+
+bool MIDIDrum::modKnobAssignmentsMatch(MIDIDrum const* other) const {
+	if (!other) {
+		return false;
+	}
+
+	return modKnobCCAssignments == other->modKnobCCAssignments;
+}
+
+void MIDIDrum::ensureDeviceDefinitionFileNameFromKit() {
+	if (!deviceDefinitionFileName.isEmpty() || !kit) {
+		return;
+	}
+
+	for (Drum* thisDrum = kit->firstDrum; thisDrum; thisDrum = thisDrum->next) {
+		if (thisDrum == this || thisDrum->type != DrumType::MIDI) {
+			continue;
+		}
+
+		MIDIDrum* midiDrum = static_cast<MIDIDrum*>(thisDrum);
+		if (!midiDrum->deviceDefinitionFileName.isEmpty()) {
+			deviceDefinitionFileName.set(midiDrum->deviceDefinitionFileName.get());
+			return;
+		}
+	}
 }
 
 std::string_view MIDIDrum::getNameFromCC(int32_t cc) {
@@ -607,5 +730,67 @@ std::string_view MIDIDrum::getNameFromCC(int32_t cc) {
 void MIDIDrum::setNameForCC(int32_t cc, std::string_view name) {
 	if (cc >= 0 && cc < kNumRealCCNumbers) {
 		labels[cc] = name;
+	}
+}
+
+void MIDIDrum::copyLabelsFrom(MIDIDrum const* other) {
+	if (!other) {
+		return;
+	}
+
+	labels = other->labels;
+	loadDeviceDefinitionFile = false;
+
+	if (deviceDefinitionFileName.isEmpty() && other->deviceDefinitionFileName.get()[0] != '\0') {
+		deviceDefinitionFileName.set(other->deviceDefinitionFileName.get());
+	}
+}
+
+bool MIDIDrum::hasCCLabels() const {
+	return !labels.empty();
+}
+
+void MIDIDrum::propagateSharedSettingsAcrossKit(Kit* kit) {
+	if (!kit) {
+		return;
+	}
+
+	MIDIDrum* modKnobTemplate = nullptr;
+	MIDIDrum* definitionTemplate = nullptr;
+
+	for (Drum* thisDrum = kit->firstDrum; thisDrum; thisDrum = thisDrum->next) {
+		if (thisDrum->type != DrumType::MIDI) {
+			continue;
+		}
+
+		MIDIDrum* midiDrum = static_cast<MIDIDrum*>(thisDrum);
+
+		if (!modKnobTemplate && midiDrum->hasModKnobAssignments()) {
+			modKnobTemplate = midiDrum;
+		}
+
+		if (!definitionTemplate && midiDrum->deviceDefinitionFileName.get()[0] != '\0') {
+			definitionTemplate = midiDrum;
+		}
+	}
+
+	for (Drum* thisDrum = kit->firstDrum; thisDrum; thisDrum = thisDrum->next) {
+		if (thisDrum->type != DrumType::MIDI) {
+			continue;
+		}
+
+		MIDIDrum* midiDrum = static_cast<MIDIDrum*>(thisDrum);
+
+		if (modKnobTemplate && !midiDrum->hasModKnobAssignments()) {
+			midiDrum->modKnobCCAssignments = modKnobTemplate->modKnobCCAssignments;
+		}
+
+		if (definitionTemplate && midiDrum->deviceDefinitionFileName.isEmpty()) {
+			midiDrum->deviceDefinitionFileName.set(definitionTemplate->deviceDefinitionFileName.get());
+		}
+
+		if (modKnobTemplate && modKnobTemplate->hasCCLabels() && !midiDrum->hasCCLabels()) {
+			midiDrum->copyLabelsFrom(modKnobTemplate);
+		}
 	}
 }

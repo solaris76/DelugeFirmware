@@ -3203,6 +3203,87 @@ uint32_t NoteRow::getNumNotes() {
 	return notes.getNumElements();
 }
 
+// Same parser pattern as InstrumentClip::readMIDIParamsFromFile (MIDI instrument preset path).
+static Error readMIDIParamsIntoParamManager(Deserializer& reader, ParamManagerForTimeline& paramManager,
+                                            int32_t readAutomationUpToPos) {
+	char const* tagName;
+
+	while (*(tagName = reader.readNextTagOrAttributeName())) {
+		if (!strcmp(tagName, "param")) {
+			char const* innerTag;
+			int32_t paramId = CC_NUMBER_NONE;
+			AutoParam* param = nullptr;
+
+			while (*(innerTag = reader.readNextTagOrAttributeName())) {
+				if (!strcmp(innerTag, "cc")) {
+					char const* contents = reader.readTagOrAttributeValue();
+					if (!strcasecmp(contents, "none")) {
+						paramId = CC_NUMBER_NONE;
+					}
+					else {
+						paramId = stringToInt(contents);
+						if (paramId == CC_EXTERNAL_MOD_WHEEL) {
+							paramId = CC_NUMBER_Y_AXIS;
+						}
+					}
+					reader.exitTag("cc");
+				}
+				else if (!strcmp(innerTag, "value")) {
+					if (paramId != CC_NUMBER_NONE) {
+						ParamCollectionSummary* summary = paramManager.getMIDIParamCollectionSummary();
+						MIDIParam* midiParam =
+						    ((MIDIParamCollection*)summary->paramCollection)->params.getOrCreateParamFromCC(paramId, 0);
+						if (!midiParam) {
+							return Error::INSUFFICIENT_RAM;
+						}
+						param = &midiParam->param;
+						Error error = param->readFromFile(reader, readAutomationUpToPos);
+						if (error != Error::NONE) {
+							return error;
+						}
+					}
+					reader.exitTag("value");
+				}
+				else if (!strcmp(innerTag, "clockDivider")) {
+					if (param) {
+						param->setAutomationClockDivider(reader.readTagOrAttributeValueInt());
+					}
+					reader.exitTag("clockDivider");
+				}
+				else if (!strcmp(innerTag, "laneType")) {
+					if (param) {
+						param->setAutomationLaneType(stringToAutomationLaneType(reader.readTagOrAttributeValue()),
+						                             nullptr);
+					}
+					reader.exitTag("laneType");
+				}
+				else if (!strcmp(innerTag, "shapeAmount")) {
+					if (param) {
+						param->setShapeAmount(reader.readTagOrAttributeValueInt());
+					}
+					reader.exitTag("shapeAmount");
+				}
+				else if (!strcmp(innerTag, "shapeOffset")) {
+					if (param) {
+						param->setShapeOffset(reader.readTagOrAttributeValueInt());
+					}
+					reader.exitTag("shapeOffset");
+				}
+				else {
+					reader.exitTag(innerTag);
+				}
+			}
+
+			reader.exitTag("param");
+		}
+		else {
+			reader.exitTag(tagName);
+		}
+	}
+
+	return Error::NONE;
+}
+
 Error NoteRow::readFromFile(Deserializer& reader, int32_t* minY, InstrumentClip* parentClip, Song* song,
                             int32_t readAutomationUpToPos) {
 	char const* tagName;
@@ -3292,9 +3373,7 @@ finishedNormalStuff:
 			Sound::readParamsFromFile(reader, &paramManager, readAutomationUpToPos);
 		}
 
-		// Read MIDI CC automation for MIDI drums (like MIDI instrument tracks)
 		else if (!strcmp(tagName, "midiParams")) {
-			// Ensure MIDI param collection exists
 			if (!paramManager.containsAnyMainParamCollections()) {
 				Error error = paramManager.setupMIDI();
 				if (error != Error::NONE) {
@@ -3302,77 +3381,10 @@ finishedNormalStuff:
 				}
 			}
 
-			// Read each MIDI param (cc + automation data)
-			while (*(tagName = reader.readNextTagOrAttributeName())) {
-				if (!strcmp(tagName, "param")) {
-					int32_t paramId = CC_NUMBER_NONE;
-					AutoParam* param = nullptr;
-
-					while (*(tagName = reader.readNextTagOrAttributeName())) {
-						if (!strcmp(tagName, "cc")) {
-							char const* contents = reader.readTagOrAttributeValue();
-							if (!strcasecmp(contents, "none")) {
-								paramId = CC_NUMBER_NONE;
-							}
-							else {
-								paramId = stringToInt(contents);
-								// External mod wheel maps to internal Y axis
-								if (paramId == CC_EXTERNAL_MOD_WHEEL) {
-									paramId = CC_NUMBER_Y_AXIS;
-								}
-							}
-							reader.exitTag("cc");
-						}
-						else if (!strcmp(tagName, "value")) {
-							if (paramId != CC_NUMBER_NONE) {
-								ParamCollectionSummary* summary = paramManager.getMIDIParamCollectionSummary();
-								MIDIParam* midiParam = ((MIDIParamCollection*)summary->paramCollection)
-								                           ->params.getOrCreateParamFromCC(paramId, 0);
-								if (!midiParam) {
-									return Error::INSUFFICIENT_RAM;
-								}
-								Error error = midiParam->param.readFromFile(reader, readAutomationUpToPos);
-								if (error != Error::NONE) {
-									return error;
-								}
-							}
-							reader.exitTag("value");
-						}
-						else if (!strcmp(tagName, "clockDivider")) {
-							if (param) {
-								param->setAutomationClockDivider(reader.readTagOrAttributeValueInt());
-							}
-							reader.exitTag("clockDivider");
-						}
-						else if (!strcmp(tagName, "laneType")) {
-							if (param) {
-								param->setAutomationLaneType(
-								    stringToAutomationLaneType(reader.readTagOrAttributeValue()), nullptr);
-							}
-							reader.exitTag("laneType");
-						}
-						else if (!strcmp(tagName, "shapeAmount")) {
-							if (param) {
-								param->setShapeAmount(reader.readTagOrAttributeValueInt());
-							}
-							reader.exitTag("shapeAmount");
-						}
-						else if (!strcmp(tagName, "shapeOffset")) {
-							if (param) {
-								param->setShapeOffset(reader.readTagOrAttributeValueInt());
-							}
-							reader.exitTag("shapeOffset");
-						}
-						else {
-							reader.exitTag(tagName);
-						}
-					}
-				}
-				else {
-					reader.exitTag(tagName);
-				}
+			Error error = readMIDIParamsIntoParamManager(reader, paramManager, readAutomationUpToPos);
+			if (error != Error::NONE) {
+				return error;
 			}
-			reader.exitTag("midiParams"); // Exit the midiParams tag before continuing
 		}
 
 		// Notes stored as XML (before V1.4) - NOT CONVERTED TO ALSO WORK WITH JSON.
@@ -3775,13 +3787,10 @@ void NoteRow::writeToFile(Serializer& writer, int32_t drumIndex, InstrumentClip*
 			writer.writeOpeningTagEnd();
 			closedOurTagYet = true;
 
-			// MIDI drums write MIDI params, sound drums write sound params
 			if (drum->type == DrumType::MIDI) {
-				// Write MIDI CC automation (like MIDI instrument tracks)
 				paramManager.getMIDIParamCollection()->writeToFile(writer);
 			}
 			else if (drum->type == DrumType::SOUND) {
-				// Write sound params (existing behavior)
 				writer.writeOpeningTagBeginning("soundParams");
 				Sound::writeParamsToFile(writer, &paramManager, true);
 				writer.writeClosingTag("soundParams", true);

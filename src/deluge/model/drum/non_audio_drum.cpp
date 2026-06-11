@@ -112,6 +112,7 @@ bool NonAudioDrum::readDrumTagFromFile(Deserializer& reader, char const* tagName
 			}
 		}
 		reader.match('}'); // End arpeggiator value object.
+		reader.exitTag("arpeggiator");
 	}
 	else if (Drum::readDrumTagFromFile(reader, tagName)) {}
 	else {

@@ -86,6 +86,10 @@ public:
 	/// Get/set CC labels
 	std::string_view getNameFromCC(int32_t cc);
 	void setNameForCC(int32_t cc, std::string_view name);
+	bool hasCCLabels() const;
+	void copyLabelsFrom(MIDIDrum const* other);
+	/// After kit load/save round-trip, row 0 may hold modKnobs/definition that rows 1+ omitted in XML.
+	static void propagateSharedSettingsAcrossKit(class Kit* kit);
 
 	uint8_t note;
 	int8_t noteEncoderCurrentOffset;
@@ -115,6 +119,15 @@ public:
 	String outputDeviceName;
 
 private:
+	MIDIDrum* findKitMidiDrumWithLabels() const;
+	MIDIDrum* findKitMidiDrumWithModKnobs() const;
+	bool hasModKnobAssignments() const;
+	bool modKnobAssignmentsMatch(MIDIDrum const* other) const;
+	/// Copy definition file path from an earlier kit row if this row only has shared labels.
+	void ensureDeviceDefinitionFileNameFromKit();
+	/// Same definition file path, or both inline-only (no definition file set).
+	bool sharesMidiDeviceDefinitionWith(const MIDIDrum* other) const;
+
 	/// Custom CC label names loaded from device definition file
 	deluge::fast_map<uint8_t, std::string> labels;
 };

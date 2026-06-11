@@ -35,6 +35,7 @@
 #include "model/action/action_logger.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/instrument.h"
+#include "model/instrument/kit.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/song/song.h"
 #include "processing/engines/audio_engine.h"
@@ -1042,6 +1043,9 @@ giveUsedError:
 				                                             &midiInstrument->deviceDefinitionFileName, false);
 			}
 		}
+	}
+	else if (newInstrument->type == OutputType::KIT) {
+		StorageManager::loadPendingMidiDeviceDefinitionFilesForKit(static_cast<Kit*>(newInstrument));
 	}
 
 	return Error::NONE;
