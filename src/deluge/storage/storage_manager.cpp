@@ -415,6 +415,10 @@ paramManagersMissing:
 	newInstrument->mightExistOnCard = true;
 	newInstrument->loadAllAudioFiles(mayReadSamplesFromFiles); // Needs name, directory and slots set first, above.
 
+	if (newInstrument->type == OutputType::KIT) {
+		loadPendingMidiDeviceDefinitionFilesForKit(static_cast<Kit*>(newInstrument));
+	}
+
 	*getInstrument = newInstrument;
 	return Error::NONE;
 }
@@ -504,6 +508,69 @@ Error StorageManager::loadMidiDeviceDefinitionFileForDrum(MIDIDrum* midiDrum, Fi
 	}
 
 	return Error::NONE;
+}
+
+void StorageManager::loadPendingMidiDeviceDefinitionFilesForKit(Kit* kit) {
+	if (!kit) {
+		return;
+	}
+
+	for (Drum* thisDrum = kit->firstDrum; thisDrum; thisDrum = thisDrum->next) {
+		if (thisDrum->type != DrumType::MIDI) {
+			continue;
+		}
+
+		MIDIDrum* midiDrum = static_cast<MIDIDrum*>(thisDrum);
+		if (!midiDrum->loadDeviceDefinitionFile) {
+			continue;
+		}
+
+		if (midiDrum->deviceDefinitionFileName.isEmpty()) {
+			midiDrum->loadDeviceDefinitionFile = false;
+			continue;
+		}
+
+		// One SD read per definition file path; share labels across kit rows.
+		for (Drum* earlierDrum = kit->firstDrum; earlierDrum != thisDrum; earlierDrum = earlierDrum->next) {
+			if (earlierDrum->type != DrumType::MIDI) {
+				continue;
+			}
+
+			MIDIDrum* earlierMidiDrum = static_cast<MIDIDrum*>(earlierDrum);
+			if (earlierMidiDrum->hasCCLabels()
+			    && !strcmp(earlierMidiDrum->deviceDefinitionFileName.get(), midiDrum->deviceDefinitionFileName.get())) {
+				midiDrum->copyLabelsFrom(earlierMidiDrum);
+				goto nextDrum;
+			}
+		}
+
+		{
+			FilePointer definitionFilePointer;
+			if (StorageManager::fileExists(midiDrum->deviceDefinitionFileName.get(), &definitionFilePointer)) {
+				loadMidiDeviceDefinitionFileForDrum(midiDrum, &definitionFilePointer,
+				                                    &midiDrum->deviceDefinitionFileName, false);
+			}
+			else {
+				midiDrum->loadDeviceDefinitionFile = false;
+			}
+		}
+
+nextDrum: {}
+	}
+
+	MIDIDrum::propagateSharedSettingsAcrossKit(kit);
+}
+
+void StorageManager::loadPendingMidiDeviceDefinitionFilesForSong(Song* song) {
+	if (!song) {
+		return;
+	}
+
+	for (Output* thisOutput = song->firstOutput; thisOutput; thisOutput = thisOutput->next) {
+		if (thisOutput->type == OutputType::KIT) {
+			loadPendingMidiDeviceDefinitionFilesForKit(static_cast<Kit*>(thisOutput));
+		}
+	}
 }
 
 Error StorageManager::openPatternFile(FilePointer* filePointer) {

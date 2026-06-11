@@ -4150,7 +4150,11 @@ Error InstrumentClip::claimOutput(ModelStackWithTimelineCounter* modelStack) {
 
 				// Don't call setDrum(), because that would overwrite the NoteRow's paramManager. It already has the
 				// right one, loaded from file
-				Drum* drumFromIndex = kit->getDrumFromIndex((uint32_t)thisNoteRow->drum);
+				Drum* drumFromIndex = kit->getDrumFromIndexAllowNull(static_cast<int32_t>((uint32_t)thisNoteRow->drum));
+				if (!drumFromIndex) {
+					thisNoteRow->deleteParamManager();
+					goto haveNoDrum;
+				}
 
 				ParamManagerForTimeline* otherParamManager;
 

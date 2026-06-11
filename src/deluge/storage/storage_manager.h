@@ -35,6 +35,7 @@ extern void deleteOldSongBeforeLoadingNew();
 extern FatFS::Filesystem fileSystem;
 
 class Instrument;
+class Kit;
 class PlaybackMode;
 class ParamManagerForTimeline;
 class ArpeggiatorSettings;
@@ -398,6 +399,8 @@ Error loadMidiDeviceDefinitionFile(MIDIInstrument* midiInstrument, FilePointer* 
                                    bool updateFileName = true);
 Error loadMidiDeviceDefinitionFileForDrum(MIDIDrum* midiDrum, FilePointer* filePointer, String* fileName,
                                           bool updateFileName = true);
+void loadPendingMidiDeviceDefinitionFilesForKit(Kit* kit);
+void loadPendingMidiDeviceDefinitionFilesForSong(Song* song);
 
 Error openPatternFile(FilePointer* filePointer);
 Error loadPatternFile(FilePointer* filePointer, String* fileName, bool overwriteExisting, bool noScaling,
