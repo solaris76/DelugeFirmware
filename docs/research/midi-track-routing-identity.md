@@ -1,6 +1,6 @@
 # MIDI track routing identity (channel + output port)
 
-**Status:** Implemented in CG-Custom-FW (uncommitted at time of writing).
+**Status:** Implemented on `CG-Custom-FW` in commit `7196dbd4f` (2026-06-14).
 
 ## Problem
 
