@@ -628,8 +628,6 @@ bool handleMidiMessage(MIDICable& cable, uint8_t statusType, uint8_t channel, ui
 		return true;
 	}
 
-	launchpadInputNeedsSync = false;
-
 	bool on = isPressed(statusType, data2);
 	bool handled = false;
 	bool modeChanged = false;
@@ -669,9 +667,12 @@ bool handleMidiMessage(MIDICable& cable, uint8_t statusType, uint8_t channel, ui
 	if (handled && !modeChanged) {
 		markLaunchpadInputNeedsSync();
 	}
-	flushLaunchpadInputSync();
 
 	return true;
+}
+
+void flushDeferredInputSync() {
+	flushLaunchpadInputSync();
 }
 
 bool shouldBlockOutgoingMidi(MIDICableUSB& cable, MIDIMessage message) {
