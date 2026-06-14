@@ -4,6 +4,9 @@
 
 namespace deluge::io::midi {
 
+// Clip/song matching: omit outputDevice from XML → legacy channel+suffix match only.
+static constexpr uint8_t kMIDIOutputDeviceMatchUnspecified = 255;
+
 /**
  * MIDI routing configuration for output device and channel selection
  *

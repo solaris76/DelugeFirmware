@@ -18,6 +18,7 @@
 #pragma once
 
 #include "definitions_cxx.hpp"
+#include "io/midi/midi_routing.h"
 #include "model/instrument/non_audio_instrument.h"
 #include "util/containers.h"
 #include <array>
@@ -96,12 +97,18 @@ public:
 	}
 	inline bool sendsToInternal() { return (getChannel() >= IS_A_DEST); }
 	bool matchesPreset(OutputType otherType, int32_t otherChannel, int32_t otherSuffix, char const* otherName,
-	                   char const* otherPath) override {
-		bool match{false};
-		if (type == otherType) {
-			match = (getChannel() == otherChannel && (channelSuffix == otherSuffix));
+	                   char const* otherPath,
+	                   uint8_t otherOutputDevice = deluge::io::midi::kMIDIOutputDeviceMatchUnspecified) override {
+		if (type != otherType) {
+			return false;
 		}
-		return match;
+		if (getChannel() != otherChannel || channelSuffix != otherSuffix) {
+			return false;
+		}
+		if (otherOutputDevice == deluge::io::midi::kMIDIOutputDeviceMatchUnspecified) {
+			return true;
+		}
+		return outputDevice == otherOutputDevice;
 	}
 	int32_t channelSuffix{-1};
 	int32_t lastNoteCode{32767};

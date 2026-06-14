@@ -26,6 +26,7 @@
 #include "gui/views/view.h"
 #include "hid/buttons.h"
 #include "io/midi/midi_device.h"
+#include "io/midi/midi_device_helper.h"
 #include "io/midi/midi_engine.h"
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
@@ -146,6 +147,10 @@ void InstrumentClip::copyBasicsFrom(Clip const* otherClip) {
 	for (int32_t i = 0; i < 2; i++) {
 		backedUpInstrumentDirPath[i].set(&otherInstrumentClip->backedUpInstrumentDirPath[i]);
 	}
+
+	backedUpMIDIOutputDevice = otherInstrumentClip->backedUpMIDIOutputDevice;
+	backedUpMIDIOutputDeviceName.set(&otherInstrumentClip->backedUpMIDIOutputDeviceName);
+	backedUpMIDIOutputDeviceWasSpecified = otherInstrumentClip->backedUpMIDIOutputDeviceWasSpecified;
 
 	arpSettings.cloneFrom(&otherInstrumentClip->arpSettings);
 
@@ -2376,10 +2381,16 @@ void InstrumentClip::writeDataToFile(Serializer& writer, Song* song) {
 	Instrument* instrument = (Instrument*)output;
 
 	if (output->type == OutputType::MIDI_OUT) {
-		writer.writeAttribute("midiChannel", ((MIDIInstrument*)instrument)->getChannel());
+		MIDIInstrument* midiInstrument = (MIDIInstrument*)instrument;
+		writer.writeAttribute("midiChannel", midiInstrument->getChannel());
 
-		if (((MIDIInstrument*)instrument)->channelSuffix != -1) {
-			writer.writeAttribute("midiChannelSuffix", ((MIDIInstrument*)instrument)->channelSuffix);
+		if (midiInstrument->channelSuffix != -1) {
+			writer.writeAttribute("midiChannelSuffix", midiInstrument->channelSuffix);
+		}
+
+		writer.writeAttribute("outputDevice", midiInstrument->outputDevice);
+		if (!midiInstrument->outputDeviceName.isEmpty()) {
+			writer.writeAttribute("outputDeviceName", midiInstrument->outputDeviceName.get());
 		}
 
 		// MIDI PGM
@@ -2519,6 +2530,9 @@ someError:
 
 	int16_t instrumentPresetSlot = 0;
 	int8_t instrumentPresetSubSlot = -1;
+	uint8_t midiOutputDeviceForClip = deluge::io::midi::kMIDIOutputDeviceMatchUnspecified;
+	bool midiOutputDeviceForClipWasSpecified = false;
+	String midiOutputDeviceNameForClip;
 	String instrumentPresetName;
 	String instrumentPresetDirPath;
 	bool dirPathHasBeenSpecified = false;
@@ -2573,6 +2587,15 @@ someError:
 
 		else if (!strcmp(tagName, "midiChannelSuffix")) {
 			instrumentPresetSubSlot = reader.readTagOrAttributeValueInt();
+		}
+
+		else if (!strcmp(tagName, "outputDevice")) {
+			midiOutputDeviceForClip = static_cast<uint8_t>(reader.readTagOrAttributeValueInt());
+			midiOutputDeviceForClipWasSpecified = true;
+		}
+
+		else if (!strcmp(tagName, "outputDeviceName")) {
+			reader.readTagOrAttributeValueString(&midiOutputDeviceNameForClip);
 		}
 
 		else if (!strcmp(tagName, "cvChannel")) {
@@ -3097,6 +3120,11 @@ doReadBendRange:
 	case OutputType::CV:
 		backedUpInstrumentSlot[outputTypeWhileLoadingAsIdx] = instrumentPresetSlot;
 		backedUpInstrumentSubSlot[outputTypeWhileLoadingAsIdx] = instrumentPresetSubSlot;
+		if (outputTypeWhileLoading == OutputType::MIDI_OUT) {
+			backedUpMIDIOutputDevice = midiOutputDeviceForClip;
+			backedUpMIDIOutputDeviceWasSpecified = midiOutputDeviceForClipWasSpecified;
+			backedUpMIDIOutputDeviceName.set(&midiOutputDeviceNameForClip);
+		}
 		break;
 
 	default:
@@ -3705,6 +3733,9 @@ void InstrumentClip::backupPresetSlot() {
 	switch (output->type) {
 	case OutputType::MIDI_OUT:
 		backedUpInstrumentSubSlot[outputTypeAsIdx] = ((MIDIInstrument*)output)->channelSuffix;
+		backedUpMIDIOutputDevice = ((MIDIInstrument*)output)->outputDevice;
+		backedUpMIDIOutputDeviceName.set(&((MIDIInstrument*)output)->outputDeviceName);
+		backedUpMIDIOutputDeviceWasSpecified = true;
 		// No break
 
 	case OutputType::CV:
@@ -4008,9 +4039,18 @@ Error InstrumentClip::claimOutput(ModelStackWithTimelineCounter* modelStack) {
 		char const* instrumentName = (outputTypeAsIdx < 2) ? backedUpInstrumentName[outputTypeAsIdx].get() : nullptr;
 		char const* dirPath = (outputTypeAsIdx < 2) ? backedUpInstrumentDirPath[outputTypeAsIdx].get() : nullptr;
 
-		output = modelStack->song->getInstrumentFromPresetSlot(outputType, backedUpInstrumentSlot[outputTypeAsIdx],
-		                                                       backedUpInstrumentSubSlot[outputTypeAsIdx],
-		                                                       instrumentName, dirPath, false);
+		uint8_t outputDeviceForMatch = deluge::io::midi::kMIDIOutputDeviceMatchUnspecified;
+		if (outputType == OutputType::MIDI_OUT && backedUpMIDIOutputDeviceWasSpecified) {
+			outputDeviceForMatch = backedUpMIDIOutputDevice;
+			if (!backedUpMIDIOutputDeviceName.isEmpty()) {
+				outputDeviceForMatch = deluge::io::midi::findDeviceIndexByName(backedUpMIDIOutputDeviceName.get(),
+				                                                               backedUpMIDIOutputDevice);
+			}
+		}
+
+		output = modelStack->song->getInstrumentFromPresetSlot(
+		    outputType, backedUpInstrumentSlot[outputTypeAsIdx], backedUpInstrumentSubSlot[outputTypeAsIdx],
+		    instrumentName, dirPath, false, true, outputDeviceForMatch);
 
 		if (!output) {
 
