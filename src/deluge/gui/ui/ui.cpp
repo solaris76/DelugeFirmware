@@ -114,7 +114,7 @@ void changeRootUI(UI* newUI) {
 		renderUIsForOled();
 	}
 
-	launchpad_extension::requestSync();
+	launchpad_extension::requestSyncAfterViewChange();
 }
 
 // Only called when setting up blank song, so don't worry about this
@@ -132,7 +132,7 @@ bool changeUISideways(UI* newUI) {
 		renderUIsForOled();
 	}
 	if (success) {
-		launchpad_extension::requestSync();
+		launchpad_extension::requestSyncAfterViewChange();
 	}
 	return success;
 }

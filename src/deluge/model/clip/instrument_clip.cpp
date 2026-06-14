@@ -678,8 +678,55 @@ Error InstrumentClip::appendClip(ModelStackWithTimelineCounter* thisModelStack,
 	return Clip::appendClip(thisModelStack, otherModelStack);
 }
 
+namespace {
+
+// Extend still-held live input notes to the current loop end during linear recording. Prevents a 1-tick recorded
+// note from retriggering every loop (live audition + arp output + sequencer replay = MIDI flood / freeze).
+void extendHeldAuditioningNoteRowsToLoopEnd(InstrumentClip* clip, Action** action) {
+	Instrument* instrument = (Instrument*)clip->output;
+	if (instrument->type == OutputType::AUDIO) {
+		return;
+	}
+
+	for (int32_t i = 0; i < clip->noteRows.getNumElements(); i++) {
+		NoteRow* thisNoteRow = clip->noteRows.getElement(i);
+		if (!thisNoteRow->notes.getNumElements()) {
+			continue;
+		}
+		if (!instrument->isNoteRowStillAuditioningAsLinearRecordingEnded(thisNoteRow)) {
+			continue;
+		}
+
+		Note* lastNote = thisNoteRow->notes.getLast();
+		if (lastNote->pos >= clip->loopLength) {
+			continue;
+		}
+
+		if (*action == nullptr) {
+			*action = actionLogger.getNewAction(ActionType::RECORD, ActionAddition::ALLOWED);
+		}
+		int32_t noteRowId = clip->getNoteRowId(thisNoteRow, i);
+		if (*action) {
+			(*action)->recordNoteArrayChangeIfNotAlreadySnapshotted(clip, noteRowId, &thisNoteRow->notes, false, true);
+		}
+		lastNote->setLength(clip->loopLength - lastNote->pos);
+
+		if (thisNoteRow->isDroning(clip->loopLength)) {
+			thisNoteRow->sequenced = true;
+		}
+	}
+}
+
+} // namespace
+
 void InstrumentClip::posReachedEnd(ModelStackWithTimelineCounter* thisModelStack) {
 	Clip::posReachedEnd(thisModelStack);
+
+	// Auto-extend path: grow held input notes with the clip each loop, not only when recording stops.
+	if (getCurrentlyRecordingLinearly() && playbackHandler.recording != RecordingMode::OFF) {
+		Action* action = nullptr;
+		extendHeldAuditioningNoteRowsToLoopEnd(this, &action);
+	}
 
 	if (playbackHandler.recording == RecordingMode::ARRANGEMENT && isArrangementOnlyClip()) {
 
