@@ -520,6 +520,8 @@ bool MelodicInstrument::setActiveClip(ModelStackWithTimelineCounter* modelStack,
 }
 
 bool MelodicInstrument::isNoteRowStillAuditioningAsLinearRecordingEnded(NoteRow* noteRow) {
+	// Held external-MIDI notes live in notesAuditioned; earlyNotes are count-in / pre-roll only (flushed at
+	// beginLinearRecording). Original logic excluded earlyNotes so we don't double-handle those rows here.
 	return notesAuditioned.contains(noteRow->y) && !earlyNotes.contains(noteRow->y);
 }
 
@@ -582,11 +584,9 @@ void MelodicInstrument::beginAuditioningForNote(ModelStack* modelStack, int32_t 
 void MelodicInstrument::endAuditioningForNote(ModelStack* modelStack, int32_t note, int32_t velocity) {
 
 	notesAuditioned.erase(note);
-	// if this note was recorded as an early note, then set no longer active
-	if (earlyNotes.contains(note)) {
-		earlyNotes[note].still_active = false;
+	if (auto it = earlyNotes.find(note); it != earlyNotes.end()) {
+		it->second.still_active = false;
 	}
-
 	if (!activeClip) {
 		return;
 	}
