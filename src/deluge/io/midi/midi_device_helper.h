@@ -18,11 +18,14 @@
 #pragma once
 
 #include "io/midi/midi_device_manager.h"
+#include "io/midi/midi_routing.h"
 #include "util/containers.h"
 #include "util/d_string.h"
 #include <string_view>
 
 namespace deluge::io::midi {
+
+// See midi_routing.h for kMIDIOutputDeviceMatchUnspecified.
 
 /// Get the device name for a given device index
 /// @param deviceIndex 0=ALL, 1=DIN, 2+=USB devices

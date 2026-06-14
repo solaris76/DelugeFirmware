@@ -2381,6 +2381,7 @@ void View::navigateThroughPresetsForInstrumentClip(int32_t offset, ModelStackWit
 		else {
 
 			int32_t oldChannel = newChannel;
+			uint8_t outputDeviceForSuffix = ((MIDIInstrument*)oldNonAudioInstrument)->outputDevice;
 
 			if (oldInstrumentCanBeReplaced) {
 				oldNonAudioInstrument->setChannel(-1); // Get it out of the way
@@ -2401,7 +2402,7 @@ void View::navigateThroughPresetsForInstrumentClip(int32_t offset, ModelStackWit
 						else if (newChannel > MIDI_CHANNEL_MPE_UPPER_ZONE && newChannel <= IS_A_DEST) {
 							newChannel = MIDI_CHANNEL_MPE_UPPER_ZONE;
 						}
-						newChannelSuffix = modelStack->song->getMaxMIDIChannelSuffix(newChannel);
+						newChannelSuffix = modelStack->song->getMaxMIDIChannelSuffix(newChannel, outputDeviceForSuffix);
 					}
 				}
 
@@ -2409,7 +2410,8 @@ void View::navigateThroughPresetsForInstrumentClip(int32_t offset, ModelStackWit
 				else {
 
 					if (newChannelSuffix >= 26
-					    || newChannelSuffix > modelStack->song->getMaxMIDIChannelSuffix(newChannel)) {
+					    || newChannelSuffix
+					           > modelStack->song->getMaxMIDIChannelSuffix(newChannel, outputDeviceForSuffix)) {
 						newChannel = (newChannel + step);
 						if (newChannel > MIDI_CHANNEL_MPE_UPPER_ZONE && newChannel <= IS_A_DEST) {
 							newChannel = IS_A_DEST + 1;
@@ -2432,14 +2434,15 @@ void View::navigateThroughPresetsForInstrumentClip(int32_t offset, ModelStackWit
 					break;
 				}
 				else if (availabilityRequirement == Availability::INSTRUMENT_AVAILABLE_IN_SESSION) {
-					if (!modelStack->song->doesNonAudioSlotHaveClipInSession(outputType, newChannel,
-					                                                         newChannelSuffix)) {
+					if (!modelStack->song->doesNonAudioSlotHaveActiveClipInSession(
+					        outputType, newChannel, newChannelSuffix, outputDeviceForSuffix)) {
 						break;
 					}
 				}
 				else if (availabilityRequirement == Availability::INSTRUMENT_UNUSED) {
 					if (!modelStack->song->getInstrumentFromPresetSlot(outputType, newChannel, newChannelSuffix,
-					                                                   nullptr, nullptr, false)) {
+					                                                   nullptr, nullptr, false, true,
+					                                                   outputDeviceForSuffix)) {
 						break;
 					}
 				}
