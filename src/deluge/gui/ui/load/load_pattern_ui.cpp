@@ -39,7 +39,6 @@ static constexpr const char* PATTERN_RHYTHMIC_DRUM_DEFAULT_FOLDER = "PATTERNS/RH
 static constexpr const char* PATTERN_MELODIC_DEFAULT_FOLDER = "PATTERNS/MELODIC";
 static constexpr const char* PATTERN_SEQUENCER_STEP_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/STEP";
 static constexpr const char* PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/PULSE";
-static constexpr const char* PATTERN_SEQUENCER_ACID_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/ACID";
 
 LoadPatternUI loadPatternUI{};
 
@@ -96,11 +95,6 @@ bool LoadPatternUI::opened() {
 		display->displayError(error);
 		return false;
 	}
-	error = createFoldersRecursiveIfNotExists(PATTERN_SEQUENCER_ACID_DEFAULT_FOLDER);
-	if (error != Error::NONE) {
-		display->displayError(error);
-		return false;
-	}
 
 	actionLogger.getNewAction(ActionType::PATTERN_PASTE, ActionAddition::ALLOWED);
 	overwriteExisting = true;
@@ -131,11 +125,6 @@ bool LoadPatternUI::opened() {
 				defaultDir = PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER;
 				favouritesManager.setCategory(PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER);
 				title = "Load Pulse Pattern";
-			}
-			else if (cachedSequencerModeName == "acid_seq") {
-				defaultDir = PATTERN_SEQUENCER_ACID_DEFAULT_FOLDER;
-				favouritesManager.setCategory(PATTERN_SEQUENCER_ACID_DEFAULT_FOLDER);
-				title = "Load Acid Pattern";
 			}
 			else {
 				// Unknown sequencer mode, use default
