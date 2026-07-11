@@ -16,7 +16,7 @@ The original custom fork remains untouched at:
 
 ## Branch
 
-**`CG-Custom-FW-on-main`** — integration branch based on upstream `main`.
+**`CG-Custom-FW-on-main`** — integration branch based on upstream `main` (**CGFW v2.0.0**).
 
 ## Why a separate folder?
 
