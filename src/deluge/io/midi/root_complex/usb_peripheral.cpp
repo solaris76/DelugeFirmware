@@ -58,7 +58,9 @@ void usbSendCompleteAsPeripheral(int32_t ip) {
 }
 }
 
-MIDIRootComplexUSBPeripheral::MIDIRootComplexUSBPeripheral() : cables_{0, 1, 2} {
+MIDIRootComplexUSBPeripheral::MIDIRootComplexUSBPeripheral()
+    : cables_{MIDICableUSBUpstream{0, false, true}, MIDICableUSBUpstream{1, true, false},
+              MIDICableUSBUpstream{2, false, false}} {
 }
 
 MIDIRootComplexUSBPeripheral::~MIDIRootComplexUSBPeripheral() {
