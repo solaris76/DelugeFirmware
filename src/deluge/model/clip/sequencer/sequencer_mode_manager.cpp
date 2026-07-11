@@ -16,7 +16,6 @@
  */
 
 #include "model/clip/sequencer/sequencer_mode_manager.h"
-#include "model/clip/sequencer/modes/acid_sequencer_mode.h"
 #include "model/clip/sequencer/modes/pulse_sequencer_mode.h"
 #include "model/clip/sequencer/modes/step_sequencer_mode.h"
 #include "model/clip/sequencer/sequencer_mode.h"
@@ -33,7 +32,6 @@ SequencerModeManager& SequencerModeManager::instance() {
 		// Register built-in modes here instead of using static initialization
 		instance.registerMode<deluge::model::clip::sequencer::modes::StepSequencerMode>("step_sequencer");
 		instance.registerMode<deluge::model::clip::sequencer::modes::PulseSequencerMode>("pulse_seq");
-		instance.registerMode<deluge::model::clip::sequencer::modes::AcidSequencerMode>("acid_seq");
 	}
 
 	return instance;

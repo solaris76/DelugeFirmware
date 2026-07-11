@@ -40,7 +40,6 @@ private:
 	    l10n::String::STRING_FOR_PIANO_ROLL,
 	    l10n::String::STRING_FOR_STEP_SEQ,
 	    l10n::String::STRING_FOR_PULSE_SEQ,
-	    l10n::String::STRING_FOR_ACID_SEQ,
 	};
 };
 
