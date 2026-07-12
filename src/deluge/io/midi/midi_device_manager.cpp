@@ -308,6 +308,7 @@ extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 		}
 
 		perPortDevice->portNumber = static_cast<uint8_t>(i);
+		perPortDevice->receiveClock = (i == 0);
 		connectedDevice->cable[i] = perPortDevice;
 	}
 
