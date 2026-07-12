@@ -393,7 +393,9 @@ extern "C" void detachedAsPeripheral(int32_t ip) {
 	int32_t ports = connectedUSBMIDIDevices[ip][0].maxPortConnected;
 	for (int32_t i = 0; i <= ports; i++) {
 		auto* cable = connectedUSBMIDIDevices[ip][0].cable[i];
-		cable->connectionFlags = 0;
+		if (cable != nullptr) {
+			cable->connectionFlags = 0;
+		}
 		connectedUSBMIDIDevices[ip][0].cable[i] = nullptr;
 	}
 	anyUSBSendingStillHappening[ip] = 0; // Reset this again. Been meaning to do this, and can no longer quite remember
@@ -492,13 +494,81 @@ static MIDICable* readCableFromFlash(uint8_t const* memory) {
 	return cable;
 }
 
+namespace {
+
+bool cableBelongsToRoot(MIDICable* cable, MIDIRootComplex* root) {
+	if (cable == nullptr || root == nullptr) {
+		return false;
+	}
+
+	if (root->getType() == RootComplexType::RC_USB_HOST) {
+		auto& devices = static_cast<MIDIRootComplexUSBHosted*>(root)->getHostedMIDIDevices();
+		for (int32_t j = 0; j < devices.getNumElements(); j++) {
+			if (devices.getElement(j) == cable) {
+				return true;
+			}
+		}
+	}
+
+	size_t numCables = root->getNumCables();
+	if (root->getType() == RootComplexType::RC_USB_PERIPHERAL) {
+		numCables = 3;
+	}
+
+	for (size_t i = 0; i < numCables; i++) {
+		if (root->getCable(i) == cable) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void clearStaleRootUSBCableReferences(MIDIRootComplex* rootBeingDestroyed) {
+	if (rootBeingDestroyed == nullptr) {
+		return;
+	}
+
+	for (auto& command : midiEngine.globalMIDICommands) {
+		if (cableBelongsToRoot(command.cable, rootBeingDestroyed)) {
+			command.cable = nullptr;
+		}
+	}
+
+	for (auto& channelType : midiEngine.midiFollowChannelType) {
+		if (cableBelongsToRoot(channelType.cable, rootBeingDestroyed)) {
+			channelType.cable = nullptr;
+		}
+	}
+}
+
+bool cableReferenceIsValid(MIDICable* cable) {
+	if (cable == nullptr) {
+		return true;
+	}
+	if (cable == &root_din.cable) {
+		return true;
+	}
+	if (root_usb != nullptr && cableBelongsToRoot(cable, root_usb)) {
+		return true;
+	}
+	return false;
+}
+
+} // namespace
+
 void readDeviceReferenceFromFlash(GlobalMIDICommand whichCommand, uint8_t const* memory) {
 	midiEngine.globalMIDICommands[util::to_underlying(whichCommand)].cable = readCableFromFlash(memory);
 }
 
 void writeDeviceReferenceToFlash(GlobalMIDICommand whichCommand, uint8_t* memory) {
-	if (midiEngine.globalMIDICommands[util::to_underlying(whichCommand)].cable) {
-		midiEngine.globalMIDICommands[util::to_underlying(whichCommand)].cable->writeToFlash(memory);
+	MIDICable* cable = midiEngine.globalMIDICommands[util::to_underlying(whichCommand)].cable;
+	if (cable != nullptr && !cableReferenceIsValid(cable)) {
+		cable = nullptr;
+		midiEngine.globalMIDICommands[util::to_underlying(whichCommand)].cable = nullptr;
+	}
+	if (cable != nullptr) {
+		cable->writeToFlash(memory);
 	}
 }
 
@@ -507,8 +577,13 @@ void readMidiFollowDeviceReferenceFromFlash(MIDIFollowChannelType whichType, uin
 }
 
 void writeMidiFollowDeviceReferenceToFlash(MIDIFollowChannelType whichType, uint8_t* memory) {
-	if (midiEngine.midiFollowChannelType[util::to_underlying(whichType)].cable) {
-		midiEngine.midiFollowChannelType[util::to_underlying(whichType)].cable->writeToFlash(memory);
+	MIDICable* cable = midiEngine.midiFollowChannelType[util::to_underlying(whichType)].cable;
+	if (cable != nullptr && !cableReferenceIsValid(cable)) {
+		cable = nullptr;
+		midiEngine.midiFollowChannelType[util::to_underlying(whichType)].cable = nullptr;
+	}
+	if (cable != nullptr) {
+		cable->writeToFlash(memory);
 	}
 }
 
@@ -556,14 +631,17 @@ void writeDevicesToFile() {
 		case RootComplexType::RC_DIN:
 			// illegal
 			break;
-		case RootComplexType::RC_USB_PERIPHERAL:
-			if (root_usb->getCable(0)->worthWritingToFile()) {
-				root_usb->getCable(0)->writeToFile(writer, "upstreamUSBDevice");
+		case RootComplexType::RC_USB_PERIPHERAL: {
+			MIDICable* upstream1 = root_usb->getCable(0);
+			MIDICable* upstream2 = root_usb->getCable(1);
+			if (upstream1 != nullptr && upstream1->worthWritingToFile()) {
+				upstream1->writeToFile(writer, "upstreamUSBDevice");
 			}
-			if (root_usb->getCable(1)->worthWritingToFile()) {
-				root_usb->getCable(1)->writeToFile(writer, "upstreamUSBDevice2");
+			if (upstream2 != nullptr && upstream2->worthWritingToFile()) {
+				upstream2->writeToFile(writer, "upstreamUSBDevice2");
 			}
 			break;
+		}
 		case RootComplexType::RC_USB_HOST:
 			for (auto& cable : root_usb->getCables()) {
 				auto& cableHosted = static_cast<MIDICableUSBHosted&>(cable);
@@ -633,9 +711,13 @@ void readDevicesFromFile() {
 					case '2':
 						root_usb->getCable(1)->readFromFile(reader);
 						break;
-					case '3':
-						root_usb->getCable(3)->readFromFile(reader);
+					case '3': {
+						MIDICable* upstream3 = root_usb->getCable(2);
+						if (upstream3 != nullptr) {
+							upstream3->readFromFile(reader);
+						}
 						break;
+					}
 					}
 				}
 			}
@@ -724,6 +806,18 @@ checkDevice:
 				device->sendClock = reader.readTagOrAttributeValueInt();
 			}
 		}
+		else if (!strcmp(tagName, "receiveClock")) {
+			if (!device) {
+				if (!name.isEmpty() || vendorId) {
+					device = getOrCreateHostedMIDIDeviceFromDetails(&name, vendorId,
+					                                                productId); // Will return NULL if error.
+				}
+			}
+
+			if (device) {
+				device->receiveClock = reader.readTagOrAttributeValueInt();
+			}
+		}
 
 		reader.exitTag();
 	}
@@ -733,6 +827,7 @@ checkDevice:
 }
 
 void setUSBRoot(gsl::owner<MIDIRootComplex*> root) {
+	clearStaleRootUSBCableReferences(root_usb);
 	delete root_usb;
 	root_usb = root;
 }
