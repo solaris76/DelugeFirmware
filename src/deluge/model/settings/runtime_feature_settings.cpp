@@ -287,6 +287,8 @@ void RuntimeFeatureSettings::readSettingsFromFile() {
 void RuntimeFeatureSettings::writeSettingsToFile() {
 	f_unlink(RUNTIME_FEATURE_SETTINGS_FILE); // May give error, but no real consequence from that.
 
+	f_mkdir(SETTINGS_FOLDER);
+
 	Error error = StorageManager::createXMLFile(RUNTIME_FEATURE_SETTINGS_FILE, smSerializer, true);
 	if (error != Error::NONE) {
 		return;
