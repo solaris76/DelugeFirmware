@@ -21,6 +21,7 @@
 #include "gui/menu_item/colour.h"
 #include "gui/ui/sound_editor.h"
 #include "hid/led/pad_leds.h"
+#include "io/midi/midi_device_manager.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/midi_transpose.h"
 #include "model/scale/preset_scales.h"
@@ -1012,6 +1013,35 @@ void writeSettings() {
 	R_SFLASH_EraseSector(0x80000 - 0x1000, SPIBSC_CH, SPIBSC_CMNCR_BSZ_SINGLE, 1, SPIBSC_OUTPUT_ADDR_24);
 	R_SFLASH_ByteProgram(0x80000 - 0x1000, buffer.data(), 256, SPIBSC_CH, SPIBSC_CMNCR_BSZ_SINGLE, SPIBSC_1BIT,
 	                     SPIBSC_OUTPUT_ADDR_24);
+}
+
+void reResolveMIDIDeviceReferencesAfterUSBInit() {
+	if (!settingsBeenRead) {
+		return;
+	}
+
+	uint8_t buffer[kFilenameBufferSize];
+	R_SFLASH_ByteRead(0x80000 - 0x1000, buffer, kFilenameBufferSize, SPIBSC_CH, SPIBSC_CMNCR_BSZ_SINGLE, SPIBSC_1BIT,
+	                  SPIBSC_OUTPUT_ADDR_24);
+
+	if (FirmwareVersion::Type{buffer[FIRMWARE_TYPE]} == FirmwareVersion::Type::UNKNOWN) {
+		return;
+	}
+
+	// Flash is read before the USB root complex exists, so USB device references must be
+	// resolved again once upstream/hosted cables are available.
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::PLAYBACK_RESTART, &buffer[80]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::PLAY, &buffer[84]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::RECORD, &buffer[88]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::TAP, &buffer[92]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::LOOP, &buffer[96]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::LOOP_CONTINUOUS_LAYERING, &buffer[100]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::UNDO, &buffer[104]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::REDO, &buffer[108]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::FILL, &buffer[116]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::NEXT_SONG, &buffer[181]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::SHIFT, &buffer[192]);
+	MIDIDeviceManager::readDeviceReferenceFromFlash(GlobalMIDICommand::TRANSPOSE, &buffer[158]);
 }
 
 } // namespace FlashStorage

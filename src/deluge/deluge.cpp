@@ -803,6 +803,8 @@ extern "C" int32_t deluge_main(void) {
 		}
 	}
 
+	FlashStorage::reResolveMIDIDeviceReferencesAfterUSBInit();
+
 	// Hopefully we can read these files now
 	runtimeFeatureSettings.readSettingsFromFile();
 	MIDIDeviceManager::readDevicesFromFile();

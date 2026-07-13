@@ -27,7 +27,20 @@ void MIDICableUSBUpstream::writeReferenceAttributesToFile(Serializer& writer) {
 
 void MIDICableUSBUpstream::writeToFlash(uint8_t* memory) {
 	D_PRINTLN("writing to flash port  %d  into ", portNumber);
-	*(uint16_t*)memory = portNumber ? VENDOR_ID_UPSTREAM_USB2 : VENDOR_ID_UPSTREAM_USB;
+	switch (portNumber) {
+	case 0:
+		*(uint16_t*)memory = VENDOR_ID_UPSTREAM_USB;
+		break;
+	case 1:
+		*(uint16_t*)memory = VENDOR_ID_UPSTREAM_USB2;
+		break;
+	case 2:
+		*(uint16_t*)memory = VENDOR_ID_UPSTREAM_USB3;
+		break;
+	default:
+		*(uint16_t*)memory = VENDOR_ID_NONE;
+		break;
+	}
 }
 
 char const* MIDICableUSBUpstream::getDisplayName() const {

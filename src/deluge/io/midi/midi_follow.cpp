@@ -1617,6 +1617,8 @@ void MidiFollow::writeSpecificChannelSettingsToFile(Serializer& writer, MIDIFoll
 	                midiEngine.midiFollowChannelType[util::to_underlying(type)].channelOrZone + 1);
 
 	MIDICable* cable = midiEngine.midiFollowChannelType[util::to_underlying(type)].cable;
+	MIDIDeviceManager::nullIfStaleCablePointer(cable);
+	midiEngine.midiFollowChannelType[util::to_underlying(type)].cable = cable;
 
 	if (cable != nullptr) {
 		// write reference inside <device> tag
@@ -1668,6 +1670,7 @@ void MidiFollow::readDefaultsFromFile() {
 			successfullyReadDefaultsFromFile = true;
 			return;
 		}
+		return;
 	}
 
 	//<defaults>

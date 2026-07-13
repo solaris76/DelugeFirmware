@@ -88,6 +88,7 @@ extern GlobalMIDICommand defaultLoopRecordingCommand;
 extern bool defaultUseSharps;
 
 void readSettings();
+void reResolveMIDIDeviceReferencesAfterUSBInit();
 void writeSettings();
 void resetSettings();
 void resetMidiFollowSettings();
