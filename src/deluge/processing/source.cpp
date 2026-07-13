@@ -18,6 +18,12 @@
 #include "processing/source.h"
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
+#include "dsp/phi_gendy.hpp"
+#include "dsp/phi_morph.hpp"
+#include "dsp/phi_stair.hpp"
+#include "dsp/phi_swarm.hpp"
+#include "dsp/phi_vox.hpp"
+#include "dsp/phi_weave.hpp"
 #include "gui/ui/browser/sample_browser.h"
 #include "gui/ui/sound_editor.h"
 #include "model/sample/sample.h"
@@ -48,6 +54,12 @@ Source::Source() {
 
 Source::~Source() {
 	destructAllMultiRanges();
+	delete phiMorphCache;
+	delete phiWeaveCache;
+	delete phiVoxCache;
+	delete phiSwarmCache;
+	delete phiGendyCache;
+	delete phiStairCache;
 }
 
 // Destructs the actual MultiRanges, but doesn't actually deallocate the memory, aka calling empty() on the Array - the
@@ -85,6 +97,10 @@ bool Source::renderInStereo(Sound* s, SampleHolder* sampleHolder) {
 	}
 
 	if (s->unisonStereoSpread && s->numUnison > 1) {
+		return true;
+	}
+
+	if (phiStereoActive()) {
 		return true;
 	}
 

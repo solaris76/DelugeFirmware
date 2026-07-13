@@ -91,4 +91,48 @@ inline void foldBuffer(q31_t* startSample, q31_t* endSample, q31_t foldLevel) {
 		currentSample += 1;
 	} while (currentSample < endSample);
 }
+
+/// Simple unipolar triangle - 2 segments: 0→1→0 (peak at phase=0.5)
+/// @param phase Phase in cycles (wraps automatically via floor)
+/// @param duty Active portion 0.0-1.0 (default 1.0 = full triangle, no deadzone)
+/// @return Output 0.0 to 1.0
+inline float triangleSimpleUnipolar(float phase, float duty = 1.0f) {
+	// Wrap to [0,1) — floorf handles negative phases correctly (truncation does not)
+	phase = phase - floorf(phase);
+	float halfDuty = duty * 0.5f;
+	float invHalfDuty = 2.0f / duty; // One division instead of two
+
+	if (phase < halfDuty) {
+		return phase * invHalfDuty; // Rising: 0→1
+	}
+	else if (phase < duty) {
+		return (duty - phase) * invHalfDuty; // Falling: 1→0
+	}
+	return 0.0f; // Deadzone
+}
+
+/// Bipolar triangle - 4 segments: 0→+1→0→-1→0 (starts at 0, peak at phase=0.25)
+/// @param phase Phase in cycles (wraps automatically via floor)
+/// @param duty Active portion 0.0-1.0 (default 1.0 = full triangle, no deadzone)
+/// @return Output -1.0 to +1.0
+inline float triangleFloat(float phase, float duty = 1.0f) {
+	// Wrap to [0,1) — floorf handles negative phases correctly (truncation does not)
+	phase = phase - floorf(phase);
+	float quarterDuty = duty * 0.25f;
+	float halfDuty = duty * 0.5f;
+
+	if (phase < quarterDuty) {
+		return phase / quarterDuty; // Rising positive: 0→+1
+	}
+	else if (phase < halfDuty) {
+		return (halfDuty - phase) / quarterDuty; // Falling positive: +1→0
+	}
+	else if (phase < halfDuty + quarterDuty) {
+		return -(phase - halfDuty) / quarterDuty; // Falling negative: 0→-1
+	}
+	else if (phase < duty) {
+		return -(duty - phase) / quarterDuty; // Rising negative: -1→0
+	}
+	return 0.0f; // Deadzone
+}
 } // namespace deluge::dsp

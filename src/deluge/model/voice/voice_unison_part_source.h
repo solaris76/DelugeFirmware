@@ -41,6 +41,7 @@ public:
 	uint32_t oscPos; // FKA phase. No longer used for Sample playback / rate conversion position. Only waves, including
 	                 // wavetable.
 	uint32_t phaseIncrementStoredValue;
+	uint64_t prevPhaseScaler{0}; // For PHI_SWARM / PHI_VOX state across buffers
 	int32_t carrierFeedback;
 	bool active;
 	VoiceSample* voiceSample = nullptr;
