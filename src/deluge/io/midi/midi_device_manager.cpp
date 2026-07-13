@@ -23,6 +23,7 @@
 #include "io/midi/cable_types/usb_common.h"
 #include "io/midi/cable_types/usb_device_cable.h"
 #include "io/midi/cable_types/usb_hosted.h"
+#include "io/midi/device_specific/launchpad_cable.h"
 #include "io/midi/device_specific/midi_device_launchpad_mk3.h"
 #include "io/midi/device_specific/novation_launchpad_mk3.h"
 #include "io/midi/device_specific/specific_midi_device.h"
@@ -90,7 +91,7 @@ void slowRoutine() {
 
 		if (root_usb->getType() == RootComplexType::RC_USB_HOST) {
 			auto& hostCable = static_cast<MIDICableUSBHosted&>(cable);
-			if (hostCable.freshly_connected) {
+			if (hostCable.freshly_connected && hostCable.connectionFlags) {
 				hostCable.hookOnConnected();
 				hostCable.freshly_connected = false;
 			}
@@ -317,7 +318,7 @@ extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 	                            && novation_launchpad_mk3::matchesVendorProduct(vendorId, productId);
 
 	for (int32_t i = 0; i < cablesToCreate; i++) {
-		if (omitLaunchpadDawPort && i == 0) {
+		if (omitLaunchpadDawPort && i == 0 && cablesToCreate > 1) {
 			continue;
 		}
 
@@ -960,6 +961,7 @@ checkDevice:
 
 void setUSBRoot(gsl::owner<MIDIRootComplex*> root) {
 	clearStaleRootUSBCableReferences(root_usb);
+	launchpad_cable::invalidatePort2();
 	delete root_usb;
 	root_usb = root;
 }

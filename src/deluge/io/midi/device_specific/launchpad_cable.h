@@ -21,4 +21,6 @@ bool isLaunchpadCable(MIDICable& cable);
 
 void registerPort2(MIDICableUSBHosted* cable);
 
+void invalidatePort2();
+
 } // namespace launchpad_cable

@@ -49,6 +49,10 @@ void registerPort2(MIDICableUSBHosted* cable) {
 	cachedPort2 = cable;
 }
 
+void invalidatePort2() {
+	cachedPort2 = nullptr;
+}
+
 MIDICableUSBHosted* getPort2() {
 	if (cachedPort2 != nullptr) {
 		if (cachedPort2->connectionFlags) {

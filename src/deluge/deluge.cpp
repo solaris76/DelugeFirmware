@@ -799,6 +799,7 @@ extern "C" int32_t deluge_main(void) {
 	FlashStorage::readSettings();
 
 	runtimeFeatureSettings.init();
+	runtimeFeatureSettings.readSettingsFromFile();
 
 	if (runtimeFeatureSettings.get(RuntimeFeatureSettingType::EmulatedDisplay)
 	    == RuntimeFeatureStateEmulatedDisplay::OnBoot) {
@@ -807,6 +808,8 @@ extern "C" int32_t deluge_main(void) {
 
 	{
 		deluge::io::usb::USBAutoLock lock;
+		// Hosted enumeration callbacks need a root complex before openUSBHost() returns.
+		MIDIDeviceManager::setUSBRoot(new MIDIRootComplexUSBHosted());
 		openUSBHost();
 
 		if (anythingInitiallyAttachedAsUSBHost == 0) {
@@ -821,15 +824,11 @@ extern "C" int32_t deluge_main(void) {
 
 			// configuredAsPeripheral will set the root complex.
 		}
-		else {
-			MIDIDeviceManager::setUSBRoot(new MIDIRootComplexUSBHosted());
-		}
 	}
 
 	FlashStorage::reResolveMIDIDeviceReferencesAfterUSBInit();
 
 	// Hopefully we can read these files now
-	runtimeFeatureSettings.readSettingsFromFile();
 	MIDIDeviceManager::readDevicesFromFile();
 	midiFollow.readDefaultsFromFile();
 	PadLEDs::setBrightnessLevel(FlashStorage::defaultPadBrightness);
