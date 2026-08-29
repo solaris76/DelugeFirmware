@@ -114,7 +114,10 @@ public:
 			if (fullPath) {
 				// locate last occurence of "/" in string
 				char* fileName = strrchr((char*)fullPath, '/');
-				image.drawString(++fileName, kTextSpacingX, yPixel + kTextSpacingY, kTextSpacingX, kTextSpacingY);
+				if (fileName) {
+					image.drawString(++fileName, kTextSpacingX, yPixel + (kTextSpacingY * 2), kTextSpacingX,
+					                 kTextSpacingY);
+				}
 			}
 		}
 		else {

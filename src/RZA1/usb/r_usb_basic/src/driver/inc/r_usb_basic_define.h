@@ -795,8 +795,10 @@
 #define USB_REL_BLK(ID, BLK)  (usb_cstd_rel_blk((uint8_t)(ID), (usb_utr_t*)(BLK)))
 
 /* Descriptor size */
-#define USB_DEVICESIZE (20u)  /* Device Descriptor size */
-#define USB_CONFIGSIZE (256u) /* Configuration Descriptor size */
+#define USB_DEVICESIZE (20u) /* Device Descriptor size */
+/* 2048: composite UAC2+MIDI (e.g. Expert Sleepers NTX-8CV) places MIDI after a large
+ * audio block. 256 truncated it; the host still binds MIDI only and ignores audio. */
+#define USB_CONFIGSIZE (2048u) /* Configuration Descriptor size */
 
 /* Number of software retries when a no-response condition occurs during a transfer */
 #define USB_PIPEERROR (1u)

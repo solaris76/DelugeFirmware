@@ -164,52 +164,40 @@ void InstrumentClipMinder::drawMIDIControlNumber(int32_t controlNumber, bool aut
 	DEF_STACK_STRING_BUF(buffer, 30);
 
 	bool doScroll = false;
-
-	if (controlNumber == CC_NUMBER_NONE) {
-		buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_NO_PARAM));
-	}
-	else if (controlNumber == CC_NUMBER_PITCH_BEND) {
-		buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PITCH_BEND));
-	}
-	else if (controlNumber == CC_NUMBER_AFTERTOUCH) {
-		buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_CHANNEL_PRESSURE));
-	}
-	else if (controlNumber == CC_NUMBER_Y_AXIS) {
-		// in mono expression this is mod wheel, and y-axis is not directly controllable
-		buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_MOD_WHEEL));
+	Output* output = getCurrentOutput();
+	if (output->type == OutputType::MIDI_OUT) {
+		bool usedCustomName = ((MIDIInstrument*)output)->appendCCName(buffer, controlNumber);
+		doScroll = usedCustomName && buffer.size() > 4;
 	}
 	else {
-		// Get CC label name from MIDI instrument or MIDI drum (kit row)
-		std::string_view name{};
-		bool appendedName = false;
-
-		Output* output = getCurrentOutput();
-		if (output->type == OutputType::MIDI_OUT) {
-			MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
-			if (controlNumber >= 0 && controlNumber < kNumRealCCNumbers) {
-				name = midiInstrument->getNameFromCC(controlNumber);
-			}
+		if (controlNumber == CC_NUMBER_NONE) {
+			buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_NO_PARAM));
 		}
-		else if (output->type == OutputType::KIT) {
-			Kit* kit = (Kit*)output;
-			if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
-				MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
-				if (controlNumber >= 0 && controlNumber < kNumRealCCNumbers) {
-					name = midiDrum->getNameFromCC(controlNumber);
+		else if (controlNumber == CC_NUMBER_PITCH_BEND) {
+			buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PITCH_BEND));
+		}
+		else if (controlNumber == CC_NUMBER_AFTERTOUCH) {
+			buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_CHANNEL_PRESSURE));
+		}
+		else if (controlNumber == CC_NUMBER_Y_AXIS) {
+			buffer.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_MOD_WHEEL));
+		}
+		else {
+			std::string_view name{};
+			if (output->type == OutputType::KIT) {
+				Kit* kit = (Kit*)output;
+				if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+					MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+					if (controlNumber >= 0 && controlNumber < kNumRealCCNumbers) {
+						name = midiDrum->getNameFromCC(controlNumber);
+					}
 				}
 			}
-		}
-
-		// if we have a name for this midi cc set by the user, display that instead of the cc number
-		if (!name.empty()) {
-			buffer.append(name.data());
-			doScroll = name.size() > 4;
-			appendedName = true;
-		}
-
-		// if we don't have a midi cc name set, draw CC number instead
-		if (!appendedName) {
-			if (display->haveOLED()) {
+			if (!name.empty()) {
+				buffer.append(name.data());
+				doScroll = name.size() > 4;
+			}
+			else if (display->haveOLED()) {
 				buffer.append("CC ");
 				buffer.appendInt(controlNumber);
 			}

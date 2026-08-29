@@ -442,6 +442,14 @@ static void usb_hmidi_enumeration_sequence(usb_utr_t* mess)
             p_iftable = g_p_usb_hmidi_interface_table[mess->ip];
 
             desc_len = desc_len - (p_iftable - p_desc);
+            /* Do not walk past the fetched config buffer if wTotalLength was truncated. */
+            {
+                uint16_t remaining_in_buf = (uint16_t)(USB_CONFIGSIZE - (p_iftable - p_desc));
+                if (desc_len > remaining_in_buf)
+                {
+                    desc_len = remaining_in_buf;
+                }
+            }
 
             /* pipe information table set */
             retval = usb_hmidi_pipe_info(mess, p_iftable, g_usb_hmidi_speed[mess->ip], desc_len);
@@ -723,7 +731,7 @@ uint16_t usb_hmidi_get_string_desc(usb_utr_t* ptr, uint16_t addr, uint16_t strin
         usb_shmidi_class_request_setup[ptr->ip][2] = (uint16_t)(g_usb_hmidi_str_desc_data[ptr->ip][2]);
         usb_shmidi_class_request_setup[ptr->ip][2] |=
             (uint16_t)((uint16_t)(g_usb_hmidi_str_desc_data[ptr->ip][3]) << 8);
-        usb_shmidi_class_request_setup[ptr->ip][3] = (uint16_t)USB_HMIDI_CLSDATASIZE;
+        usb_shmidi_class_request_setup[ptr->ip][3] = (uint16_t)USB_HMIDI_STRDESC_MAX_REQ;
     }
     usb_shmidi_class_request_setup[ptr->ip][0] = (USB_GET_DESCRIPTOR | USB_DEV_TO_HOST | USB_STANDARD | USB_DEVICE);
     usb_shmidi_class_request_setup[ptr->ip][1] = (uint16_t)(USB_STRING_DESCRIPTOR + string);

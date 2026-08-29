@@ -3582,6 +3582,9 @@ void Song::deleteOutput(Output* output) {
 
 void Song::moveInstrumentToHibernationList(Instrument* instrument) {
 
+	// Hibernated instruments stay allocated but leave the active output list, so audio tracks must stop targeting them.
+	clearRecordingFromReferencesTo(instrument);
+
 	removeOutputFromMainList(instrument);
 
 	if (instrument->type == OutputType::MIDI_OUT) {

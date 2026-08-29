@@ -710,9 +710,13 @@ Error Browser::getUnusedSlot(OutputType outputType, String* newName, char const*
 
 	Error error;
 	// Names always carry the prefix now, on both displays, so there is one search key.
-	char filenameToStartAt[6]; // thingName is max 4 chars.
-	strcpy(filenameToStartAt, thingName);
-	strcat(filenameToStartAt, ":"); // Colon is the first character after the digits.
+	// Sean: thingName is usually max 4 chars (e.g. SONG, SYNT, KIT), but can be longer
+	// - e.g. "PATTERN" with pattern browser or "MIDIDEVICE" with midi device definition browser.
+	// it's used for proposing the file name and on 7SEG if you type a # it will prefix it
+	uint8_t buffer_size = 20;
+	char filenameToStartAt[buffer_size];
+	strncpy(filenameToStartAt, thingName, buffer_size - 2); // Leave 2 chars for "colon + null terminator"
+	strcat(filenameToStartAt, ":");                         // Colon is the first character after the digits.
 	error = readFileItemsFromFolderAndMemory(currentSong, outputType, getThingName(outputType), filenameToStartAt, NULL,
 	                                         false, Availability::ANY, CATALOG_SEARCH_LEFT);
 
@@ -1356,7 +1360,6 @@ void Browser::displayText(bool blinkImmediately) {
 				display->setText("----");
 			}
 			else {
-
 				// A name is always the full on-card name ("SONG185"). On 7SEG we render the numeric part alone
 				// ("185") so it fits the four-character display.
 				char const* numberPart = nameAfterPrefix(enteredText.get());
@@ -1379,8 +1382,10 @@ void Browser::displayText(bool blinkImmediately) {
 					// provide some context in case the post-fix is long
 					scrollStart = enteredTextEditPos - 2;
 				}
-
-				scrollingText = display->setScrollingText(enteredText.get(), scrollStart);
+				FileItem* currentFileItem = getCurrentFileItem();
+				bool currentItemIsFolder = currentFileItem && currentFileItem->isFolder;
+				auto dotPos = currentItemIsFolder ? 3 : 255;
+				scrollingText = display->setScrollingText(enteredText.get(), scrollStart, 600, -1, dotPos);
 			}
 		}
 	}
@@ -1435,47 +1440,52 @@ ActionResult Browser::buttonAction(deluge::hid::Button b, bool on, bool inCardRo
 }
 
 ActionResult Browser::padAction(int32_t x, int32_t y, int32_t on) {
+	bool inFavouriteOrBanksColumn = (x >= 0 && x < static_cast<int32_t>(kNumFavourites));
 
-	if (isFavouritesVisible() && y == favouriteRow && on) {
-		if (sdRoutineLock) {
-			return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
-		}
-		if (Buttons::isShiftButtonPressed()) {
-			String filePath;
-			Error error = getCurrentFilePath(&filePath);
-			if (error != Error::NONE) {
-				display->displayPopup(l10n::get(l10n::String::STRING_FOR_ERROR_FILE_NOT_FOUND));
+	if (isFavouritesVisible() && inFavouriteOrBanksColumn && y == favouriteRow) {
+		if (on) {
+			if (sdRoutineLock) {
+				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 			}
-			if (favouritesManager.isEmpty(x)) {
-				if (!getCurrentFileItem()->isFolder) {
-					favouritesManager.setFavourite(x, FavouritesManager::favouriteDefaultColor, filePath.get());
+			if (Buttons::isShiftButtonPressed()) {
+				String filePath;
+				Error error = getCurrentFilePath(&filePath);
+				if (error != Error::NONE) {
+					display->displayPopup(l10n::get(l10n::String::STRING_FOR_ERROR_FILE_NOT_FOUND));
+				}
+				if (favouritesManager.isEmpty(x)) {
+					if (!getCurrentFileItem()->isFolder) {
+						favouritesManager.setFavourite(x, FavouritesManager::favouriteDefaultColor, filePath.get());
+						favouritesChanged();
+					}
+				}
+				else {
+					favouritesManager.unsetFavourite(x);
 					favouritesChanged();
 				}
 			}
 			else {
-				favouritesManager.unsetFavourite(x);
+				const std::string favouritePath = favouritesManager.getFavouriteFilename(x);
 				favouritesChanged();
-			}
-		}
-		else {
-			const std::string favouritePath = favouritesManager.getFavouriteFilename(x);
-			favouritesChanged();
-			if (!favouritePath.empty()) {
-				setFileByFullPath(outputTypeToLoad, favouritePath.c_str());
-			}
-			else {
-				display->displayPopup(l10n::get(l10n::String::STRING_FOR_FAVOURITES_EMPTY));
+				if (!favouritePath.empty()) {
+					setFileByFullPath(outputTypeToLoad, favouritePath.c_str());
+				}
+				else {
+					display->displayPopup(l10n::get(l10n::String::STRING_FOR_FAVOURITES_EMPTY));
+				}
 			}
 		}
 		return ActionResult::DEALT_WITH;
 	}
-	else if (isBanksVisible() && y == favouriteBankRow && on) {
-		if (sdRoutineLock) {
-			return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+	else if (isBanksVisible() && inFavouriteOrBanksColumn && y == favouriteBankRow) {
+		if (on) {
+			if (sdRoutineLock) {
+				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+			}
+			favouritesManager.selectFavouritesBank(x);
+			favouritesChanged();
+			return ActionResult::DEALT_WITH;
 		}
-		favouritesManager.selectFavouritesBank(x);
-		favouritesChanged();
-		return ActionResult::DEALT_WITH;
 	}
 	else {
 		return QwertyUI::padAction(x, y, on);

@@ -526,7 +526,10 @@ void AutomationEditorLayoutModControllable::getAutomationParameterName(Clip* cli
 		}
 	}
 	else {
-		if (clip->lastSelectedParamID == CC_NUMBER_NONE) {
+		if (outputType == OutputType::MIDI_OUT) {
+			((MIDIInstrument*)clip->output)->appendCCName(parameterName, clip->lastSelectedParamID);
+		}
+		else if (clip->lastSelectedParamID == CC_NUMBER_NONE) {
 			parameterName.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_NO_PARAM));
 		}
 		else if (clip->lastSelectedParamID == CC_NUMBER_PITCH_BEND) {
@@ -539,48 +542,31 @@ void AutomationEditorLayoutModControllable::getAutomationParameterName(Clip* cli
 			parameterName.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_MOD_WHEEL));
 		}
 		else {
-			bool appendedName = false;
-
-			// For MIDI instruments or MIDI kit drums, try to get custom CC name
-			if (clip->lastSelectedParamID >= 0 && clip->lastSelectedParamID < kNumRealCCNumbers) {
-				std::string_view name{};
-
-				if (outputType == OutputType::MIDI_OUT) {
-					// MIDI instrument track
-					MIDIInstrument* midiInstrument = (MIDIInstrument*)clip->output;
-					name = midiInstrument->getNameFromCC(clip->lastSelectedParamID);
-				}
-				else if (outputType == OutputType::KIT) {
-					// MIDI drum kit row
-					Kit* kit = (Kit*)clip->output;
-					if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
-						MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+			std::string_view name{};
+			if (outputType == OutputType::KIT) {
+				Kit* kit = (Kit*)clip->output;
+				if (kit->selectedDrum && kit->selectedDrum->type == DrumType::MIDI) {
+					MIDIDrum* midiDrum = (MIDIDrum*)kit->selectedDrum;
+					if (clip->lastSelectedParamID >= 0 && clip->lastSelectedParamID < kNumRealCCNumbers) {
 						name = midiDrum->getNameFromCC(clip->lastSelectedParamID);
 					}
 				}
-
-				// if we have a name for this midi cc set by the user, display that instead of the cc number
-				if (!name.empty()) {
-					parameterName.append(name.data());
-					appendedName = true;
-				}
 			}
-
-			// if we don't have a midi cc name set, draw CC number instead
-			if (!appendedName) {
-				if (display->haveOLED()) {
-					parameterName.append("CC ");
-					parameterName.appendInt(clip->lastSelectedParamID);
+			if (!name.empty()) {
+				parameterName.append(name.data());
+			}
+			else if (display->haveOLED()) {
+				parameterName.append("CC ");
+				parameterName.appendInt(clip->lastSelectedParamID);
+			}
+			else {
+				if (clip->lastSelectedParamID < 100) {
+					parameterName.append("CC");
 				}
 				else {
-					if (clip->lastSelectedParamID < 100) {
-						parameterName.append("CC");
-					}
-					else {
-						parameterName.append("C");
-					}
-					parameterName.appendInt(clip->lastSelectedParamID);
+					parameterName.append("C");
 				}
+				parameterName.appendInt(clip->lastSelectedParamID);
 			}
 		}
 	}

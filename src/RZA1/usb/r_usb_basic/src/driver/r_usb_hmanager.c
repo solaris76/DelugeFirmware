@@ -658,7 +658,8 @@ static uint16_t usb_hstd_chk_device_class(usb_utr_t* ptr, usb_hcdreg_t* driver, 
                 if ((uint16_t)descriptor_table[total_length1 + 5] == driver->ifclass)
                 {
 
-                    // If audio class, ensure MIDI subclass. Rohan
+                    // Audio class: skip UAC control/streaming (subclass != MIDI 0x03)
+                    // and keep walking so composite audio+MIDI devices still bind MIDI.
                     if (descriptor_table[total_length1 + 5] == USB_IFCLS_AUD
                         && descriptor_table[total_length1 + 6] != 0x03)
                         break;

@@ -105,10 +105,12 @@ public:
 	/// @param bend Bend amount. Only the lower 14 bits are used
 	void sendPitchBend(MIDISource source, int32_t channel, uint16_t bend, int32_t filter);
 	void sendPitchBend(MIDISource source, int32_t channel, uint16_t bend, int32_t filter, uint8_t deviceFilter);
-	void sendChannelAftertouch(MIDISource source, int32_t channel, uint8_t value, int32_t filter);
-	void sendChannelAftertouch(MIDISource source, int32_t channel, uint8_t value, int32_t filter, uint8_t deviceFilter);
-	void sendPolyphonicAftertouch(MIDISource source, int32_t channel, uint8_t value, uint8_t noteCode, int32_t filter);
-	void sendPolyphonicAftertouch(MIDISource source, int32_t channel, uint8_t value, uint8_t noteCode, int32_t filter,
+	/// @param value Pressure amount. Saturated into 0-127
+	void sendChannelAftertouch(MIDISource source, int32_t channel, int32_t value, int32_t filter);
+	void sendChannelAftertouch(MIDISource source, int32_t channel, int32_t value, int32_t filter, uint8_t deviceFilter);
+	/// @param value Pressure amount. Saturated into 0-127
+	void sendPolyphonicAftertouch(MIDISource source, int32_t channel, int32_t value, uint8_t noteCode, int32_t filter);
+	void sendPolyphonicAftertouch(MIDISource source, int32_t channel, int32_t value, uint8_t noteCode, int32_t filter,
 	                              uint8_t deviceFilter);
 	bool anythingInOutputBuffer();
 
@@ -116,8 +118,8 @@ public:
 	LearnedMIDI globalMIDICommands[kNumGlobalMIDICommands];
 
 	bool midiThru;
-	LearnedMIDI midiFollowChannelType[kNumMIDIFollowChannelTypes]; // A, B, C
-	MIDIFollowChannelType midiFollowFeedbackChannelType;           // A, B, C, NONE
+	LearnedMIDI midiFollowChannelType[kNumMIDIFollowChannelTypesIncludingTracks]; // A, B, C, Track 1-16
+	MIDIFollowFeedbackChannelType midiFollowFeedbackChannelType;                  // NONE, A, B, C, Track, Track + A/B/C
 	uint8_t midiFollowKitRootNote;
 	bool midiFollowDisplayParam;
 	MIDIFollowFeedbackAutomationMode midiFollowFeedbackAutomation;
