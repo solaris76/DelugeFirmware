@@ -748,7 +748,7 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 				// Check iterance first (if set)
 				bool shouldPlay = true;
 				if (step.iterance != kDefaultIteranceValue) {
-					shouldPlay = step.iterance.passesCheck(repeatCount_);
+					shouldPlay = step.iterance.passesCheck(repeatCount_, false);
 				}
 
 				// If iterance check passes, check probability

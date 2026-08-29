@@ -817,10 +817,42 @@ void factoryReset(bool showPopup) {
 
 	f_unlink(MIDI_DEVICES_XML);
 
-	new (&upstreamUSBMIDICable1) MIDICableUSBUpstream{0, false, true};
-	new (&upstreamUSBMIDICable2) MIDICableUSBUpstream{1, true, false};
-	new (&upstreamUSBMIDICable3) MIDICableUSBUpstream{2, false, false};
-	new (&dinMIDIPorts) MIDICableDINPorts{};
+	new (&root_din.cable) MIDICableDINPorts{};
+
+	if (root_usb != nullptr && root_usb->getType() == RootComplexType::RC_USB_PERIPHERAL) {
+		if (MIDICable* cable = root_usb->getCable(0)) {
+			new (cable) MIDICableUSBUpstream{0, false, true};
+		}
+		if (MIDICable* cable = root_usb->getCable(1)) {
+			new (cable) MIDICableUSBUpstream{1, true, false};
+		}
+		if (MIDICable* cable = root_usb->getCable(2)) {
+			new (cable) MIDICableUSBUpstream{2, false, false};
+		}
+	}
+	else if (root_usb != nullptr && root_usb->getType() == RootComplexType::RC_USB_HOST) {
+		for (size_t i = 0; i < root_usb->getNumCables(); i++) {
+			MIDICable* cable = root_usb->getCable(i);
+			if (cable == nullptr) {
+				continue;
+			}
+			uint8_t connected = cable->connectionFlags;
+			cable->ports[0] = MIDIPort{};
+			cable->ports[1] = MIDIPort{};
+			cable->defaultVelocityToLevel = 0;
+			cable->sendClock = true;
+			cable->receiveClock = true;
+			cable->is_relative = false;
+			cable->mpeZoneBendRanges[MPE_ZONE_LOWER_NUMBERED_FROM_0][BEND_RANGE_MAIN] = 2;
+			cable->mpeZoneBendRanges[MPE_ZONE_UPPER_NUMBERED_FROM_0][BEND_RANGE_MAIN] = 2;
+			cable->mpeZoneBendRanges[MPE_ZONE_LOWER_NUMBERED_FROM_0][BEND_RANGE_FINGER_LEVEL] = 48;
+			cable->mpeZoneBendRanges[MPE_ZONE_UPPER_NUMBERED_FROM_0][BEND_RANGE_FINGER_LEVEL] = 48;
+			for (auto& channel : cable->inputChannels) {
+				channel = MIDIInputChannel{};
+			}
+			cable->connectionFlags = connected;
+		}
+	}
 
 	recountSmallestMPEZones();
 	anyChangesToSave = false;

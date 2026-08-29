@@ -584,7 +584,7 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 	// Check iterance first (if set) - same as step sequencer
 	bool shouldPlay = true;
 	if (stageData.iterance != kDefaultIteranceValue) {
-		shouldPlay = stageData.iterance.passesCheck(sequencerState_.repeatCount_);
+		shouldPlay = stageData.iterance.passesCheck(sequencerState_.repeatCount_, false);
 	}
 	if (!shouldPlay) {
 		return; // Iterance check failed - don't play this cycle
