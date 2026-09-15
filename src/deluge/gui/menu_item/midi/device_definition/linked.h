@@ -73,7 +73,7 @@ public:
 		}
 	}
 
-	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) {
+	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) const {
 		Output* output = getCurrentOutput();
 		// Device definition is relevant for both MIDI instruments and MIDI drum kit rows
 		if (output && output->type == OutputType::MIDI_OUT) {

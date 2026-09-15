@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2014-2023 Synthstrom Audible Limited
- *
+ * Copyright (c) 2026 Sean Ditny
+
  * This file is part of The Synthstrom Audible Deluge Firmware.
  *
  * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
@@ -16,30 +16,18 @@
  */
 #pragma once
 #include "gui/menu_item/toggle.h"
-#include "model/instrument/midi_instrument.h"
-#include "model/song/song.h"
-
-extern Output* getCurrentOutput();
-extern Instrument* getCurrentInstrument();
+#include "gui/ui/sound_editor.h"
+#include "io/midi/midi_device.h"
+#include "io/midi/midi_device_manager.h"
 
 namespace deluge::gui::menu_item::midi {
-class MPEYToModWheel final : public Toggle {
+class DeviceSendThru final : public Toggle {
 public:
 	using Toggle::Toggle;
-	// this is safe since it's only shown in midi clips
-	void readCurrentValue() override {
-		// awkward but this avoids needing to branch every time we output a cc
-		this->setValue(((MIDIInstrument*)getCurrentOutput())->outputMPEY == CC_EXTERNAL_MOD_WHEEL);
-	}
+	void readCurrentValue() override { this->setValue(soundEditor.currentMIDICable->midi_thru); }
 	void writeCurrentValue() override {
-		((MIDIInstrument*)getCurrentOutput())->outputMPEY =
-		    this->getValue() ? CC_EXTERNAL_MOD_WHEEL : CC_EXTERNAL_MPE_Y;
-		getCurrentInstrument()->editedByUser = true;
-	}
-	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) const override {
-		// not relevant for cv
-		const auto type = getCurrentOutputType();
-		return (type == OutputType::MIDI_OUT);
+		soundEditor.currentMIDICable->midi_thru = this->getValue();
+		MIDIDeviceManager::anyChangesToSave = true;
 	}
 };
 } // namespace deluge::gui::menu_item::midi

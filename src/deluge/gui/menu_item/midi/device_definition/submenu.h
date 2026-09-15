@@ -29,7 +29,7 @@ class DeviceDefinitionSubmenu : public Submenu {
 public:
 	using Submenu::Submenu;
 
-	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) override {
+	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) const override {
 		Output* output = getCurrentOutput();
 		// Device definition menu is relevant for both MIDI instruments and MIDI drum kit rows
 		if (output && output->type == OutputType::MIDI_OUT) {

@@ -26,6 +26,7 @@
 #include "dsp/phi_weave.hpp"
 #include "gui/ui/browser/sample_browser.h"
 #include "gui/ui/sound_editor.h"
+#include "memory/memory_allocator_interface.h"
 #include "model/sample/sample.h"
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound.h"
@@ -53,6 +54,12 @@ Source::Source() {
 }
 
 Source::~Source() {
+	// destruct dxPatch if it was allocated
+	if (dxPatch != nullptr) {
+		dxPatch->~DxPatch();
+		delugeDealloc(dxPatch);
+		dxPatch = nullptr;
+	}
 	destructAllMultiRanges();
 	delete phiMorphCache;
 	delete phiWeaveCache;

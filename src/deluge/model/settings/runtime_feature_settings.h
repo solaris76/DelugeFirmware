@@ -75,6 +75,7 @@ enum RuntimeFeatureSettingType : uint32_t {
 	EnableLaunchpadGridMirror,
 	GeneratorCcOutput,
 	RoundedCorners,
+	ShortcutOverlay,
 	MaxElement // Keep as boundary
 };
 
