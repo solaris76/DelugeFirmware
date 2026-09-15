@@ -138,7 +138,8 @@ protected:
 	uint8_t spiralHigh_ = 15;     // For SPIRAL mode: high bound (optimized from int32_t)
 
 	// Currently playing note (for note-off)
-	int16_t activeNoteCode_ = -1; // -1 to 127 (optimized from int32_t)
+	int16_t activeNoteCode_ = -1;  // -1 to 127 (optimized from int32_t)
+	int32_t activeNoteOffPos_ = 0; // absolutePlaybackPos when the active note should end
 
 	// Active step count (1-16) - steps beyond this are dimmed and not played
 	uint8_t numActiveSteps_ = 16; // Optimized from int32_t

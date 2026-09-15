@@ -96,6 +96,8 @@ public:
 	void sendPGMChange(MIDISource source, int32_t channel, int32_t pgm, int32_t filter, uint8_t deviceFilter);
 	void sendAllNotesOff(MIDISource source, int32_t channel, int32_t filter);
 	void sendAllNotesOff(MIDISource source, int32_t channel, int32_t filter, uint8_t deviceFilter);
+	/// Send MIDI CC 123 (All Notes Off) on every channel to all connected outputs.
+	void sendAllNotesOffAllChannels();
 	void sendBank(MIDISource source, int32_t channel, int32_t num, int32_t filter);
 	void sendBank(MIDISource source, int32_t channel, int32_t num, int32_t filter, uint8_t deviceFilter);
 	void sendSubBank(MIDISource source, int32_t channel, int32_t num, int32_t filter);

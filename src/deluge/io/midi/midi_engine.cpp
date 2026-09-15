@@ -113,6 +113,13 @@ void MidiEngine::sendAllNotesOff(MIDISource source, int32_t channel, int32_t fil
 	sendMidi(source, MIDIMessage::cc(channel, 123, 0), filter, true, deviceFilter);
 }
 
+void MidiEngine::sendAllNotesOffAllChannels() {
+	for (int32_t channel = 0; channel < 16; channel++) {
+		sendAllNotesOff(&playbackHandler, channel, kMIDIOutputFilterNoMPE);
+	}
+	flushMIDI();
+}
+
 /// Saturate a value into the 7 bits a MIDI data byte gets. Callers derive these from internal 32-bit parameter values,
 /// which can land outside 0-127; letting one through sets bit 7 and the receiver reads it as a status byte instead - if
 /// it falls in 0xF8-0xFF that's a spurious System Real-Time message (see #4821).

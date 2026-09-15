@@ -208,6 +208,7 @@
 #include "gui/menu_item/sidechain/sync.h"
 #include "gui/menu_item/sidechain/volume.h"
 #include "gui/menu_item/sidechain/volume_global.h"
+#include "gui/menu_item/song/all_notes_off.h"
 #include "gui/menu_item/song/configure_macros.h"
 #include "gui/menu_item/song/midi_learn.h"
 #include "gui/menu_item/source/patched_param/modulator_feedback.h"
@@ -1854,6 +1855,7 @@ PLACE_SDRAM_BSS Submenu songThresholdRecordingSubmenu{
 
 PLACE_SDRAM_BSS song::ConfigureMacros configureSongMacrosMenu{STRING_FOR_CONFIGURE_SONG_MACROS};
 PLACE_SDRAM_BSS song::MidiLearn midiLearnMenu{STRING_FOR_MIDI_LEARN};
+PLACE_SDRAM_BSS song::AllNotesOff allNotesOffMenu{STRING_FOR_ALL_NOTES_OFF};
 
 // Root menu for Song View
 PLACE_SDRAM_BSS menu_item::Submenu soundEditorRootMenuSongView{
@@ -1868,6 +1870,7 @@ PLACE_SDRAM_BSS menu_item::Submenu soundEditorRootMenuSongView{
         &configureSongMacrosMenu,
         &midiLearnMenu,
         &stemExportMenu,
+        &allNotesOffMenu,
     },
 };
 

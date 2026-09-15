@@ -947,6 +947,7 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_DEFAULT_HIGH_CPU_USAGE_INDICATOR, "High CPU Indicator"},
         {STRING_FOR_HOLD_TIME, "Hold Press Time"},
         {STRING_FOR_EXPORT_AUDIO, "Export Audio"},
+        {STRING_FOR_ALL_NOTES_OFF, "All Notes Off"},
         {STRING_FOR_START_EXPORT, "Start Export"},
         {STRING_FOR_CONFIGURE_EXPORT_STEMS, "Configure Export"},
         {STRING_FOR_CONFIGURE_EXPORT_STEMS_NORMALIZATION, "Normalization"},

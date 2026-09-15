@@ -178,12 +178,23 @@ protected:
 	// to get tick periods that automatically handle tempo and resolution
 
 	static bool atDivisionBoundary(int32_t absolutePos, int32_t ticksPerPeriod) {
+		if (ticksPerPeriod <= 0) {
+			return false;
+		}
 		return (absolutePos % ticksPerPeriod) == 0;
 	}
 
 	static int32_t ticksUntilNextDivision(int32_t absolutePos, int32_t ticksPerPeriod) {
+		if (ticksPerPeriod <= 0) {
+			return 2147483647;
+		}
 		int32_t howFarIntoPeriod = absolutePos % ticksPerPeriod;
 		return howFarIntoPeriod == 0 ? ticksPerPeriod : (ticksPerPeriod - howFarIntoPeriod);
+	}
+
+	static int32_t ticksUntilPos(int32_t now, int32_t then) {
+		int32_t remaining = then - now;
+		return remaining > 0 ? remaining : 2147483647;
 	}
 
 	// SCALE HELPERS - Get notes in current scale

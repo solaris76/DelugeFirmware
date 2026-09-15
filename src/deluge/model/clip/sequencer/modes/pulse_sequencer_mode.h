@@ -168,8 +168,9 @@ protected:
 	int8_t heldPadY_ = -1; // Y coordinate of held note pad, or -1 if none
 
 	// Core sequencer methods
-	void generateNotes(void* modelStack);
-	void playNoteForStage(void* modelStack, int32_t stage);
+	void generateNotes(void* modelStack, int32_t absolutePlaybackPos);
+	void playNoteForStage(void* modelStack, int32_t stage, int32_t absolutePlaybackPos);
+	int32_t ticksUntilSoonestNoteOff(int32_t absolutePlaybackPos) const;
 	void switchNoteOff(void* modelStack, int32_t noteSlot);
 	void advanceToNextEnabledStage();
 	bool evaluateRhythmPattern(int32_t stage, int32_t pulsePosition);

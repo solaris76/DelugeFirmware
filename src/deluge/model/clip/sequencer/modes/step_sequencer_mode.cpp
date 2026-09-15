@@ -31,6 +31,7 @@
 #include "storage/storage_manager.h"
 #include "util/functions.h" // Includes cfunctions.h, which provides intToString()
 #include "util/lookuptables/lookuptables.h"
+#include <algorithm>
 #include <cstring>
 
 namespace deluge::model::clip::sequencer::modes {
@@ -45,6 +46,7 @@ void StepSequencerMode::initialize() {
 	initialized_ = true;
 	currentStep_ = 0;
 	activeNoteCode_ = -1;
+	activeNoteOffPos_ = 0;
 	ticksPerSixteenthNote_ = 0;
 	lastAbsolutePlaybackPos_ = 0;
 	heldPadX_ = -1;
@@ -88,6 +90,7 @@ void StepSequencerMode::cleanup() {
 	initialized_ = false;
 	currentStep_ = 0;
 	activeNoteCode_ = -1;
+	activeNoteOffPos_ = 0;
 	numScaleNotes_ = 0;
 	noteScrollOffset_ = 0;
 	lastAbsolutePlaybackPos_ = 0;
@@ -663,6 +666,11 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 		ticksPerSixteenthNote_ = modelStack->song->getSixteenthNoteLength();
 	}
 
+	// Playback restarted or song position jumped backwards - kill any leftover note
+	if (absolutePlaybackPos < lastAbsolutePlaybackPos_) {
+		stopAllNotes(modelStackPtr);
+	}
+
 	// Reset to first step when playback starts (only at position 0)
 	if (absolutePlaybackPos == 0) {
 		currentStep_ = 0;
@@ -692,9 +700,20 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 	// Always update scale notes (like Pulse Sequencer does)
 	updateScaleNotes(modelStackPtr);
 
+	// Honour gate length between step boundaries
+	if (activeNoteCode_ >= 0 && absolutePlaybackPos >= activeNoteOffPos_) {
+		stopNote(modelStackPtr, activeNoteCode_);
+		activeNoteCode_ = -1;
+	}
+
 	// Check if we're at a step boundary
 	if (!atDivisionBoundary(absolutePlaybackPos, adjustedTicksPerStep)) {
-		return ticksUntilNextDivision(absolutePlaybackPos, adjustedTicksPerStep);
+		lastAbsolutePlaybackPos_ = absolutePlaybackPos;
+		int32_t ticksTilNext = ticksUntilNextDivision(absolutePlaybackPos, adjustedTicksPerStep);
+		if (activeNoteCode_ >= 0) {
+			ticksTilNext = std::min(ticksTilNext, ticksUntilPos(absolutePlaybackPos, activeNoteOffPos_));
+		}
+		return ticksTilNext;
 	}
 
 	// Advance to next step at the START of this boundary (except on first boundary at position 0)
@@ -761,9 +780,13 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 						if (noteCode >= 0 && noteCode <= 127) {
 							// Use step's gate length (percentage of step duration)
 							int32_t noteLength = (adjustedTicksPerStep * static_cast<int32_t>(step.gateLength)) / 100;
+							if (noteLength < 1) {
+								noteLength = 1;
+							}
 							// Use step's velocity (1-127)
 							playNote(modelStackPtr, noteCode, step.velocity, noteLength);
 							activeNoteCode_ = noteCode;
+							activeNoteOffPos_ = absolutePlaybackPos + noteLength;
 						}
 					}
 				}
@@ -776,8 +799,12 @@ int32_t StepSequencerMode::processPlayback(void* modelStackPtr, int32_t absolute
 
 	lastAbsolutePlaybackPos_ = absolutePlaybackPos;
 
-	// Return ticks until next step boundary (use adjusted ticks, not base)
-	return adjustedTicksPerStep;
+	// Wake again at the sooner of the next step or this note's gate end
+	int32_t ticksTilNext = adjustedTicksPerStep;
+	if (activeNoteCode_ >= 0) {
+		ticksTilNext = std::min(ticksTilNext, ticksUntilPos(absolutePlaybackPos, activeNoteOffPos_));
+	}
+	return ticksTilNext;
 }
 
 void StepSequencerMode::stopAllNotes(void* modelStackPtr) {
@@ -786,6 +813,7 @@ void StepSequencerMode::stopAllNotes(void* modelStackPtr) {
 		stopNote(modelStackPtr, activeNoteCode_);
 		activeNoteCode_ = -1;
 	}
+	activeNoteOffPos_ = 0;
 
 	// Reset play head position and refresh UI to clear the play head indicator
 	currentStep_ = 0;
@@ -1356,9 +1384,11 @@ bool StepSequencerMode::copyFrom(SequencerMode* other) {
 	// Copy playback state
 	initialized_ = otherStep->initialized_;
 	repeatCount_ = otherStep->repeatCount_;
-	activeNoteCode_ = otherStep->activeNoteCode_;
+	// Don't copy a live sounding note - the source clip still owns it
+	activeNoteCode_ = -1;
+	activeNoteOffPos_ = 0;
 	ticksPerSixteenthNote_ = otherStep->ticksPerSixteenthNote_;
-	lastAbsolutePlaybackPos_ = otherStep->lastAbsolutePlaybackPos_;
+	lastAbsolutePlaybackPos_ = 0;
 
 	// Copy scale notes cache
 	numScaleNotes_ = otherStep->numScaleNotes_;

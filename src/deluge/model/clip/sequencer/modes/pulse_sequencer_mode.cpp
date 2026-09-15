@@ -458,6 +458,11 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 		return 2147483647;
 	}
 
+	// Playback restarted or song position jumped backwards - kill leftover notes
+	if (absolutePlaybackPos < lastAbsolutePlaybackPos_) {
+		stopAllNotes(modelStackPtr);
+	}
+
 	// Reset repeat count when playback starts (only at position 0)
 	if (absolutePlaybackPos == 0) {
 		sequencerState_.repeatCount_ = 0;
@@ -471,14 +476,11 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 	// Apply clock divider to timing
 	int32_t ticksPerPeriod = getTicksPerPeriod(ticksPerSixteenthNote_);
 
-	// Store clip position
-	lastAbsolutePlaybackPos_ = clip->lastProcessedPos;
-
 	// Check for any notes that need to be turned off
 	for (int32_t i = 0; i < kMaxNoteSlots; i++) {
 		if (sequencerState_.noteActive[i]) {
 			// Check if note should end now
-			if (absolutePlaybackPos >= sequencerState_.noteGatePos[i]) {
+			if (absolutePlaybackPos >= static_cast<int32_t>(sequencerState_.noteGatePos[i])) {
 				stopNote(modelStackPtr, sequencerState_.noteCodeActive[i]);
 				sequencerState_.noteActive[i] = false;
 				sequencerState_.noteCodeActive[i] = -1;
@@ -499,7 +501,7 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 		sequencerState_.lastPlayedStage = performanceControls_.currentStage;
 
 		// Generate notes
-		generateNotes(modelStackPtr);
+		generateNotes(modelStackPtr, absolutePlaybackPos);
 
 		// Refresh the gate line and note pads when stage changes
 		if (oldStage != performanceControls_.currentStage) {
@@ -539,7 +541,11 @@ int32_t PulseSequencerMode::processPlayback(void* modelStackPtr, int32_t absolut
 		sequencerState_.lastRefreshTick = currentTick;
 	}
 
-	return ticksUntilNextDivision(absolutePlaybackPos, ticksPerPeriod);
+	lastAbsolutePlaybackPos_ = absolutePlaybackPos;
+
+	int32_t ticksTilNext = ticksUntilNextDivision(absolutePlaybackPos, ticksPerPeriod);
+	ticksTilNext = std::min(ticksTilNext, ticksUntilSoonestNoteOff(absolutePlaybackPos));
+	return ticksTilNext;
 }
 
 void PulseSequencerMode::stopAllNotes(void* modelStackPtr) {
@@ -553,14 +559,14 @@ void PulseSequencerMode::stopAllNotes(void* modelStackPtr) {
 	}
 }
 
-void PulseSequencerMode::generateNotes(void* modelStackPtr) {
+void PulseSequencerMode::generateNotes(void* modelStackPtr, int32_t absolutePlaybackPos) {
 	int32_t stage = performanceControls_.currentStage;
 
 	if (isStageActive(stage)) {
 		int32_t pulseInStage = sequencerState_.currentPulse;
 
 		if (evaluateRhythmPattern(stage, pulseInStage)) {
-			playNoteForStage(modelStackPtr, stage);
+			playNoteForStage(modelStackPtr, stage, absolutePlaybackPos);
 		}
 	}
 
@@ -574,7 +580,7 @@ void PulseSequencerMode::generateNotes(void* modelStackPtr) {
 	}
 }
 
-void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
+void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage, int32_t absolutePlaybackPos) {
 	StageData& stageData = stages_[stage];
 
 	if (stageData.gateType == GateType::OFF || stageData.gateType == GateType::SKIP) {
@@ -629,9 +635,6 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 		note = 127;
 
 	// Calculate note length based on gate type
-	ModelStackWithTimelineCounter* modelStack = static_cast<ModelStackWithTimelineCounter*>(modelStackPtr);
-	InstrumentClip* clip = static_cast<InstrumentClip*>(modelStack->getTimelineCounter());
-
 	int32_t noteLength;
 	int32_t periodTicks = getTicksPerPeriod(ticksPerSixteenthNote_);
 	if (stageData.gateType == GateType::HELD) {
@@ -666,6 +669,8 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 		if (sequencerState_.noteCodeActive[freeSlot] >= 0) {
 			stopNote(modelStackPtr, sequencerState_.noteCodeActive[freeSlot]);
 		}
+		sequencerState_.noteActive[freeSlot] = false;
+		sequencerState_.noteCodeActive[freeSlot] = -1;
 	}
 
 	// Apply probability check
@@ -685,10 +690,21 @@ void PulseSequencerMode::playNoteForStage(void* modelStackPtr, int32_t stage) {
 	// Send note-on (Deluge convention: pass length but we still track note-off ourselves)
 	playNote(modelStackPtr, note, velocity, noteLength);
 
-	// Track for automatic note-off
+	// Track for automatic note-off using the same never-wrapping song clock as processPlayback
 	sequencerState_.noteCodeActive[freeSlot] = note;
-	sequencerState_.noteGatePos[freeSlot] = clip->lastProcessedPos + noteLength;
+	sequencerState_.noteGatePos[freeSlot] = static_cast<uint32_t>(absolutePlaybackPos + noteLength);
 	sequencerState_.noteActive[freeSlot] = true;
+}
+
+int32_t PulseSequencerMode::ticksUntilSoonestNoteOff(int32_t absolutePlaybackPos) const {
+	int32_t soonest = 2147483647;
+	for (int32_t i = 0; i < kMaxNoteSlots; i++) {
+		if (sequencerState_.noteActive[i]) {
+			soonest = std::min(
+			    soonest, ticksUntilPos(absolutePlaybackPos, static_cast<int32_t>(sequencerState_.noteGatePos[i])));
+		}
+	}
+	return soonest;
 }
 
 void PulseSequencerMode::switchNoteOff(void* modelStackPtr, int32_t noteSlot) {
@@ -1797,8 +1813,13 @@ bool PulseSequencerMode::copyFrom(SequencerMode* other) {
 	// Copy all stage data
 	stages_ = otherPulse->stages_;
 
-	// Copy sequencer state
+	// Copy sequencer state, but not live sounding notes - the source clip still owns those
 	sequencerState_ = otherPulse->sequencerState_;
+	for (int32_t i = 0; i < kMaxNoteSlots; i++) {
+		sequencerState_.noteCodeActive[i] = -1;
+		sequencerState_.noteGatePos[i] = 0;
+		sequencerState_.noteActive[i] = false;
+	}
 
 	// Copy performance controls
 	performanceControls_ = otherPulse->performanceControls_;
@@ -1809,7 +1830,7 @@ bool PulseSequencerMode::copyFrom(SequencerMode* other) {
 	// Copy playback state (critical for playback to work)
 	initialized_ = otherPulse->initialized_;
 	ticksPerSixteenthNote_ = otherPulse->ticksPerSixteenthNote_;
-	lastAbsolutePlaybackPos_ = otherPulse->lastAbsolutePlaybackPos_;
+	lastAbsolutePlaybackPos_ = 0;
 
 	// Copy control columns
 	controlColumnState_ = otherPulse->controlColumnState_;
