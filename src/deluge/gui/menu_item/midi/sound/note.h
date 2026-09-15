@@ -51,7 +51,7 @@ public:
 		}
 	}
 
-	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) override {
+	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) const override {
 		Output* output = getCurrentOutput();
 		return (output && output->type == OutputType::KIT);
 	}

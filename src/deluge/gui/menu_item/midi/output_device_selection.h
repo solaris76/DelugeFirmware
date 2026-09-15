@@ -31,7 +31,7 @@ class OutputDeviceSelection final : public Selection {
 public:
 	using Selection::Selection;
 
-	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) override {
+	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) const override {
 		Output* output = ::getCurrentOutput();
 		return (output != nullptr && output->type == OutputType::MIDI_OUT);
 	}

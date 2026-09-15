@@ -34,7 +34,7 @@ class KitOutputDeviceSelection final : public Selection {
 public:
 	using Selection::Selection;
 
-	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) override {
+	bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) const override {
 		// Check if we're editing a Kit row and if it's a MIDI drum
 		if (soundEditor.editingKitRow()) {
 			auto* kit = ::getCurrentKit();
