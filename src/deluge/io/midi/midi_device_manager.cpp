@@ -20,14 +20,20 @@
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/mpe/zone_num_member_channels.h"
 #include "gui/ui/sound_editor.h"
+#include "gui/ui/ui.h"
 #include "hid/display/display.h"
 #include "io/midi/cable_types/din.h"
 #include "io/midi/cable_types/usb_device_cable.h"
 #include "io/midi/device_specific/specific_midi_device.h"
 #include "io/midi/midi_device.h"
+#include "io/midi/midi_device_helper.h"
 #include "io/midi/midi_engine.h"
 #include "mem_functions.h"
 #include "memory/general_memory_allocator.h"
+#include "model/drum/midi_drum.h"
+#include "model/instrument/kit.h"
+#include "model/instrument/midi_instrument.h"
+#include "model/song/song.h"
 #include "storage/storage_manager.h"
 #include "util/container/vector/named_thing_vector.h"
 #include "util/misc.h"
@@ -264,6 +270,58 @@ static int32_t countEmbeddedMidiJacks(uint8_t const* cfg) {
 	return detected;
 }
 
+static void rematchSongOutputDevices() {
+	if (currentSong == nullptr) {
+		return;
+	}
+
+	for (Output* output = currentSong->firstOutput; output != nullptr; output = output->next) {
+		if (output->type == OutputType::MIDI_OUT) {
+			auto* instrument = static_cast<MIDIInstrument*>(output);
+			if (!instrument->outputDeviceName.isEmpty()) {
+				instrument->outputDevice = deluge::io::midi::findDeviceIndexByName(instrument->outputDeviceName.get(),
+				                                                                   instrument->outputDevice);
+			}
+		}
+		else if (output->type == OutputType::KIT) {
+			for (Drum* drum = static_cast<Kit*>(output)->firstDrum; drum != nullptr; drum = drum->next) {
+				if (drum->type != DrumType::MIDI) {
+					continue;
+				}
+				auto* midi_drum = static_cast<MIDIDrum*>(drum);
+				if (!midi_drum->outputDeviceName.isEmpty()) {
+					midi_drum->outputDevice = deluge::io::midi::findDeviceIndexByName(midi_drum->outputDeviceName.get(),
+					                                                                  midi_drum->outputDevice);
+				}
+			}
+		}
+	}
+}
+
+// Hosted entries are sorted by name, so plugging a multi-port box shifts outputDevice
+// indices. Re-resolve saved names and refresh the Output Device menu if it's open.
+static void reloadUSBDeviceNamesAfterChange() {
+	rematchSongOutputDevices();
+
+	MenuItem* item = soundEditor.getCurrentMenuItem();
+	if (item == nullptr) {
+		return;
+	}
+	item->readCurrentValue();
+	if (display->haveOLED()) {
+		renderUIsForOled();
+	}
+	else {
+		item->drawValue();
+	}
+}
+
+static void clearUSBDeviceBeingSetUp(int32_t ip) {
+	usbDeviceCurrentlyBeingSetUp[ip].name.clear();
+	usbDeviceCurrentlyBeingSetUp[ip].vendorId = 0;
+	usbDeviceCurrentlyBeingSetUp[ip].productId = 0;
+}
+
 // Create the midi device configuration and add to the USB midi array
 extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 	String base_name;
@@ -273,7 +331,7 @@ extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 
 	int32_t detected_cables = countEmbeddedMidiJacks(g_p_usb_hmidi_config_table[ip]);
 
-	usbDeviceCurrentlyBeingSetUp[ip].name.clear(); // Save some memory. Not strictly necessary
+	clearUSBDeviceBeingSetUp(ip);
 
 	ConnectedUSBMIDIDevice* connected_device = &connectedUSBMIDIDevices[ip][midiDeviceNum];
 	connected_device->setup();
@@ -322,6 +380,7 @@ extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
 		}
 	}
 	recountSmallestMPEZones(); // Must be called after setting device->connectionFlags
+	reloadUSBDeviceNamesAfterChange();
 
 	if (display->haveOLED()) {
 		String text;
@@ -355,7 +414,9 @@ extern "C" void hostedDeviceDetached(int32_t ip, int32_t midiDeviceNum) {
 		}
 		connectedDevice->cable[i] = nullptr;
 	}
+	clearUSBDeviceBeingSetUp(ip);
 	recountSmallestMPEZones();
+	reloadUSBDeviceNamesAfterChange();
 }
 
 // called by USB setup
@@ -377,6 +438,7 @@ extern "C" void configuredAsPeripheral(int32_t ip) {
 	upstreamUSBMIDICable2.connectedNow(0);
 	upstreamUSBMIDICable3.connectedNow(0);
 	recountSmallestMPEZones();
+	reloadUSBDeviceNamesAfterChange();
 }
 
 extern "C" void detachedAsPeripheral(int32_t ip) {
@@ -392,6 +454,7 @@ extern "C" void detachedAsPeripheral(int32_t ip) {
 	                                     // reason or whether technically essential, but adds to safety at least.
 
 	recountSmallestMPEZones();
+	reloadUSBDeviceNamesAfterChange();
 }
 
 // Returns NULL if insufficient details found, or not enough RAM to create
