@@ -54,6 +54,73 @@ inline std::string_view getDeviceNameForIndex(uint8_t deviceIndex) {
 	return {}; // Empty if not found
 }
 
+inline MIDICable* getCableForOutputIndex(uint8_t device_index) {
+	if (device_index == 1) {
+		return &MIDIDeviceManager::root_din.cable;
+	}
+	if (device_index >= 2 && MIDIDeviceManager::root_usb != nullptr) {
+		return MIDIDeviceManager::root_usb->getCable(static_cast<size_t>(device_index) - 2);
+	}
+	return nullptr;
+}
+
+inline bool isMIDIOutputDeviceConnected(uint8_t device_index) {
+	if (device_index <= 1) {
+		return true;
+	}
+	MIDICable* cable = getCableForOutputIndex(device_index);
+	return cable != nullptr && cable->connectionFlags != 0;
+}
+
+struct MIDIOutputDeviceOption {
+	uint8_t index;
+	std::string_view name;
+};
+
+// Connected destinations only. Saved-but-unplugged USB boxes stay in MIDIDevices.XML
+// for settings, but they do not appear in the Output Device menu.
+inline deluge::vector<MIDIOutputDeviceOption> getVisibleMIDIOutputDevices() {
+	deluge::vector<MIDIOutputDeviceOption> options;
+
+	auto maybe_add = [&](uint8_t index) {
+		if (!isMIDIOutputDeviceConnected(index)) {
+			return;
+		}
+		std::string_view name = getDeviceNameForIndex(index);
+		if (!name.empty()) {
+			options.push_back({index, name});
+		}
+	};
+
+	maybe_add(0);
+	maybe_add(1);
+	if (MIDIDeviceManager::root_usb != nullptr) {
+		size_t num_cables = MIDIDeviceManager::root_usb->getNumCables();
+		for (size_t i = 0; i < num_cables; i++) {
+			maybe_add(static_cast<uint8_t>(i + 2));
+		}
+	}
+	return options;
+}
+
+inline uint8_t deviceIndexToMenuSlot(uint8_t device_index) {
+	auto options = getVisibleMIDIOutputDevices();
+	for (size_t i = 0; i < options.size(); i++) {
+		if (options[i].index == device_index) {
+			return static_cast<uint8_t>(i);
+		}
+	}
+	return 0;
+}
+
+inline uint8_t menuSlotToDeviceIndex(uint8_t slot) {
+	auto options = getVisibleMIDIOutputDevices();
+	if (slot >= options.size()) {
+		return 0;
+	}
+	return options[slot].index;
+}
+
 /// Find device index by matching device name
 /// @param deviceName The device name to search for
 /// @param fallbackIndex The index to use if name not found
@@ -141,22 +208,11 @@ inline void readDeviceFromAttributes(Deserializer& reader, uint8_t& outDeviceInd
 /// Get list of all available MIDI output devices
 /// @return Vector of device names (ALL, DIN, USB devices...)
 inline deluge::vector<std::string_view> getAllMIDIDeviceNames() {
-	deluge::vector<std::string_view> options;
-
-	// Always include ALL (0)
-	options.push_back("ALL");
-
-	// Always include DIN (1)
-	options.push_back(MIDIDeviceManager::root_din.cable.getDisplayName());
-
-	// Add USB devices using iterator
-	if (MIDIDeviceManager::root_usb != nullptr) {
-		for (auto& cable : MIDIDeviceManager::root_usb->getCables()) {
-			options.push_back(cable.getDisplayName());
-		}
+	deluge::vector<std::string_view> names;
+	for (auto const& option : getVisibleMIDIOutputDevices()) {
+		names.push_back(option.name);
 	}
-
-	return options;
+	return names;
 }
 
 } // namespace deluge::io::midi

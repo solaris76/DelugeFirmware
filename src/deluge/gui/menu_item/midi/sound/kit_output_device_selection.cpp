@@ -40,24 +40,18 @@ void KitOutputDeviceSelection::beginSession(MenuItem* navigatedBackwardFrom) {
 }
 
 void KitOutputDeviceSelection::readCurrentValue() {
-	// Determine current device selection based on context
+	uint8_t stored = 0;
 	if (soundEditor.editingKitRow()) {
 		auto* kit = ::getCurrentKit();
 		if (kit != nullptr && kit->selectedDrum != nullptr && kit->selectedDrum->type == DrumType::MIDI) {
-			auto* midiDrum = static_cast<MIDIDrum*>(kit->selectedDrum);
-			this->setValue(midiDrum->outputDevice);
-		}
-		else {
-			this->setValue(0); // Default to ALL
+			stored = static_cast<MIDIDrum*>(kit->selectedDrum)->outputDevice;
 		}
 	}
-	else {
-		this->setValue(0); // Default to ALL
-	}
+	this->setValue(deluge::io::midi::deviceIndexToMenuSlot(stored));
 }
 
 void KitOutputDeviceSelection::writeCurrentValue() {
-	uint8_t currentDevice = static_cast<uint8_t>(this->getValue());
+	uint8_t currentDevice = deluge::io::midi::menuSlotToDeviceIndex(static_cast<uint8_t>(this->getValue()));
 
 	// Get device name for storing
 	auto deviceName = deluge::io::midi::getDeviceNameForIndex(currentDevice);
@@ -88,9 +82,11 @@ void KitOutputDeviceSelection::drawValue() {
 		const auto options = this->getOptions(OptType::FULL);
 		int32_t numOptions = options.size();
 
-		// Debug: always show at least 3 options regardless of current value
-		int32_t startIndex = 0;
-		int32_t endIndex = std::min<int32_t>(numOptions, 3);
+		int32_t startIndex = std::max<int32_t>(0, current - 1);
+		if (startIndex + 3 > numOptions) {
+			startIndex = std::max<int32_t>(0, numOptions - 3);
+		}
+		int32_t endIndex = std::min<int32_t>(numOptions, startIndex + 3);
 
 		int32_t yPixel = OLED_MAIN_TOPMOST_PIXEL + 15;
 
