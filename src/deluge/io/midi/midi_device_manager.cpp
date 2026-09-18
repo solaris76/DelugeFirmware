@@ -299,7 +299,7 @@ static void reloadUSBDeviceNamesAfterChange() {
 		renderUIsForOled();
 	}
 	else {
-		item->drawValue();
+		item->drawName();
 	}
 }
 
