@@ -42,6 +42,9 @@ struct MIDICableUSB;
 #define MIDI_SEND_BUFFER_LEN_RING 1024
 #define MIDI_SEND_RING_MASK (MIDI_SEND_BUFFER_LEN_RING - 1)
 
+// USB MIDI 1.0 cable number is a 4-bit nibble (0-15). H4MIDI has 4, MRCC 880 has 8.
+#define MAX_USB_MIDI_CABLES 16
+
 #ifdef __cplusplus
 /*A ConnectedUSBMIDIDevice is used directly to interface with the USB driver
  * When a ConnectedUSBMIDIDevice has a numMessagesQueued>=MIDI_SEND_BUFFER_LEN and tries to add another,
@@ -60,7 +63,7 @@ struct MIDICableUSB;
  */
 class ConnectedUSBMIDIDevice {
 public:
-	MIDICableUSB* cable[4]; // If NULL, then no cable is connected here
+	MIDICableUSB* cable[MAX_USB_MIDI_CABLES]; // NULL if that virtual cable is unused
 	ConnectedUSBMIDIDevice();
 	void bufferMessage(uint32_t fullMessage);
 	void setup();
@@ -72,7 +75,7 @@ public:
 #else
 // warning - accessed as a C struct from usb driver
 struct ConnectedUSBMIDIDevice {
-	struct MIDICableUSB* device[4];
+	struct MIDICableUSB* device[MAX_USB_MIDI_CABLES];
 #endif
 	uint8_t currentlyWaitingToReceive;
 	uint8_t sq; // Only for connections as HOST

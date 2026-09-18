@@ -31,6 +31,8 @@
 #include "storage/storage_manager.h"
 #include "util/container/vector/named_thing_vector.h"
 #include "util/misc.h"
+#include <cstdio>
+#include <cstring>
 #include <new>
 
 extern "C" {
@@ -38,6 +40,7 @@ extern "C" {
 #include "drivers/uart/uart.h"
 
 extern uint8_t anyUSBSendingStillHappening[];
+extern uint8_t* g_p_usb_hmidi_config_table[];
 }
 #pragma GCC diagnostic push
 // This is supported by GCC and other compilers should error (not warn), so turn off for this file
@@ -137,7 +140,11 @@ MIDICableUSBHosted* getOrCreateHostedMIDIDeviceFromDetails(String* name, uint16_
 		auto* candidate = static_cast<MIDICableUSBHosted*>(hostedMIDIDevices.getElement(i));
 
 		if (candidate->vendorId == vendorId && candidate->productId == productId) {
-			// Update its name - if we got one and it's different
+			// Same USB box can expose several virtual cables. Only reuse the record if the
+			// name matches (or we have no name / the stored name is empty).
+			if (gotAName && !candidate->name.isEmpty() && !candidate->name.equals(name)) {
+				continue;
+			}
 			if (gotAName && !candidate->name.equals(name)) {
 				hostedMIDIDevices.renameMember(i, name);
 			}
@@ -225,39 +232,100 @@ void recountSmallestMPEZones() {
 	}
 }
 
+// USB MIDI 1.0 CS_ENDPOINT / MS_GENERAL: bNumEmbMIDIJack is the number of virtual cables.
+static int32_t countEmbeddedMidiJacks(uint8_t const* cfg) {
+	if (cfg == nullptr) {
+		return 0;
+	}
+	uint16_t total_len = static_cast<uint16_t>(cfg[2] | (cfg[3] << 8));
+	if (total_len > USB_CONFIGSIZE) {
+		total_len = USB_CONFIGSIZE;
+	}
+
+	int32_t detected = 0;
+	uint16_t pos = 0;
+	while (pos + 2 < total_len) {
+		uint8_t b_len = cfg[pos];
+		uint8_t b_type = cfg[pos + 1];
+		if (b_len == 0) {
+			break;
+		}
+		if (b_type == 0x25 && b_len >= 5) {
+			uint8_t sub_type = cfg[pos + 2];
+			if (sub_type == 0x01) {
+				uint8_t num_jacks = cfg[pos + 3];
+				if (num_jacks > detected) {
+					detected = num_jacks;
+				}
+			}
+		}
+		pos += b_len;
+	}
+	return detected;
+}
+
 // Create the midi device configuration and add to the USB midi array
 extern "C" void hostedDeviceConfigured(int32_t ip, int32_t midiDeviceNum) {
-	MIDICableUSBHosted* device = getOrCreateHostedMIDIDeviceFromDetails(&usbDeviceCurrentlyBeingSetUp[ip].name,
-	                                                                    usbDeviceCurrentlyBeingSetUp[ip].vendorId,
-	                                                                    usbDeviceCurrentlyBeingSetUp[ip].productId);
+	String base_name;
+	base_name.set(&usbDeviceCurrentlyBeingSetUp[ip].name);
+	uint16_t vendor_id = usbDeviceCurrentlyBeingSetUp[ip].vendorId;
+	uint16_t product_id = usbDeviceCurrentlyBeingSetUp[ip].productId;
+
+	int32_t detected_cables = countEmbeddedMidiJacks(g_p_usb_hmidi_config_table[ip]);
 
 	usbDeviceCurrentlyBeingSetUp[ip].name.clear(); // Save some memory. Not strictly necessary
 
-	if (!device) {
-		return; // Only if ran out of RAM - i.e. very unlikely.
+	ConnectedUSBMIDIDevice* connected_device = &connectedUSBMIDIDevices[ip][midiDeviceNum];
+	connected_device->setup();
+
+	int32_t cables_to_create = detected_cables;
+	if (cables_to_create <= 0) {
+		cables_to_create = static_cast<int32_t>(connected_device->maxPortConnected) + 1;
+	}
+	if (cables_to_create < 1) {
+		cables_to_create = 1;
+	}
+	if (cables_to_create > MAX_USB_MIDI_CABLES) {
+		cables_to_create = MAX_USB_MIDI_CABLES;
 	}
 
-	// Associate with USB port
-	ConnectedUSBMIDIDevice* connectedDevice = &connectedUSBMIDIDevices[ip][midiDeviceNum];
+	for (int32_t i = 0; i < cables_to_create; i++) {
+		String per_port_name;
+		per_port_name.set(&base_name);
+		if (cables_to_create > 1) {
+			per_port_name.concatenate(" port ");
+			char num_buf[8];
+			snprintf(num_buf, sizeof num_buf, "%d", i + 1);
+			per_port_name.concatenate(num_buf);
+		}
 
-	connectedDevice->setup();
-	int32_t ports = connectedDevice->maxPortConnected;
-	for (int32_t i = 0; i <= ports; i++) {
-		connectedDevice->cable[i] = device;
+		MIDICableUSBHosted* per_port_device =
+		    getOrCreateHostedMIDIDeviceFromDetails(&per_port_name, vendor_id, product_id);
+		if (per_port_device == nullptr) {
+			continue;
+		}
+
+		per_port_device->portNumber = static_cast<uint8_t>(i);
+		per_port_device->receiveClock = (i == 0);
+		connected_device->cable[i] = per_port_device;
 	}
 
-	connectedDevice->sq = 0;
-	connectedDevice->canHaveMIDISent = (bool)strcmp(device->name.get(), "Synthstrom MIDI Foot Controller");
-	connectedDevice->canHaveMIDISent = (bool)strcmp(device->name.get(), "LUMI Keys BLOCK");
+	connected_device->maxPortConnected = static_cast<uint8_t>(cables_to_create - 1);
+	connected_device->sq = 0;
+	connected_device->canHaveMIDISent = (bool)strcmp(base_name.get(), "Synthstrom MIDI Foot Controller");
+	connected_device->canHaveMIDISent = (bool)strcmp(base_name.get(), "LUMI Keys BLOCK");
 
-	device->connectedNow(midiDeviceNum);
+	for (int32_t i = 0; i < cables_to_create; i++) {
+		if (connected_device->cable[i] != nullptr) {
+			connected_device->cable[i]->connectedNow(midiDeviceNum);
+			static_cast<MIDICableUSBHosted*>(connected_device->cable[i])->freshly_connected = true;
+		}
+	}
 	recountSmallestMPEZones(); // Must be called after setting device->connectionFlags
-
-	device->freshly_connected = true; // Used to trigger hookOnConnected from the input loop
 
 	if (display->haveOLED()) {
 		String text;
-		text.set(&device->name);
+		text.set(&base_name);
 		Error error = text.concatenate(" attached");
 		if (error == Error::NONE) {
 			consoleTextIfAllBootedUp(text.get());
@@ -739,7 +807,11 @@ void ConnectedUSBMIDIDevice::setup() {
 	currentlyWaitingToReceive = false;
 	numBytesReceived = 0;
 
-	// default to only a single port
+	for (int32_t i = 0; i < MAX_USB_MIDI_CABLES; i++) {
+		cable[i] = nullptr;
+	}
+
+	// default to only a single port until the descriptor is parsed
 	maxPortConnected = 0;
 }
 ConnectedUSBMIDIDevice::ConnectedUSBMIDIDevice() {
@@ -753,6 +825,10 @@ ConnectedUSBMIDIDevice::ConnectedUSBMIDIDevice() {
 	memset(sendDataRingBuf, 0, MIDI_SEND_BUFFER_LEN_RING);
 	ringBufWriteIdx = 0;
 	ringBufReadIdx = 0;
+
+	for (int32_t i = 0; i < MAX_USB_MIDI_CABLES; i++) {
+		cable[i] = nullptr;
+	}
 
 	maxPortConnected = 0;
 }

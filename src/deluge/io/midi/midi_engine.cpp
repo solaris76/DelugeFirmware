@@ -734,11 +734,10 @@ uint8_t usbCurrentlyInitialized = false;
 
 void MidiEngine::checkIncomingUsbSysex(uint8_t const* msg, int32_t ip, int32_t d, int32_t cableIdx) {
 	ConnectedUSBMIDIDevice* connected = &connectedUSBMIDIDevices[ip][d];
-	if (cableIdx > connectedUSBMIDIDevices[ip][d].maxPortConnected) {
-		// fallback to cable 0 since we don't support more than one port on hosted devices yet
-		cableIdx = 0;
+	if (cableIdx < 0 || cableIdx > connected->maxPortConnected || connected->cable[cableIdx] == nullptr) {
+		return;
 	}
-	MIDICable& cable = *connectedUSBMIDIDevices[ip][d].cable[cableIdx];
+	MIDICable& cable = *connected->cable[cableIdx];
 
 	uint8_t statusType = msg[0] & 15;
 	int32_t to_read = 0;
@@ -918,9 +917,9 @@ void MidiEngine::checkIncomingUsbMidi() {
 							break;
 						}
 						// select appropriate device based on the cable number
-						if (cable > connectedUSBMIDIDevices[ip][d].maxPortConnected) {
-							// fallback to cable 0 since we don't support more than one port on hosted devices yet
-							cable = 0;
+						if (cable > connectedUSBMIDIDevices[ip][d].maxPortConnected
+						    || connectedUSBMIDIDevices[ip][d].cable[cable] == nullptr) {
+							continue;
 						}
 						midiMessageReceived(*connectedUSBMIDIDevices[ip][d].cable[cable], statusType, channel, data1,
 						                    data2, &timeLastBRDY[ip]);
