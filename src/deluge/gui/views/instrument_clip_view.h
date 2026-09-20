@@ -253,6 +253,8 @@ public:
 	uint8_t auditionPadIsPressed[kDisplayHeight]{};
 	uint8_t numEditPadPressesPerNoteRowOnScreen[kDisplayHeight]{};
 	uint8_t lastAuditionedYDisplay{};
+	/// Intervallic latch: which audition row is held as a drone (-1 = none)
+	int8_t intervallicLatchedYDisplay{-1};
 	uint8_t numEditPadPresses;
 	uint32_t timeLastEditPadPress;
 	uint32_t timeFirstEditPadPress{};

@@ -844,7 +844,8 @@ removeLoadingAnimationAndGetOut:
 
 		// If we already know we want to try doing WaveTable...
 		if (makeWaveTableWorkAtAllCosts
-		    || (mayDoWaveTable == 1 && soundEditor.currentSource->oscType == OscType::WAVETABLE)) {
+		    || (mayDoWaveTable == 1 && soundEditor.currentSource->oscType == OscType::WAVETABLE)
+		    || soundEditor.intervallicWtPartial >= 0) {
 doLoadAsWaveTable:
 			numTypesTried++;
 
@@ -860,9 +861,11 @@ doLoadAsWaveTable:
 			*/
 			OscType current_osc_type = soundEditor.currentSource->getOscType();
 
-			soundEditor.currentSource->setOscType(OscType::WAVETABLE);
+			if (soundEditor.intervallicWtPartial < 0) {
+				soundEditor.currentSource->setOscType(OscType::WAVETABLE);
+			}
 
-			error = claimAudioFileForInstrument(makeWaveTableWorkAtAllCosts);
+			error = claimAudioFileForInstrument(makeWaveTableWorkAtAllCosts || soundEditor.intervallicWtPartial >= 0);
 			if (error != Error::NONE) {
 				// If word has come back that this file isn't wanting to load as a WaveTable...
 				if (error == Error::FILE_NOT_LOADABLE_AS_WAVETABLE
@@ -889,8 +892,11 @@ doLoadAsWaveTable:
 
 			// Alright, if we're still here, it was successfully loaded as a WaveTable!
 
+			if (soundEditor.intervallicWtPartial >= 0) {
+				soundEditor.intervallicWtPartial = -1;
+			}
 			// if oscillator wasn't already a wavetable, update custom knob assignments, otherwise leave as is
-			if (current_osc_type != OscType::WAVETABLE) {
+			else if (current_osc_type != OscType::WAVETABLE) {
 				if (soundEditor.currentSourceIndex == 0) { // Osc 1
 					soundEditor.currentSound->modKnobs[7][1].paramDescriptor.setToHaveParamOnly(
 					    params::LOCAL_OSC_A_WAVE_INDEX);

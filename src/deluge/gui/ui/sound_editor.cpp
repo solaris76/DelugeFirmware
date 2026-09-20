@@ -7,6 +7,7 @@
 #include "gui/menu_item/file_selector.h"
 #include "gui/menu_item/horizontal_menu.h"
 #include "gui/menu_item/horizontal_menu_group.h"
+#include "gui/menu_item/intervallic/menus.h"
 #include "gui/menu_item/menu_item.h"
 #include "gui/menu_item/mpe/zone_num_member_channels.h"
 #include "gui/menu_item/multi_range.h"
@@ -52,6 +53,7 @@
 #include "processing/source.h"
 #include "storage/flash_storage.h"
 #include "storage/multi_range/multisample_range.h"
+#include "storage/wave_table/wave_table_holder.h"
 #include "util/comparison.h"
 
 using namespace deluge;
@@ -171,12 +173,27 @@ void SoundEditor::renderMainShortcutsOnly(ModControllableAudio* forThing, RGB im
 
 	D_PRINTLN("rendering with kit affect entire? %b ", doKitAffectEntire);
 
+	const bool intervallic = soundEditor.currentSound
+	                         && soundEditor.currentSound->sources[0].oscType == OscType::INTERVAL
+	                         && !doKitAffectEntire;
+
 	// Draw the static shortcut colour map first, so that the shortcut blink (handled separately via
 	// PadLEDs::flashMainPad on the PIC) gets overlaid on top of it, instead of replacing the whole display.
 	for (int32_t yDisplay = 0; yDisplay < kDisplayHeight; yDisplay++)
 	{
 		for (int32_t xDisplay = 0; xDisplay < kDisplayWidth; xDisplay++)
 		{
+			if (intervallic && xDisplay < 8) {
+				image[yDisplay][xDisplay] = main_osc_colour;
+				occupancyMask[yDisplay][xDisplay] = 64;
+				continue;
+			}
+			if (intervallic && xDisplay == 8) {
+				image[yDisplay][xDisplay] = synth_global_colour;
+				occupancyMask[yDisplay][xDisplay] = 64;
+				continue;
+			}
+
 			auto [menuitem, _] = get_basic_shortcut_action(xDisplay, yDisplay, doKitAffectEntire);
 			if (isRelevant(forThing, menuitem, xDisplay % 2))
 			{
@@ -1441,16 +1458,40 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 		{
 			D_PRINTLN("doing sound checks");
 			if (getCurrentUI() == &soundEditor && getCurrentMenuItem() == &dxParam
-				&& runtimeFeatureSettings.get(RuntimeFeatureSettingType::EnableDX7Engine)
-				== RuntimeFeatureStateToggle::On)
-			{
+			    && runtimeFeatureSettings.get(RuntimeFeatureSettingType::EnableDX7Engine)
+			           == RuntimeFeatureStateToggle::On) {
 				if (dxParam.potentialShortcutPadAction(x, y, on)) {
 					return ActionResult::DEALT_WITH;
 				}
-					   }
+			}
+
+			Sound* soundForInterval = currentSound;
+			if (soundForInterval == nullptr) {
+				if (getCurrentOutputType() == OutputType::SYNTH) {
+					soundForInterval = (SoundInstrument*)getCurrentOutput();
+				}
+			}
+
+			// Intervallic: Shift+cols 0–7 = partial HM, col 8 = lattice HM
+			bool enteredIntervallic = false;
+			if (soundForInterval && soundForInterval->sources[0].oscType == OscType::INTERVAL && x <= 8) {
+				using namespace deluge::gui::menu_item::intervallic;
+				MenuItem* child =
+				    (x < 8) ? partialChildForRow(static_cast<uint8_t>(x), y) : latticeChildForRow(y);
+
+				if (getCurrentUI() == &soundEditor && getCurrentMenuItem() == menuGroup()) {
+					menuGroup()->focusChild(child);
+					menuGroup()->beginSession(nullptr);
+					renderUIsForOled();
+					return ActionResult::DEALT_WITH;
+				}
+
+				item = child;
+				enteredIntervallic = true;
+			}
 
 			// Shortcut to patch a modulation source to the parameter we're already looking at
-			if (getCurrentUI() == &soundEditor && ((x == 14 && y >= 5) || x == 15)) {
+			if (!enteredIntervallic && getCurrentUI() == &soundEditor && ((x == 14 && y >= 5) || x == 15)) {
 
 				const int32_t modSourceX = x - 14;
 				PatchSource source = modSourceShortcuts[modSourceX][y];
@@ -1545,32 +1586,30 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 			}
 
 			// Shortcut to edit a parameter
-			if (!modulationItemFound
-				&& (x < 14 || (x == 14 && y < 5) || //< regular shortcuts
-					(x == 15 && y >= 1 && y <= 3)))
+			if (!enteredIntervallic && !modulationItemFound
+			    && (x < 14 || (x == 14 && y < 5) || //< regular shortcuts
+			        (x == 15 && y >= 1 && y <= 3)))
 			{
 				//< randomizer shortcuts
 
+				item = paramShortcutsForSounds[x][y];
+				if (getCurrentOutputType() == OutputType::KIT && item == &editNameMenu) {
+					item = &drumNameEditMenu;
+				}
 
-					item = paramShortcutsForSounds[x][y];
-					if (getCurrentOutputType() == OutputType::KIT && item == &editNameMenu) {
-						item = &drumNameEditMenu;
+				// Replace the current shortcut with a second layer shortcut if the pad was pressed twice
+				secondLayerShortcutsToggled =
+				    getCurrentMenuItem() != nullptr && x == currentParamShortcutX && y == currentParamShortcutY
+				            && getCurrentMenuItem()->getParamKind() != modulation::params::Kind::PATCH_CABLE
+				        ? !secondLayerShortcutsToggled
+				        : false;
+
+				if (secondLayerShortcutsToggled) {
+					if (const auto secondLayerItem = paramShortcutsForSoundsSecondLayer[x][y];
+					    secondLayerItem != nullptr) {
+						item = secondLayerItem;
 					}
-
-					// Replace the current shortcut with a second layer shortcut if the pad was pressed twice
-					secondLayerShortcutsToggled =
-						getCurrentMenuItem() != nullptr && x == currentParamShortcutX && y == currentParamShortcutY
-						&& getCurrentMenuItem()->getParamKind() != modulation::params::Kind::PATCH_CABLE
-							? !secondLayerShortcutsToggled
-							: false;
-
-					if (secondLayerShortcutsToggled) {
-						if (const auto secondLayerItem = paramShortcutsForSoundsSecondLayer[x][y];
-							secondLayerItem != nullptr) {
-							item = secondLayerItem;
-						}
-					}
-
+				}
 			}
 		}
 
@@ -2242,9 +2281,17 @@ AudioFileHolder* SoundEditor::getCurrentAudioFileHolder() {
 		return &getCurrentAudioClip()->sampleHolder;
 	}
 
-	else {
-		return currentMultiRange->getAudioFileHolder();
+	if (intervallicWtPartial >= 0 && currentSound != nullptr) {
+		auto* patch = currentSound->sources[0].ensureIntervallicPatch();
+		if (patch != nullptr) {
+			auto* holder = patch->ensureWaveTableHolder(intervallicWtPartial);
+			if (holder != nullptr) {
+				return holder;
+			}
+		}
 	}
+
+	return currentMultiRange->getAudioFileHolder();
 }
 
 ModelStackWithThreeMainThings* SoundEditor::getCurrentModelStack(void* memory) {

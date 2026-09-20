@@ -37,6 +37,10 @@ class WaveTable;
 class SampleHolder;
 class DxPatch;
 
+namespace deluge::dsp::intervallic {
+struct Patch;
+}
+
 class Source {
 public:
 	Source();
@@ -55,6 +59,7 @@ public:
 
 	DxPatch* dxPatch;
 	bool dxPatchChanged = false;
+	deluge::dsp::intervallic::Patch* intervallicPatch{nullptr};
 	SampleRepeatMode repeatMode;
 
 	// PHI_MORPH zone parameters and cache (lazily allocated)
@@ -139,6 +144,7 @@ public:
 	void setOscType(OscType newType);
 
 	DxPatch* ensureDxPatch();
+	deluge::dsp::intervallic::Patch* ensureIntervallicPatch();
 
 private:
 	void destructAllMultiRanges();

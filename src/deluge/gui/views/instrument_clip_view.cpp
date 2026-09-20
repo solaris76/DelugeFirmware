@@ -17,6 +17,7 @@
 
 #include "gui/views/instrument_clip_view.h"
 #include "definitions_cxx.hpp"
+#include "dsp/intervallic/patch.h"
 #include "extern.h"
 #include "fatfs.hpp"
 #include "gui/colour/colour.h"
@@ -5593,6 +5594,30 @@ bool InstrumentClipView::startAuditioningRow(int32_t velocity, int32_t yDisplay,
 
 	int32_t velocityToSound = getVelocityToSound(velocity);
 
+	// Intervallic latch: toggle off if pressing the same latched root again
+	if (!isKit && getCurrentOutputType() == OutputType::SYNTH) {
+		auto* sound = static_cast<SoundInstrument*>(getCurrentOutput());
+		if (sound->sources[0].oscType == OscType::INTERVAL) {
+			auto* patch = sound->sources[0].ensureIntervallicPatch();
+			if (patch && patch->playMode == deluge::dsp::intervallic::PlayMode::Latch) {
+				if (intervallicLatchedYDisplay == yDisplay) {
+					sendAuditionNote(false, yDisplay, 64, 0);
+					intervallicLatchedYDisplay = -1;
+					auditionPadIsPressed[yDisplay] = 0;
+					lastAuditionedVelocityOnScreen[yDisplay] = 255;
+					someAuditioningHasEnded(true);
+					return true;
+				}
+				if (intervallicLatchedYDisplay >= 0) {
+					sendAuditionNote(false, intervallicLatchedYDisplay, 64, 0);
+					auditionPadIsPressed[intervallicLatchedYDisplay] = 0;
+					lastAuditionedVelocityOnScreen[intervallicLatchedYDisplay] = 255;
+				}
+				intervallicLatchedYDisplay = static_cast<int8_t>(yDisplay);
+			}
+		}
+	}
+
 	auditionPadIsPressed[yDisplay] = velocityToSound; // Yup, need to do this even if we're going to do a
 	                                                  // "silent" audition, so pad lights up etc.
 
@@ -5692,10 +5717,23 @@ void InstrumentClipView::finishAuditioningRow(int32_t yDisplay, ModelStackWithNo
 		auditionPadIsPressed[yDisplay] = 0;
 		lastAuditionedVelocityOnScreen[yDisplay] = 255;
 
+		// Intervallic latch: keep the drone sounding after pad release
+		bool intervallicLatchHold = false;
+		if (getCurrentOutputType() == OutputType::SYNTH) {
+			auto* sound = static_cast<SoundInstrument*>(getCurrentOutput());
+			if (sound->sources[0].oscType == OscType::INTERVAL) {
+				auto* patch = sound->sources[0].intervallicPatch;
+				if (patch && patch->playMode == deluge::dsp::intervallic::PlayMode::Latch
+				    && intervallicLatchedYDisplay == yDisplay) {
+					intervallicLatchHold = true;
+				}
+			}
+		}
+
 		// Stop the note sounding - but only if we previously auditioned the note
 		// and only if a sequenced note isn't in fact being played here.
 		// Or if it's drone note, end auditioning to transfer the note's sustain to the sequencer
-		if (auditionNoteWasSounding
+		if (!intervallicLatchHold && auditionNoteWasSounding
 		    && (!noteRowOnActiveClip || !noteRowOnActiveClip->sequenced
 		        || noteRowOnActiveClip->isDroning(modelStack->getLoopLength()))) {
 			sendAuditionNote(false, yDisplay, 64, 0);
@@ -5708,6 +5746,10 @@ void InstrumentClipView::finishAuditioningRow(int32_t yDisplay, ModelStackWithNo
 }
 
 void InstrumentClipView::cancelAllAuditioning() {
+	if (intervallicLatchedYDisplay >= 0) {
+		sendAuditionNote(false, intervallicLatchedYDisplay, 64, 0);
+		intervallicLatchedYDisplay = -1;
+	}
 	if (isUIModeActive(UI_MODE_AUDITIONING)) {
 		memset(auditionPadIsPressed, 0, sizeof(auditionPadIsPressed));
 		reassessAllAuditionStatus();

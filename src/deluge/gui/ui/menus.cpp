@@ -1,3 +1,4 @@
+#include "gui/menu_item/intervallic/menus.h"
 #include "../menu_item/randomizer/midi_cv/note_probability.h"
 #include "gui/l10n/strings.h"
 #include "gui/menu_item/active_scales.h"
@@ -2049,7 +2050,7 @@ PLACE_SDRAM_DATA MenuItem* paramShortcutsForKitGlobalFX[][kDisplayHeight] = {
 
 PLACE_SDRAM_BSS deluge::vector<HorizontalMenu*> horizontalMenusChainForSound = {
     &recorderMenu, &soundMasterMenu,
-	&sourceMenuGroup, &voiceMenuGroup, &envMenuGroup, &lfoMenuGroup,
+	&sourceMenuGroup, &deluge::gui::menu_item::intervallic::intervallicMenuGroup, &voiceMenuGroup, &envMenuGroup, &lfoMenuGroup,
 	&filtersMenuGroup, &eqMenu, &modFXMenu,
 	&reverbMenuGroup, &delayMenu, &soundDistortionMenu,
 	&sidechainMenu, &audioCompMenu, &stutterMenu,

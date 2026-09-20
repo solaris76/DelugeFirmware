@@ -74,6 +74,8 @@ public:
 	MIDICable* currentMIDICable;
 	deluge::gui::menu_item::RangeEdit editingRangeEdge;
 	bool haveRenderedPads{false};
+	/// When >= 0, sample browser loads WT into intervallic partial N
+	int8_t intervallicWtPartial{-1};
 
 	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override;
 	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override;

@@ -241,6 +241,7 @@
     "STRING_FOR_ANALOG_SAW": "Analog saw",
     "STRING_FOR_SAMPLE": "Sample",
     "STRING_FOR_DX7": "Dx7",
+    "STRING_FOR_INTERVAL": "Intervallic",
     "STRING_FOR_INPUT": "Input",
     "STRING_FOR_INPUT_LEFT": "Input (left)",
     "STRING_FOR_INPUT_RIGHT": "Input (right)",

@@ -18,7 +18,9 @@
 #include "model/voice/voice_unison_part_source.h"
 #include "dsp/dx/dx7note.h"
 #include "dsp/dx/engine.h"
+#include "dsp/intervallic/render.h"
 #include "memory/general_memory_allocator.h"
+#include "memory/memory_allocator_interface.h"
 #include "model/sample/sample_cache.h"
 #include "model/song/song.h"
 #include "model/voice/voice.h"
@@ -28,6 +30,7 @@
 #include "processing/live/live_pitch_shifter.h"
 #include "processing/source.h"
 #include "storage/multi_range/multisample_range.h"
+#include <new>
 
 VoiceUnisonPartSource::~VoiceUnisonPartSource() {
 	unassign(false);
@@ -80,6 +83,24 @@ bool VoiceUnisonPartSource::noteOn(Voice* voice, Source* source, VoiceSamplePlay
 		DxPatch* patch = source->ensureDxPatch();
 		dxVoice->init(*patch, voice->noteCodeAfterArpeggiation, velocity);
 	}
+	else if (synthMode != SynthMode::FM && source->oscType == OscType::INTERVAL) [[unlikely]] {
+		source->ensureIntervallicPatch();
+		if (intervallicState == nullptr) {
+			void* memory = allocMaxSpeed(sizeof(deluge::dsp::intervallic::VoiceState));
+			if (memory == nullptr) {
+				return false;
+			}
+			intervallicState = new (memory) deluge::dsp::intervallic::VoiceState();
+		}
+		else {
+			*intervallicState = {};
+		}
+		if (oscRetriggerPhase != 0xFFFFFFFF) {
+			for (auto& ph : intervallicState->phase) {
+				ph = oscRetriggerPhase;
+			}
+		}
+	}
 	else {
 		if (oscRetriggerPhase != 0xFFFFFFFF) {
 			oscPos = getOscInitialPhaseForZero(source->oscType) + oscRetriggerPhase;
@@ -104,6 +125,12 @@ void VoiceUnisonPartSource::unassign(bool deletingSong) {
 	if (dxVoice != nullptr) {
 		dxEngine->dxVoiceUnassigned(dxVoice);
 		dxVoice = nullptr;
+	}
+
+	if (intervallicState != nullptr) {
+		intervallicState->~VoiceState();
+		delugeDealloc(intervallicState);
+		intervallicState = nullptr;
 	}
 
 	if (livePitchShifter != nullptr) {

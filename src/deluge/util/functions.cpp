@@ -814,6 +814,9 @@ char const* oscTypeToString(OscType oscType) {
 	case OscType::DX7:
 		return "dx7";
 
+	case OscType::INTERVAL:
+		return "intervallic";
+
 	default:
 		__builtin_unreachable();
 	}
@@ -871,6 +874,9 @@ OscType stringToOscType(char const* string) {
 	}
 	else if (!strcmp(string, "dx7")) {
 		return OscType::DX7;
+	}
+	else if (!strcmp(string, "intervallic")) {
+		return OscType::INTERVAL;
 	}
 	else {
 		return OscType::TRIANGLE;

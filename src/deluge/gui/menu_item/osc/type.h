@@ -17,6 +17,7 @@
 #pragma once
 #include "definitions_cxx.hpp"
 #include "gui/menu_item/formatted_title.h"
+#include "gui/menu_item/intervallic/menus.h"
 #include "gui/menu_item/selection.h"
 #include "gui/menu_item/submenu.h"
 #include "gui/ui/sound_editor.h"
@@ -37,20 +38,24 @@ public:
 	    : Selection(name), FormattedTitle(title_format_str, source_id + 1), sourceId_{source_id} {};
 	void beginSession(MenuItem* navigatedBackwardFrom) override { Selection::beginSession(navigatedBackwardFrom); }
 
-	bool mayUseDx() const { return !soundEditor.editingKit() && sourceId_ == 0; }
+	/// DX7 + Intervallic engines: synth tracks, OSC1 only (not kits).
+	bool mayUseSpecialEngines() const { return !soundEditor.editingKit() && sourceId_ == 0; }
+	bool mayUseDx() const { return mayUseSpecialEngines(); }
 
 	void readCurrentValue() override {
 		int32_t rawVal = static_cast<int32_t>(soundEditor.currentSound->sources[sourceId_].oscType);
-		if (!mayUseDx() && rawVal > static_cast<int32_t>(OscType::DX7)) {
-			rawVal -= 1;
+		// When special engines are hidden, DX7 and INTERVAL are skipped in the options list.
+		if (!mayUseSpecialEngines() && rawVal >= static_cast<int32_t>(OscType::INPUT_L)) {
+			rawVal -= 2;
 		}
 		setValue(rawVal);
 	}
 	void writeCurrentValue() override {
 		OscType oldValue = soundEditor.currentSound->sources[sourceId_].oscType;
 		auto newValue = getValue<OscType>();
-		if (!mayUseDx() && static_cast<int32_t>(newValue) >= static_cast<int32_t>(OscType::DX7)) {
-			newValue = static_cast<OscType>(static_cast<int32_t>(newValue) + 1);
+		if (!mayUseSpecialEngines() && static_cast<int32_t>(newValue) >= static_cast<int32_t>(OscType::DX7)) {
+			// Options jump from SAMPLE straight to INPUT_* — skip DX7 + INTERVAL enum slots.
+			newValue = static_cast<OscType>(static_cast<int32_t>(newValue) + 2);
 		}
 
 		const auto needs_unassignment = {
@@ -59,6 +64,7 @@ public:
 		    OscType::INPUT_STEREO,
 		    OscType::SAMPLE,
 		    OscType::DX7,
+		    OscType::INTERVAL,
 
 		    // Haven't actually really determined if this needs to be here - maybe not?
 		    OscType::WAVETABLE,
@@ -75,6 +81,10 @@ public:
 		}
 
 		soundEditor.currentSound->sources[sourceId_].setOscType(newValue);
+
+		if (newValue == OscType::INTERVAL) {
+			soundEditor.currentSound->polyphonic = PolyphonyMode::MONO;
+		}
 
 		if (oldValue == OscType::SQUARE || newValue == OscType::SQUARE) {
 			soundEditor.currentSound->setupPatchingForAllParamManagers(currentSong);
@@ -108,8 +118,9 @@ public:
 
 		options.emplace_back(l10n::getView(STRING_FOR_SAMPLE));
 
-		if (mayUseDx()) {
+		if (mayUseSpecialEngines()) {
 			options.emplace_back(l10n::getView(STRING_FOR_DX7));
+			options.emplace_back(l10n::getView(STRING_FOR_INTERVAL));
 		}
 
 		if (AudioEngine::micPluggedIn || AudioEngine::lineInPluggedIn) {
@@ -130,10 +141,16 @@ public:
 	}
 
 	MenuItem* selectButtonPress() override {
-		if (soundEditor.currentSound->sources[sourceId_].oscType != OscType::DX7) {
-			return nullptr;
+		auto type = soundEditor.currentSound->sources[sourceId_].oscType;
+		if (type == OscType::DX7) {
+			return &dxMenu;
 		}
-		return &dxMenu;
+		if (type == OscType::INTERVAL) {
+			::deluge::gui::menu_item::intervallic::menuGroup()->focusChild(
+			    ::deluge::gui::menu_item::intervallic::partialChildForRow(0, 0));
+			return ::deluge::gui::menu_item::intervallic::menuGroup();
+		}
+		return nullptr;
 	}
 
 	[[nodiscard]] bool showColumnLabel() const override { return false; }
@@ -142,7 +159,7 @@ public:
 		oled_canvas::Canvas& image = OLED::main;
 
 		const OscType osc_type = soundEditor.currentSound->sources[sourceId_].oscType;
-		if (osc_type == OscType::DX7) {
+		if (osc_type == OscType::DX7 || osc_type == OscType::INTERVAL) {
 			const auto option = getOptions(OptType::FULL)[getValue()].data();
 			return image.drawStringCentered(option, slot.start_x, slot.start_y + kHorizontalMenuSlotYOffset + 5,
 			                                kTextTitleSpacingX, kTextTitleSizeY, slot.width);

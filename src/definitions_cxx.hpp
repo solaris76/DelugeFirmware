@@ -385,6 +385,7 @@ enum class OscType : uint8_t {
 	PHI_GENDY,
 	SAMPLE,
 	DX7,
+	INTERVAL, // Intervallic multi-partial drone engine (OSC1 synth tracks)
 	INPUT_L,
 	INPUT_R,
 	INPUT_STEREO,

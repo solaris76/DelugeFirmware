@@ -18,6 +18,7 @@
 #include "processing/sound/sound.h"
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
+#include "dsp/intervallic/patch.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/root_ui.h"
 #include "gui/ui/sound_editor.h"
@@ -56,6 +57,7 @@
 #include "storage/multi_range/multi_wave_table_range.h"
 #include "storage/multi_range/multisample_range.h"
 #include "storage/storage_manager.h"
+#include "util/cfunctions.h"
 #include "util/comparison.h"
 #include "util/exceptions.h"
 #include "util/firmware_version.h"
@@ -64,6 +66,7 @@
 #include <algorithm>
 #include <array>
 #include <bits/ranges_algo.h>
+#include <cstring>
 #include <limits>
 #include <ranges>
 
@@ -3386,6 +3389,75 @@ Error Sound::readSourceFromFile(Deserializer& reader, int32_t s, ParamManagerFor
 			patch->setEngineMode(reader.readTagOrAttributeValueInt());
 			reader.exitTag("dx7enginemode");
 		}
+		else if (!strncmp(tagName, "intervallic", 11)) {
+			auto* patch = source->ensureIntervallicPatch();
+			if (patch) {
+				if (!strcmp(tagName, "intervallicPreset")) {
+					patch->latticePreset = reader.readTagOrAttributeValueInt();
+				}
+				else if (!strcmp(tagName, "intervallicInversion")) {
+					patch->inversion = reader.readTagOrAttributeValueInt();
+				}
+				else if (!strcmp(tagName, "intervallicVoiceSpread")) {
+					patch->voiceSpread = reader.readTagOrAttributeValueInt();
+				}
+				else if (!strcmp(tagName, "intervallicPairFm")) {
+					patch->pairFmAmount = reader.readTagOrAttributeValueInt();
+				}
+				else if (!strcmp(tagName, "intervallicStereoSpread")) {
+					patch->stereoSpread = reader.readTagOrAttributeValueInt();
+				}
+				else if (!strcmp(tagName, "intervallicPlayMode")) {
+					patch->playMode =
+					    static_cast<deluge::dsp::intervallic::PlayMode>(reader.readTagOrAttributeValueInt());
+				}
+				else if (!strncmp(tagName, "intervallicP", 12) && tagName[12] >= '0' && tagName[12] <= '7') {
+					int32_t idx = tagName[12] - '0';
+					char const* v = reader.readTagOrAttributeValue();
+					auto& p = patch->partials[idx];
+					int32_t fields[14]{};
+					for (int32_t f = 0; f < 14 && v && *v; f++) {
+						fields[f] = stringToInt(v);
+						while (*v && *v != ',') {
+							v++;
+						}
+						if (*v == ',') {
+							v++;
+						}
+					}
+					p.intervalSemitones = static_cast<int8_t>(fields[0]);
+					p.detuneCents = static_cast<int8_t>(fields[1]);
+					p.level = static_cast<uint8_t>(fields[2]);
+					p.pan = static_cast<int8_t>(fields[3]);
+					p.wave = static_cast<OscType>(fields[4]);
+					p.enabled = fields[5] != 0;
+					p.lfoIndex = static_cast<uint8_t>(fields[6]);
+					p.lfoDepthLevel = static_cast<uint8_t>(fields[7]);
+					p.lfoDepthDetune = static_cast<uint8_t>(fields[8]);
+					p.phiZoneA = static_cast<uint16_t>(fields[9]);
+					p.phiZoneB = static_cast<uint16_t>(fields[10]);
+					p.waveIndex = fields[11];
+					p.gamma = static_cast<float>(fields[12]) / 10.0f;
+					if (p.wave == OscType::WAVETABLE) {
+						// filename stored as separate attribute intervallicWtN
+					}
+				}
+				else if (!strncmp(tagName, "intervallicWt", 13) && tagName[13] >= '0' && tagName[13] <= '7') {
+					int32_t idx = tagName[13] - '0';
+					char const* path = reader.readTagOrAttributeValue();
+					auto* holder = patch->ensureWaveTableHolder(idx);
+					if (holder != nullptr && path != nullptr && *path) {
+						holder->filePath.set(path);
+						holder->loadFile(false, false, true, CLUSTER_ENQUEUE, nullptr, true);
+					}
+				}
+				else if (!strncmp(tagName, "intervallicLfo", 14) && tagName[14] >= '0' && tagName[14] <= '3') {
+					int32_t idx = tagName[14] - '0';
+					patch->localLfos[idx].rate = reader.readTagOrAttributeValueInt();
+				}
+			}
+			reader.exitTag();
+		}
 		else if (!strcmp(tagName, "phiMorphZoneA")) {
 			source->phiMorphZoneA = reader.readTagOrAttributeValueInt();
 			reader.exitTag("phiMorphZoneA");
@@ -3858,6 +3930,57 @@ void Sound::writeSourceToFile(Serializer& writer, int32_t s, char const* tagName
 				// real extension:
 				if (patch->random_detune != 0) {
 					writer.writeAttribute("dx7randomdetune", patch->random_detune);
+				}
+			}
+			goto justCloseTag;
+		}
+		else if (source->oscType == OscType::INTERVAL && synthMode != SynthMode::FM) {
+			auto* patch = source->ensureIntervallicPatch();
+			if (patch) {
+				writer.writeAttribute("intervallicPreset", patch->latticePreset);
+				writer.writeAttribute("intervallicInversion", patch->inversion);
+				writer.writeAttribute("intervallicVoiceSpread", patch->voiceSpread);
+				writer.writeAttribute("intervallicPairFm", patch->pairFmAmount);
+				writer.writeAttribute("intervallicStereoSpread", patch->stereoSpread);
+				writer.writeAttribute("intervallicPlayMode", static_cast<int32_t>(patch->playMode));
+				for (int32_t i = 0; i < deluge::dsp::intervallic::kNumPartials; i++) {
+					char name[] = "intervallicP0";
+					name[12] = static_cast<char>('0' + i);
+					auto& p = patch->partials[i];
+					char buf[64];
+					char* pos = buf;
+					auto appendField = [&](int32_t value, bool comma) {
+						intToString(value, pos, 1);
+						pos += strlen(pos);
+						if (comma) {
+							*pos++ = ',';
+						}
+					};
+					appendField(p.intervalSemitones, true);
+					appendField(p.detuneCents, true);
+					appendField(p.level, true);
+					appendField(p.pan, true);
+					appendField(static_cast<int32_t>(p.wave), true);
+					appendField(p.enabled ? 1 : 0, true);
+					appendField(p.lfoIndex, true);
+					appendField(p.lfoDepthLevel, true);
+					appendField(p.lfoDepthDetune, true);
+					appendField(p.phiZoneA, true);
+					appendField(p.phiZoneB, true);
+					appendField(p.waveIndex, true);
+					appendField(static_cast<int32_t>(p.gamma * 10.0f), false);
+					*pos = 0;
+					writer.writeAttribute(name, buf);
+					if (p.waveTableHolder != nullptr && !p.waveTableHolder->filePath.isEmpty()) {
+						char wtName[] = "intervallicWt0";
+						wtName[13] = static_cast<char>('0' + i);
+						writer.writeAttribute(wtName, p.waveTableHolder->filePath.get());
+					}
+				}
+				for (int32_t i = 0; i < 4; i++) {
+					char name[] = "intervallicLfo0";
+					name[14] = static_cast<char>('0' + i);
+					writer.writeAttribute(name, patch->localLfos[i].rate);
 				}
 			}
 			goto justCloseTag;

@@ -18,6 +18,7 @@
 #include "processing/source.h"
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
+#include "dsp/intervallic/patch.h"
 #include "dsp/phi_gendy.hpp"
 #include "dsp/phi_morph.hpp"
 #include "dsp/phi_stair.hpp"
@@ -37,6 +38,7 @@
 #include "storage/wave_table/wave_table.h"
 #include "util/functions.h"
 #include <cstring>
+#include <new>
 
 Source::Source() {
 
@@ -51,6 +53,7 @@ Source::Source() {
 
 	defaultRangeI = -1;
 	dxPatch = nullptr;
+	intervallicPatch = nullptr;
 }
 
 Source::~Source() {
@@ -59,6 +62,11 @@ Source::~Source() {
 		dxPatch->~DxPatch();
 		delugeDealloc(dxPatch);
 		dxPatch = nullptr;
+	}
+	if (intervallicPatch != nullptr) {
+		intervallicPatch->~Patch();
+		delugeDealloc(intervallicPatch);
+		intervallicPatch = nullptr;
 	}
 	destructAllMultiRanges();
 	delete phiMorphCache;
@@ -313,6 +321,9 @@ doChangeType:
 	if (oscType == OscType::DX7) {
 		ensureDxPatch();
 	}
+	else if (oscType == OscType::INTERVAL) {
+		ensureIntervallicPatch();
+	}
 }
 
 DxPatch* Source::ensureDxPatch() {
@@ -321,6 +332,16 @@ DxPatch* Source::ensureDxPatch() {
 	}
 	return dxPatch;
 };
+
+deluge::dsp::intervallic::Patch* Source::ensureIntervallicPatch() {
+	if (intervallicPatch == nullptr) {
+		void* memory = allocMaxSpeed(sizeof(deluge::dsp::intervallic::Patch));
+		if (memory != nullptr) {
+			intervallicPatch = new (memory) deluge::dsp::intervallic::Patch();
+		}
+	}
+	return intervallicPatch;
+}
 
 /*
     for (int32_t e = 0; e < ranges.getNumElements(); e++) {

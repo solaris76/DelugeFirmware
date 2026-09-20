@@ -20,6 +20,7 @@
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
 #include "dsp/filter/filter_set.h"
+#include "dsp/intervallic/render.h"
 #include "dsp/oscillators/sine_osc.h"
 #include "dsp/phi_gendy.hpp"
 #include "dsp/phi_morph.hpp"
@@ -2732,6 +2733,31 @@ dontUseCache: {}
 				for (int i = 0; i < numSamples; i++) {
 					sourceAmplitudeNow += amplitudeIncrement;
 					oscBuffer[i] += multiply_32x32_rshift32(uniBuf[i], sourceAmplitudeNow) << 6;
+				}
+			}
+
+			// Or Intervallic lattice
+		}
+		else if (sound.sources[s].oscType == OscType::INTERVAL) {
+			auto* patch = sound.sources[s].ensureIntervallicPatch();
+			auto* istate = unisonParts[u].sources[s].intervallicState;
+			if (patch != nullptr && istate != nullptr) {
+				// Mono render into oscBuffer; stereo unison path can come later
+				int32_t* dest = oscBuffer;
+				if (stereoUnison) {
+					// Render to temp mono then spread — MVP: just left+right same
+					static int32_t monoBuf[SSI_TX_BUFFER_NUM_SAMPLES] __attribute__((aligned(CACHE_LINE_SIZE)));
+					memset(monoBuf, 0, numSamples * sizeof(int32_t));
+					dsp::intervallic::render(*patch, *istate, monoBuf, numSamples, phaseIncrement, sourceAmplitude,
+					                         amplitudeIncrement);
+					for (int i = 0; i < numSamples; i++) {
+						oscBuffer[(i << 1)] += monoBuf[i];
+						oscBuffer[(i << 1) + 1] += monoBuf[i];
+					}
+				}
+				else {
+					dsp::intervallic::render(*patch, *istate, dest, numSamples, phaseIncrement, sourceAmplitude,
+					                         amplitudeIncrement);
 				}
 			}
 

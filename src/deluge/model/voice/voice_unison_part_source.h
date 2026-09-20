@@ -29,6 +29,10 @@ class VoiceSample;
 class LivePitchShifter;
 class DxVoice;
 
+namespace deluge::dsp::intervallic {
+struct VoiceState;
+}
+
 class VoiceUnisonPartSource {
 public:
 	VoiceUnisonPartSource() = default;
@@ -49,4 +53,7 @@ public:
 	VoiceSample* voiceSample = nullptr;
 	LivePitchShifter* livePitchShifter = nullptr;
 	gsl::owner<DxVoice*> dxVoice = nullptr;
+
+	// Intervallic engine per-voice phase / LFO state (OSC1 only in practice)
+	deluge::dsp::intervallic::VoiceState* intervallicState{nullptr};
 };
