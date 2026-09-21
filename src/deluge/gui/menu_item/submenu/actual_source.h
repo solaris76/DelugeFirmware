@@ -38,11 +38,8 @@ public:
 			}
 			// Machine SYN title e.g. "Osc1 FM Tone"
 			else if (deluge::dsp::machine::isMachineOscType(source.oscType)) {
-				l10n::String typeStr = l10n::String::STRING_FOR_FM_TONE;
+				l10n::String typeStr = l10n::String::STRING_FOR_WAVETONE;
 				switch (source.oscType) {
-				case OscType::FM_TONE:
-					typeStr = l10n::String::STRING_FOR_FM_TONE;
-					break;
 				case OscType::WAVETONE:
 					typeStr = l10n::String::STRING_FOR_WAVETONE;
 					break;

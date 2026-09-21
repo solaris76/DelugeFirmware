@@ -2755,10 +2755,6 @@ dontUseCache: {}
 			float timeScale =
 			    deluge::dsp::machine::envelopeTimeScaleFromDecayParam(paramFinalValues[params::LOCAL_ENV_0_DECAY]);
 			switch (src.oscType) {
-			case OscType::FM_TONE:
-				deluge::dsp::machine::renderFmTone(*src.ensureFmTonePatch(), mstate, machineBuf, numSamples,
-				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
-				break;
 			case OscType::FM_DRUM:
 				deluge::dsp::machine::renderFmDrum(*src.ensureFmDrumPatch(), mstate, machineBuf, numSamples,
 				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);

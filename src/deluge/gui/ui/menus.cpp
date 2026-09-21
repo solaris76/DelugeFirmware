@@ -254,15 +254,6 @@ namespace params = deluge::modulation::params;
 using machine::U8Param;
 
 // Machine SYN params (source 0) — isRelevant gates by OscType
-// FM Tone — Algo + 6 dials
-PLACE_SDRAM_DATA U8Param fmToneAlgoMenu{STRING_FOR_MACHINE_ALGO, machine::fmToneAlgo, OscType::FM_TONE, 7};
-PLACE_SDRAM_DATA U8Param fmToneRatioMenu{STRING_FOR_MACHINE_RATIO, machine::fmToneRatio, OscType::FM_TONE, 18};
-PLACE_SDRAM_DATA U8Param fmToneHarmMenu{STRING_FOR_MACHINE_HARMONICS, machine::fmToneHarm, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneDetuneMenu{STRING_FOR_MACHINE_DETUNE, machine::fmToneDetune, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneFbMenu{STRING_FOR_FEEDBACK, machine::fmToneFb, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneMixMenu{STRING_FOR_MACHINE_MIX, machine::fmToneMix, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneDecayMenu{STRING_FOR_DECAY, machine::fmToneDecay, OscType::FM_TONE};
-
 // FM Drum — Algo + 6 dials
 PLACE_SDRAM_DATA U8Param fmDrumAlgoMenu{STRING_FOR_MACHINE_ALGO, machine::fmDrumAlgo, OscType::FM_DRUM, 6};
 PLACE_SDRAM_DATA U8Param fmDrumTuneMenu{STRING_FOR_PITCH, machine::fmDrumTune, OscType::FM_DRUM};

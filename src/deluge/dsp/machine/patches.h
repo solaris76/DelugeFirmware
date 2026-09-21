@@ -13,22 +13,9 @@
 namespace deluge::dsp::machine {
 
 inline constexpr bool isMachineOscType(OscType t) {
-	return t == OscType::FM_TONE || t == OscType::WAVETONE || t == OscType::FM_DRUM || t == OscType::PERC
-	       || t == OscType::SKIN || t == OscType::RESONATOR;
+	return t == OscType::WAVETONE || t == OscType::FM_DRUM || t == OscType::PERC || t == OscType::SKIN
+	       || t == OscType::RESONATOR;
 }
-
-// FM Tone — Algo + 5 dials
-struct FmTonePatch {
-	uint8_t algorithm{0};  // 0–7 routing
-	uint8_t ratio{3};      // primary ratio; A/B derived
-	uint8_t harmonics{48}; // FM depth + mod levels
-	uint8_t detune{12};
-	uint8_t feedback{0};
-	uint8_t mix{40};
-	uint8_t decay{50}; // shared mod-env decay
-
-	void initDefaults();
-};
 
 // FM Drum — Algo + 6 dials
 struct FmDrumPatch {

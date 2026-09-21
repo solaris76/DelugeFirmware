@@ -3,10 +3,6 @@
 
 namespace deluge::dsp::machine {
 
-void FmTonePatch::initDefaults() {
-	*this = FmTonePatch{};
-}
-
 void FmDrumPatch::initDefaults() {
 	*this = FmDrumPatch{};
 }

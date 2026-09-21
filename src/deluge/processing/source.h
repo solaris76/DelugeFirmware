@@ -57,7 +57,6 @@ public:
 	DxPatch* dxPatch;
 	bool dxPatchChanged = false;
 
-	deluge::dsp::machine::FmTonePatch* fmTonePatch{nullptr};
 	deluge::dsp::machine::FmDrumPatch* fmDrumPatch{nullptr};
 	deluge::dsp::machine::WaveTonePatch* waveTonePatch{nullptr};
 	deluge::dsp::machine::PercPatch* percPatch{nullptr};
@@ -148,7 +147,6 @@ public:
 	void setOscType(OscType newType);
 
 	DxPatch* ensureDxPatch();
-	deluge::dsp::machine::FmTonePatch* ensureFmTonePatch();
 	deluge::dsp::machine::FmDrumPatch* ensureFmDrumPatch();
 	deluge::dsp::machine::WaveTonePatch* ensureWaveTonePatch();
 	deluge::dsp::machine::PercPatch* ensurePercPatch();

@@ -63,10 +63,11 @@ Source::~Source() {
 		dxPatch = nullptr;
 	}
 	destructAllMultiRanges();
-	delete fmTonePatch;
 	delete fmDrumPatch;
 	delete waveTonePatch;
 	delete percPatch;
+	delete skinPatch;
+	delete resonatorPatch;
 	delete phiMorphCache;
 	delete phiWeaveCache;
 	delete phiVoxCache;
@@ -337,9 +338,6 @@ DxPatch* Source::ensureDxPatch() {
 
 void Source::ensureMachinePatchForType(OscType type) {
 	switch (type) {
-	case OscType::FM_TONE:
-		ensureFmTonePatch();
-		break;
 	case OscType::FM_DRUM:
 		ensureFmDrumPatch();
 		break;
@@ -358,14 +356,6 @@ void Source::ensureMachinePatchForType(OscType type) {
 	default:
 		break;
 	}
-}
-
-deluge::dsp::machine::FmTonePatch* Source::ensureFmTonePatch() {
-	if (fmTonePatch == nullptr) {
-		fmTonePatch = new deluge::dsp::machine::FmTonePatch();
-		fmTonePatch->initDefaults();
-	}
-	return fmTonePatch;
 }
 
 deluge::dsp::machine::FmDrumPatch* Source::ensureFmDrumPatch() {

@@ -1,18 +1,12 @@
 from dmui.dsl import ExternalMenu, Menu
 
 _available_txt = 'Oscillator has its type set to <string-for name="STRING_FOR_SAMPLE">SAMPLE</string-for>'
-_machine_when = "Oscillator type is a machine engine (FM Tone / Wavetone / FM Drum / Perc / Skin / Resonator)"
+_machine_when = (
+    "Oscillator type is a machine engine (Wavetone / FM Drum / Perc / Skin / Resonator)"
+)
 
 # Defined in menus.cpp — source 0 SYN machine params only
 _machine_menus_osc0 = [
-    # FM Tone
-    ExternalMenu("fmToneAlgoMenu", available_when=_machine_when),
-    ExternalMenu("fmToneRatioMenu", available_when=_machine_when),
-    ExternalMenu("fmToneHarmMenu", available_when=_machine_when),
-    ExternalMenu("fmToneDetuneMenu", available_when=_machine_when),
-    ExternalMenu("fmToneFbMenu", available_when=_machine_when),
-    ExternalMenu("fmToneMixMenu", available_when=_machine_when),
-    ExternalMenu("fmToneDecayMenu", available_when=_machine_when),
     # FM Drum
     ExternalMenu("fmDrumAlgoMenu", available_when=_machine_when),
     ExternalMenu("fmDrumTuneMenu", available_when=_machine_when),

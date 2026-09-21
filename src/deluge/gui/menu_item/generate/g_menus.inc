@@ -77,7 +77,7 @@ sample::PitchSpeed sample0PitchSpeedMenu{STRING_FOR_PITCH_SPEED, 0};
 sample::Interpolation sample0InterpolationMenu{STRING_FOR_INTERPOLATION, STRING_FOR_SAMP_INTERP_MENU_TITLE, 0};
 sample::Start sample0StartMenu{STRING_FOR_START_POINT, 0};
 sample::End sample0EndMenu{STRING_FOR_END_POINT, 0};
-std::array<MenuItem*, 61> child6 = {
+std::array<MenuItem*, 54> child6 = {
     &osc0TypeMenu,
     &deluge::gui::menu_item::file0SelectorMenu,
     &osc0PhiZoneAMenu,
@@ -89,13 +89,6 @@ std::array<MenuItem*, 61> child6 = {
     &osc0PulseWidthMenu,
     &source0FeedbackMenu,
     &osc0PhaseMenu,
-    &fmToneAlgoMenu,
-    &fmToneRatioMenu,
-    &fmToneHarmMenu,
-    &fmToneDetuneMenu,
-    &fmToneFbMenu,
-    &fmToneMixMenu,
-    &fmToneDecayMenu,
     &fmDrumAlgoMenu,
     &fmDrumTuneMenu,
     &fmDrumSweepMenu,

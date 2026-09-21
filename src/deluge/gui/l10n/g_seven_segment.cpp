@@ -153,7 +153,6 @@ PLACE_SDRAM_DATA Language seven_segment{
         {STRING_FOR_ANALOG_SAW, "ASAW"},
         {STRING_FOR_SAMPLE, "SAMP"},
         {STRING_FOR_DX7, "DX7"},
-        {STRING_FOR_FM_TONE, "FMTN"},
         {STRING_FOR_WAVETONE, "WAVE"},
         {STRING_FOR_FM_DRUM, "FMDR"},
         {STRING_FOR_PERC, "PERC"},

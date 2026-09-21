@@ -48,9 +48,6 @@ private:
 
 	static void ensurePatch(Source& src) {
 		switch (src.oscType) {
-		case OscType::FM_TONE:
-			src.ensureFmTonePatch();
-			break;
 		case OscType::FM_DRUM:
 			src.ensureFmDrumPatch();
 			break;
@@ -116,29 +113,6 @@ public:
 		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::RESONATOR;
 	}
 };
-
-// --- FM Tone (Algo + 6 dials) ---
-inline uint8_t* fmToneAlgo(Source& s) {
-	return &s.ensureFmTonePatch()->algorithm;
-}
-inline uint8_t* fmToneRatio(Source& s) {
-	return &s.ensureFmTonePatch()->ratio;
-}
-inline uint8_t* fmToneHarm(Source& s) {
-	return &s.ensureFmTonePatch()->harmonics;
-}
-inline uint8_t* fmToneDetune(Source& s) {
-	return &s.ensureFmTonePatch()->detune;
-}
-inline uint8_t* fmToneFb(Source& s) {
-	return &s.ensureFmTonePatch()->feedback;
-}
-inline uint8_t* fmToneMix(Source& s) {
-	return &s.ensureFmTonePatch()->mix;
-}
-inline uint8_t* fmToneDecay(Source& s) {
-	return &s.ensureFmTonePatch()->decay;
-}
 
 // --- FM Drum ---
 inline uint8_t* fmDrumAlgo(Source& s) {

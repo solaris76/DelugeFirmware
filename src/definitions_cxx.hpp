@@ -385,7 +385,6 @@ enum class OscType : uint8_t {
 	PHI_GENDY,
 	SAMPLE,
 	DX7,
-	FM_TONE,   // Digitone-like 4-op FM
 	WAVETONE,  // Digitone-like dual morph / phase-dist
 	FM_DRUM,   // Digitone-like FM drum
 	PERC,      // Archer's Rig–style metallic / hat sources

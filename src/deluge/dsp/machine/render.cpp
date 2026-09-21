@@ -78,16 +78,6 @@ inline int32_t morphWave(uint32_t phase, uint8_t waveIndex, uint8_t phaseDist) {
 	return static_cast<int32_t>(saw * (1.f - u) + sqr * u);
 }
 
-inline float envFollow(float& env, float target, float atkCoef, float decCoef) {
-	if (target > env) {
-		env += (target - env) * atkCoef;
-	}
-	else {
-		env += (target - env) * decCoef;
-	}
-	return env;
-}
-
 // Convert a full-scale sine into a phase offset. index ~0.5 is mild FM; ~2 is bright.
 inline uint32_t phaseMod(int32_t sample, float index) {
 	if (index <= 0.f) {
@@ -97,165 +87,76 @@ inline uint32_t phaseMod(int32_t sample, float index) {
 	return static_cast<uint32_t>(static_cast<int32_t>(sample * (index * 0.125f)));
 }
 
-// Digitone-ish carrier mix after operators have already been FM'd.
-// op: 0=A, 1=B1, 2=B2, 3=C (audio-rate, post-modulation)
-inline int32_t mixFmCarriers(int32_t op[4], uint8_t algo, uint8_t mix) {
-	int32_t x = 0;
-	int32_t y = 0;
-	switch (algo & 7) {
-	case 0: // single carrier C
-		x = op[3];
-		y = op[3];
-		break;
-	case 1: // C + B1
-		x = op[3];
-		y = op[1];
-		break;
-	case 2: // C + A
-		x = op[3];
-		y = op[0];
-		break;
-	case 3:
-		x = (op[3] >> 1) + (op[1] >> 2);
-		y = op[0] >> 1;
-		break;
-	case 4:
-		x = op[3];
-		y = (op[1] >> 1) + (op[2] >> 2);
-		break;
-	case 5:
-		x = (op[3] >> 1) + (op[0] >> 2);
-		y = (op[1] >> 1) + (op[2] >> 2);
-		break;
-	case 6:
-		x = (op[3] >> 1) + (op[0] >> 1);
-		y = op[1] >> 1;
-		break;
-	default:
-		x = (op[3] >> 1) + (op[0] >> 2);
-		y = (op[1] >> 1) + (op[2] >> 2);
-		break;
-	}
-	int32_t m = static_cast<int32_t>(mix);
-	return ((x * (128 - m)) + (y * m)) >> 7;
-}
-
 } // namespace
-
-float ratioFromIndexC(uint8_t idx) {
-	static constexpr float kRatios[] = {0.25f, 0.5f, 0.75f, 1.f,  2.f,  3.f,  4.f,  5.f,  6.f, 7.f,
-	                                    8.f,   9.f,  10.f,  11.f, 12.f, 13.f, 14.f, 15.f, 16.f};
-	idx = std::min<uint8_t>(idx, 18);
-	return kRatios[idx];
-}
-
-float ratioFromIndexA(uint8_t idx) {
-	static constexpr float kRatios[] = {0.25f, 0.5f, 0.75f, 1.f, 1.25f, 1.5f, 1.75f, 2.f,  2.25f, 2.5f, 2.75f, 3.f,
-	                                    3.25f, 3.5f, 3.75f, 4.f, 4.25f, 4.5f, 4.75f, 5.f,  5.5f,  6.f,  6.5f,  7.f,
-	                                    7.5f,  8.f,  8.5f,  9.f, 9.5f,  10.f, 11.f,  12.f, 13.f,  14.f, 15.f,  16.f};
-	idx = std::min<uint8_t>(idx, 35);
-	return kRatios[idx];
-}
-
-void unpackRatioB(uint8_t dial, float& b1, float& b2) {
-	// Approximate Digitone revolving B1/B2 dial
-	int v = dial;
-	int step = v / 16;
-	int fine = v % 16;
-	b1 = ratioFromIndexC(std::min(step, 18));
-	b2 = ratioFromIndexC(std::min(fine, 18));
-}
-
-void renderFmTone(FmTonePatch const& patch, MachineVoiceState& st, int32_t* dest, int32_t numSamples,
-                  uint32_t phaseIncrement, int32_t amplitude, int32_t amplitudeIncrement, float timeScale) {
-	if (timeScale < 0.15f) {
-		timeScale = 0.15f;
-	}
-	// Single Ratio dial: C primary; A/B derived for width.
-	float rC = ratioFromIndexC(std::min<uint8_t>(patch.ratio, 18));
-	float rA = ratioFromIndexA(std::min<uint8_t>(static_cast<uint8_t>(patch.ratio + patch.harmonics / 8), 35));
-	float rB1, rB2;
-	unpackRatioB(static_cast<uint8_t>((patch.ratio * 7 + patch.detune) & 127), rB1, rB2);
-
-	float det = u8f(patch.detune) * 0.02f;
-	rA *= (1.f + det);
-	rB2 *= (1.f - det);
-
-	uint32_t incC = static_cast<uint32_t>(phaseIncrement * rC);
-	uint32_t incA = static_cast<uint32_t>(phaseIncrement * rA);
-	uint32_t incB1 = static_cast<uint32_t>(phaseIncrement * rB1);
-	uint32_t incB2 = static_cast<uint32_t>(phaseIncrement * rB2);
-
-	float modLev = 0.15f + u8f(patch.harmonics) * 0.85f;
-	float dec = (0.002f + u8f(patch.decay) * 0.1f) * timeScale;
-	float fb = u8f(patch.feedback) * 0.7f;
-	float baseIndex = 0.15f + u8f(patch.harmonics) * 1.35f;
-
-	if (st.noteOn && st.sampleCount == 0) {
-		st.phase[0] = st.phase[1] = st.phase[2] = st.phase[3] = 0;
-		st.envA = 0.f;
-		st.envB = 0.f;
-	}
-
-	int32_t amp = amplitude;
-	int32_t feedbackMem = 0;
-
-	for (int32_t i = 0; i < numSamples; i++) {
-		st.sampleCount++;
-		float target = st.noteOn ? modLev : 0.f;
-		envFollow(st.envA, target, 1.f / (1.f + 8.f), 1.f / (1.f + dec * 4000.f));
-		envFollow(st.envB, target * 0.85f, 1.f / (1.f + 10.f), 1.f / (1.f + dec * 4500.f));
-
-		float idxA = baseIndex * st.envA;
-		float idxB = baseIndex * st.envB;
-
-		int32_t opA = getSine(st.phase[0]);
-		int32_t opB2 = getSine(st.phase[2]);
-		st.phase[2] += incB2;
-		int32_t opB1 = getSine(st.phase[1] + phaseMod(opB2, idxB));
-		st.phase[1] += incB1;
-
-		uint32_t mod = phaseMod(opA, idxA) + phaseMod(opB1, idxB) + phaseMod(feedbackMem, fb);
-		int32_t opC = getSine(st.phase[3] + mod);
-		st.phase[0] += incA;
-		st.phase[3] += incC;
-		feedbackMem = opC;
-
-		int32_t op[4] = {opA, opB1, opB2, opC};
-		int32_t sample = mixFmCarriers(op, patch.algorithm, patch.mix);
-
-		amp += amplitudeIncrement;
-		dest[i] += multiply_32x32_rshift32(sample, amp) << 4;
-	}
-}
 
 void renderFmDrum(FmDrumPatch const& patch, MachineVoiceState& st, int32_t* dest, int32_t numSamples,
                   uint32_t phaseIncrement, int32_t amplitude, int32_t amplitudeIncrement, float timeScale) {
 	if (timeScale < 0.15f) {
 		timeScale = 0.15f;
 	}
-	float tuneMul = 0.05f + u8f(patch.tune) * 1.7f;
+	// Tune owns pitch only — algo must not shift the fundamental.
+	float tuneMul = 0.08f + u8f(patch.tune) * 1.1f;
 	uint32_t baseInc = static_cast<uint32_t>(phaseIncrement * tuneMul);
 
 	float sweepAmt = u8f(patch.sweep);
-	float sweepDepth = sweepAmt * 3.0f;
+	float sweepDepth = sweepAmt * 2.6f;
 	uint8_t sweepTime = static_cast<uint8_t>(12 + (1.f - sweepAmt) * 50.f + sweepAmt * 70.f);
 	float bodyDecCoef = drumDecayCoef(patch.decay) / timeScale;
 	float noiseDecCoef = drumDecayCoef(static_cast<uint8_t>(8 + patch.noise / 2)) / timeScale;
 	float sweepCoef = drumPitchEnvCoef(sweepTime) / timeScale;
 
 	float modAmt = u8f(patch.mod);
-	float modA = modAmt * 1.1f;
-	float modB = modAmt * 0.75f;
-	float rA = 0.6f + modAmt * 5.5f;
-	float rB = 1.2f + modAmt * 4.0f;
-	// Algo nudges ratio flavour
-	rA *= 1.f + (patch.algorithm % 3) * 0.15f;
-	rB *= 1.f + ((patch.algorithm / 2) % 3) * 0.12f;
+	// Fixed mod ratios (independent of algo) so Pitch dial tracks predictably.
+	float modA = modAmt * 1.05f;
+	float modB = modAmt * 0.7f;
+	float rA = 1.5f + modAmt * 3.5f;
+	float rB = 2.2f + modAmt * 2.8f;
 
 	float fold = u8f(patch.fold);
 	float fb = fold * 0.35f;
 	float noiseAmt = u8f(patch.noise);
+
+	// Algo = character only: mod balance, noise colour, click, not carrier pitch.
+	uint8_t algo = patch.algorithm % 7;
+	float noiseBias = 1.f;
+	float clickBias = 1.f;
+	float modSkew = 1.f;
+	switch (algo) {
+	case 0: // deep body
+		noiseBias = 0.55f;
+		clickBias = 0.8f;
+		break;
+	case 1: // punch / clicky
+		noiseBias = 0.7f;
+		clickBias = 1.4f;
+		modSkew = 1.25f;
+		break;
+	case 2: // snare-ish
+		noiseBias = 1.35f;
+		clickBias = 1.1f;
+		break;
+	case 3: // tight
+		noiseBias = 0.4f;
+		clickBias = 1.2f;
+		modSkew = 0.75f;
+		break;
+	case 4: // metallic
+		noiseBias = 0.9f;
+		modSkew = 1.45f;
+		rB *= 1.35f; // upper mod only — carrier still baseInc
+		break;
+	case 5: // noisy wash
+		noiseBias = 1.5f;
+		clickBias = 0.6f;
+		break;
+	default: // hybrid
+		noiseBias = 1.1f;
+		clickBias = 1.0f;
+		modSkew = 1.15f;
+		break;
+	}
+	modA *= modSkew;
+	modB *= (2.f - modSkew * 0.5f);
 
 	if (st.sampleCount == 0) {
 		st.bodyEnv = 1.f;
@@ -264,7 +165,7 @@ void renderFmDrum(FmDrumPatch const& patch, MachineVoiceState& st, int32_t* dest
 		st.envA = 1.f;
 		st.envB = 1.f;
 		st.phase[3] = 0;
-		st.clickSamplesLeft = 10 + static_cast<uint32_t>(noiseAmt * 50.f);
+		st.clickSamplesLeft = 10 + static_cast<uint32_t>(noiseAmt * 50.f * clickBias);
 	}
 
 	int32_t amp = amplitude;
@@ -301,12 +202,12 @@ void renderFmDrum(FmDrumPatch const& patch, MachineVoiceState& st, int32_t* dest
 		body = static_cast<int32_t>(body * st.bodyEnv);
 
 		int32_t noise = noiseSample(st.noiseState);
-		noise = static_cast<int32_t>(noise * st.noiseEnv * noiseAmt * 0.45f);
+		noise = static_cast<int32_t>(noise * st.noiseEnv * noiseAmt * 0.45f * noiseBias);
 
 		int32_t click = 0;
 		if (st.clickSamplesLeft > 0) {
 			click = noiseSample(st.noiseState) >> 3;
-			click = static_cast<int32_t>(click * noiseAmt);
+			click = static_cast<int32_t>(click * noiseAmt * clickBias);
 			st.clickSamplesLeft--;
 		}
 

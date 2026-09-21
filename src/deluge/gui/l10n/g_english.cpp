@@ -254,7 +254,6 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_ANALOG_SAW, "Analog saw"},
         {STRING_FOR_SAMPLE, "Sample"},
         {STRING_FOR_DX7, "Dx7"},
-        {STRING_FOR_FM_TONE, "FM Tone"},
         {STRING_FOR_WAVETONE, "Wavetone"},
         {STRING_FOR_FM_DRUM, "FM Drum"},
         {STRING_FOR_PERC, "Perc"},

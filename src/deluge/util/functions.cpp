@@ -814,9 +814,6 @@ char const* oscTypeToString(OscType oscType) {
 	case OscType::DX7:
 		return "dx7";
 
-	case OscType::FM_TONE:
-		return "fmtone";
-
 	case OscType::WAVETONE:
 		return "wavetone";
 
@@ -889,9 +886,6 @@ OscType stringToOscType(char const* string) {
 	}
 	else if (!strcmp(string, "dx7")) {
 		return OscType::DX7;
-	}
-	else if (!strcmp(string, "fmtone")) {
-		return OscType::FM_TONE;
 	}
 	else if (!strcmp(string, "wavetone")) {
 		return OscType::WAVETONE;

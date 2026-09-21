@@ -3514,11 +3514,6 @@ Error Sound::readSourceFromFile(Deserializer& reader, int32_t s, ParamManagerFor
 			source->phiStereoZone = reader.readTagOrAttributeValueInt();
 			reader.exitTag("phiStereoZone");
 		}
-		else if (!strcmp(tagName, "fmtonePatch")) {
-			auto* patch = source->ensureFmTonePatch();
-			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
-			reader.exitTag("fmtonePatch");
-		}
 		else if (!strcmp(tagName, "fmdrumPatch")) {
 			auto* patch = source->ensureFmDrumPatch();
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
@@ -3894,12 +3889,6 @@ void Sound::writeSourceToFile(Serializer& writer, int32_t s, char const* tagName
 		}
 		else if (source->isMachineOsc() && synthMode != SynthMode::FM) {
 			switch (source->oscType) {
-			case OscType::FM_TONE:
-				if (source->fmTonePatch) {
-					writer.writeAttributeHexBytes("fmtonePatch", reinterpret_cast<uint8_t*>(source->fmTonePatch),
-					                              sizeof(*source->fmTonePatch));
-				}
-				break;
 			case OscType::FM_DRUM:
 				if (source->fmDrumPatch) {
 					writer.writeAttributeHexBytes("fmdrumPatch", reinterpret_cast<uint8_t*>(source->fmDrumPatch),
