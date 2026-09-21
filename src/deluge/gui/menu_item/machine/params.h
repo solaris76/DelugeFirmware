@@ -38,7 +38,7 @@ public:
 	[[nodiscard]] int32_t getMinValue() const override { return 0; }
 	[[nodiscard]] RenderingStyle getRenderingStyle() const override { return NUMBER; }
 
-	bool isRelevant(ModControllableAudio*, int32_t) override {
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
 		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == requiredType_;
 	}
 
@@ -85,7 +85,7 @@ public:
 		return {"Kick", "Snare", "HH", "Tom", "Clap", "Cymbal"};
 	}
 
-	bool isRelevant(ModControllableAudio*, int32_t) override {
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
 		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::PERC;
 	}
 };
