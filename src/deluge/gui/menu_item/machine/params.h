@@ -74,7 +74,8 @@ public:
 	PercRole(l10n::String name) : Selection(name) {}
 	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensurePercPatch()->role); }
 	void writeCurrentValue() override {
-		soundEditor.currentSound->sources[0].ensurePercPatch()->loadRoleDefaults(static_cast<uint8_t>(getValue()));
+		// Role only — leave Pitch / Color / Noise / Decay / Crunch as dialled.
+		soundEditor.currentSound->sources[0].ensurePercPatch()->role = static_cast<uint8_t>(getValue());
 		soundEditor.currentSound->killAllVoices();
 	}
 	deluge::vector<std::string_view> getOptions(OptType) override {
@@ -105,8 +106,8 @@ public:
 	ResonatorModel(l10n::String name) : Selection(name) {}
 	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureResonatorPatch()->model); }
 	void writeCurrentValue() override {
-		soundEditor.currentSound->sources[0].ensureResonatorPatch()->loadModelDefaults(
-		    static_cast<uint8_t>(getValue()));
+		// Model only — leave Structure / Bright / Damping / Position / Excite as dialled.
+		soundEditor.currentSound->sources[0].ensureResonatorPatch()->model = static_cast<uint8_t>(getValue());
 		soundEditor.currentSound->killAllVoices();
 	}
 	deluge::vector<std::string_view> getOptions(OptType) override { return {"Modal", "Strings", "Wire"}; }
