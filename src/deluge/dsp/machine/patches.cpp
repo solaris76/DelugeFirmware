@@ -156,16 +156,11 @@ void MachineVoiceState::reset() {
 	for (auto& e : oscEnv) {
 		e = 0.f;
 	}
-	for (auto& z : resZ1) {
-		z = 0.f;
-	}
-	for (auto& z : resZ2) {
-		z = 0.f;
-	}
 	for (auto& c : combBuf) {
 		c = 0.f;
 	}
 	combPos = 0;
+	combLen = 64;
 	noiseState = 1;
 	sampleCount = 0;
 	clickSamplesLeft = 0;

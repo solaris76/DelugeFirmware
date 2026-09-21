@@ -597,138 +597,149 @@ void renderResonator(ResonatorPatch const& patch, MachineVoiceState& st, int32_t
 	float pos = u8f(patch.position);
 	float excite = u8f(patch.excite);
 
-	// Note pitch → fundamental in normalized freq (~0..0.5)
-	float f0 = static_cast<float>(phaseIncrement) * (1.f / 4294967296.f);
-	f0 = std::clamp(f0, 0.0008f, 0.45f);
+	// Cheap Rings-ish: Modal = few decaying sines; Strings/Wire = short KS comb.
+	// (Old path ran exp/cos per partial per sample — melted the A9.)
+	constexpr int kPartials = 4;
+	uint32_t incs[kPartials];
+	float decays[kPartials];
+	float amps[kPartials];
 
-	constexpr int kModes = 12;
-	float freqs[kModes];
-	float qs[kModes];
-	float amps[kModes];
-
-	// Structure: 0 ≈ harmonic, 1 ≈ stiff / inharmonic stretch
 	float stretch = 1.f;
-	float stiff = (structure - 0.5f) * 0.35f;
-	for (int i = 0; i < kModes; i++) {
+	float stiff = (structure - 0.5f) * 0.28f;
+	float qLoss = 0.62f + bright * 0.32f;
+	float decay0 = 1.f - (0.00015f + (1.f - damp) * (1.f - damp) * 0.008f) / timeScale;
+
+	for (int i = 0; i < kPartials; i++) {
 		float n = static_cast<float>(i + 1);
-		if (model == ResonatorModel::Modal) {
-			freqs[i] = f0 * n * stretch;
-			stretch += stiff;
-			if (stiff < 0.f) {
-				stiff *= 0.93f;
-			}
-			else {
-				stiff *= 0.98f;
-			}
-		}
-		else if (model == ResonatorModel::Strings) {
-			// Slightly detuned sympathetic stack
-			freqs[i] = f0 * (1.f + i * (0.5f + structure * 0.08f)) * (1.f + (i & 1) * structure * 0.004f);
+		float ratio;
+		if (model == ResonatorModel::Wire) {
+			// Cheap inharmonic approx (avoid pow): 1, 2.3, 3.7, 5.1-ish stretched by structure
+			static constexpr float kWire[4] = {1.f, 2.28f, 3.65f, 5.05f};
+			ratio = kWire[i] * (1.f + structure * 0.35f * static_cast<float>(i) * 0.25f);
 		}
 		else {
-			// Wire: odd-ish inharmonic partials
-			freqs[i] = f0 * std::pow(n, 1.0f + structure * 0.55f);
+			ratio = n * stretch;
+			stretch += stiff;
+			stiff *= (stiff < 0.f) ? 0.93f : 0.98f;
 		}
-		freqs[i] = std::clamp(freqs[i], 0.0005f, 0.48f);
-
-		// Damping high → long ring; Brightness keeps highs alive
-		float qBase = 8.f + damp * damp * 420.f;
-		float qLoss = 0.55f + bright * 0.4f;
-		qs[i] = qBase * std::pow(qLoss, static_cast<float>(i));
-		qs[i] = std::clamp(qs[i], 2.f, 800.f);
-
-		// Position: cosine spatial weighting (strike location)
-		float ang = 3.14159265f * pos * n;
-		amps[i] = std::cos(ang);
-		amps[i] *= amps[i]; // energy
-		amps[i] *= (1.f - static_cast<float>(i) / static_cast<float>(kModes)) * (0.35f + bright * 0.65f);
+		incs[i] = static_cast<uint32_t>(static_cast<float>(phaseIncrement) * ratio);
+		decays[i] = decay0;
+		for (int k = 0; k < i; k++) {
+			decays[i] *= qLoss;
+		}
+		if (decays[i] < 0.995f) {
+			decays[i] = 0.995f;
+		}
+		if (decays[i] > 0.99995f) {
+			decays[i] = 0.99995f;
+		}
+		// Position: alternate polarity / weight (no cos)
+		float w = 1.f - static_cast<float>(i) * (0.18f - bright * 0.1f);
+		float posW = 1.f - std::abs(pos - (0.15f + 0.2f * static_cast<float>(i))) * 1.4f;
+		if (posW < 0.15f) {
+			posW = 0.15f;
+		}
+		amps[i] = w * posW * (0.45f + bright * 0.55f);
 	}
 
 	if (st.sampleCount == 0) {
-		for (auto& z : st.resZ1) {
-			z = 0.f;
-		}
-		for (auto& z : st.resZ2) {
-			z = 0.f;
+		for (int i = 0; i < kPartials; i++) {
+			st.phase[i] = static_cast<uint32_t>(i * 0x1A2B3C4Du);
+			st.oscEnv[i] = amps[i];
 		}
 		for (auto& c : st.combBuf) {
 			c = 0.f;
 		}
 		st.combPos = 0;
-		st.clickSamplesLeft = 20 + static_cast<uint32_t>(excite * 80.f);
-		st.noiseEnv = 1.f;
+		// Delay length from note pitch, capped to buffer
+		float f0 = static_cast<float>(phaseIncrement) * (1.f / 4294967296.f);
+		uint32_t delay = static_cast<uint32_t>(std::clamp(1.f / std::max(f0, 0.002f), 12.f, 127.f));
+		st.combLen = static_cast<uint16_t>(delay);
+		st.clickSamplesLeft = 12 + static_cast<uint32_t>(excite * 50.f);
 		st.bodyEnv = 1.f;
 	}
 
-	// Body envelope so it dies with damping even if Q is high
-	float bodyDec = drumDecayCoef(static_cast<uint8_t>(20 + damp * 100.f)) / timeScale;
+	float bodyDec = (0.00008f + (1.f - damp) * 0.0015f) / timeScale;
+	float combFb = 0.9f + damp * 0.09f;
+	float brightLp = 0.35f + bright * 0.55f; // mix of delayed / neighbour
+	float wireDrive = 1.f + structure * 2.2f;
 	int32_t amp = amplitude;
-
-	// Comb delay for Strings / Wire
-	uint32_t delaySamples = static_cast<uint32_t>(std::clamp(1.f / std::max(f0, 0.001f), 8.f, 255.f));
-	float combFb = 0.88f + damp * 0.11f;
-	float dispersion = structure * 0.35f;
+	bool useComb = (model != ResonatorModel::Modal);
 
 	for (int32_t i = 0; i < numSamples; i++) {
 		st.sampleCount++;
-		st.bodyEnv *= (1.f - bodyDec * 0.35f);
+		st.bodyEnv *= (1.f - bodyDec);
 
 		float exc = 0.f;
 		if (st.clickSamplesLeft > 0) {
-			exc = (static_cast<float>(noiseSample(st.noiseState)) * (1.f / 2147483648.f)) * excite;
-			// Soften into a short burst
-			exc *= static_cast<float>(st.clickSamplesLeft) / 100.f;
+			exc = (static_cast<float>(noiseSample(st.noiseState)) * (1.f / 2147483648.f)) * excite
+			      * (static_cast<float>(st.clickSamplesLeft) * (1.f / 64.f));
 			st.clickSamplesLeft--;
 		}
 
 		float out = 0.f;
 
-		if (model == ResonatorModel::Modal) {
-			// Parallel band-pass resonators (simplified SVF-ish one-pole complex)
-			for (int m = 0; m < kModes; m++) {
-				float w = 2.f * 3.14159265f * freqs[m];
-				float r = std::exp(-w / (2.f * qs[m]));
-				float a = 2.f * r * std::cos(w);
-				// y[n] = x + a*y[n-1] - r^2*y[n-2]
-				float y = exc * amps[m] + a * st.resZ1[m] - (r * r) * st.resZ2[m];
-				st.resZ2[m] = st.resZ1[m];
-				st.resZ1[m] = y;
-				out += y;
+		if (!useComb) {
+			// Modal: 4 decaying sine partials
+			for (int p = 0; p < kPartials; p++) {
+				out += static_cast<float>(getSine(st.phase[p])) * (1.f / 2147483648.f) * st.oscEnv[p];
+				st.phase[p] += incs[p];
+				st.oscEnv[p] *= decays[p];
 			}
-			out *= 0.45f;
+			out += exc * 0.35f;
+			out *= 1.6f;
 		}
 		else {
-			// Comb / KS family
-			uint16_t readPos = static_cast<uint16_t>((st.combPos + 256 - delaySamples) & 255);
+			// Strings / Wire: one KS comb (+ optional soft fold)
+			uint16_t len = st.combLen;
+			if (len < 8) {
+				len = 8;
+			}
+			if (len > 127) {
+				len = 127;
+			}
+			uint16_t readPos = static_cast<uint16_t>((st.combPos + 128 - len) & 127);
+			uint16_t read2 = static_cast<uint16_t>((readPos + 1) & 127);
 			float delayed = st.combBuf[readPos];
-			// Mild averaging = lowpass damping; brightness opens it
-			uint16_t read2 = static_cast<uint16_t>((readPos + 1) & 255);
-			float lp = delayed * (1.f - bright * 0.55f) + st.combBuf[read2] * (bright * 0.55f);
+			float lp = delayed * (1.f - brightLp) + st.combBuf[read2] * brightLp;
 			if (model == ResonatorModel::Wire) {
-				// Soft clip in the loop (dispersion / nonlinearity)
-				lp = std::tanh(lp * (1.f + dispersion * 3.f));
+				// Cheap soft clip (no tanh)
+				lp *= wireDrive;
+				if (lp > 1.f) {
+					lp = 1.f - 1.f / (lp + 1.f);
+				}
+				else if (lp < -1.f) {
+					lp = -1.f + 1.f / (-lp + 1.f);
+				}
 			}
 			float y = exc + lp * combFb;
 			st.combBuf[st.combPos] = y;
-			st.combPos = static_cast<uint16_t>((st.combPos + 1) & 255);
+			st.combPos = static_cast<uint16_t>((st.combPos + 1) & 127);
 			out = y;
 
-			// Blend a couple of modal partials for Strings body
+			// Strings: add two quiet partials for body (still cheap)
 			if (model == ResonatorModel::Strings) {
-				for (int m = 0; m < 4; m++) {
-					float w = 2.f * 3.14159265f * freqs[m];
-					float r = std::exp(-w / (2.f * qs[m]));
-					float a = 2.f * r * std::cos(w);
-					float ym = exc * amps[m] * 0.35f + a * st.resZ1[m] - (r * r) * st.resZ2[m];
-					st.resZ2[m] = st.resZ1[m];
-					st.resZ1[m] = ym;
-					out += ym * 0.25f;
+				for (int p = 0; p < 2; p++) {
+					out += static_cast<float>(getSine(st.phase[p])) * (1.f / 2147483648.f) * st.oscEnv[p] * 0.22f;
+					st.phase[p] += incs[p];
+					st.oscEnv[p] *= decays[p];
 				}
+				out *= 0.85f;
+			}
+			else {
+				// Wire: soft-clip loop runs hot — bring in line with Modal/Strings
+				out *= 0.42f;
 			}
 		}
 
 		out *= st.bodyEnv;
-		out = std::tanh(out * 1.4f);
+		// Soft output clip
+		if (out > 1.f) {
+			out = 1.f;
+		}
+		else if (out < -1.f) {
+			out = -1.f;
+		}
 		int32_t sample = static_cast<int32_t>(out * 2147483647.f);
 
 		amp += amplitudeIncrement;

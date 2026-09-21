@@ -90,7 +90,8 @@ public:
 	SkinMode(l10n::String name) : Selection(name) {}
 	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureSkinPatch()->mode); }
 	void writeCurrentValue() override {
-		soundEditor.currentSound->sources[0].ensureSkinPatch()->loadModeDefaults(static_cast<uint8_t>(getValue()));
+		// Algo only — leave Pitch / Harm / Morph / Fold / Decay as dialled.
+		soundEditor.currentSound->sources[0].ensureSkinPatch()->mode = static_cast<uint8_t>(getValue());
 		soundEditor.currentSound->killAllVoices();
 	}
 	deluge::vector<std::string_view> getOptions(OptType) override { return {"Skin", "Liquid", "Metal"}; }

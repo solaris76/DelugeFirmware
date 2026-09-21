@@ -129,11 +129,10 @@ struct ResonatorPatch {
 struct MachineVoiceState {
 	uint32_t phase[6]{};
 	float oscEnv[6]{};
-	// Resonator modal / comb state (reused across machine types)
-	float resZ1[16]{};
-	float resZ2[16]{};
-	float combBuf[256]{};
+	// Resonator: small comb delay (KS) — keep tiny for voice RAM / cache
+	float combBuf[128]{};
 	uint16_t combPos{0};
+	uint16_t combLen{64};
 	uint32_t noiseState{1};
 	uint32_t sampleCount{0};
 	uint32_t clickSamplesLeft{0};
