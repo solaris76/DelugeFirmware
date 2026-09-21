@@ -16,6 +16,7 @@
  */
 #pragma once
 #include "definitions_cxx.hpp"
+#include "dsp/machine/patches.h"
 #include "gui/menu_item/formatted_title.h"
 #include "gui/menu_item/selection.h"
 #include "gui/menu_item/submenu.h"
@@ -27,10 +28,16 @@
 #include "util/comparison.h"
 
 #include <hid/display/oled.h>
+#include <vector>
 
 extern gui::menu_item::Submenu dxMenu;
 
 namespace deluge::gui::menu_item::osc {
+
+inline bool mayUseMachine(uint8_t sourceId) {
+	return sourceId == 0;
+}
+
 class Type final : public Selection, public FormattedTitle {
 public:
 	Type(l10n::String name, l10n::String title_format_str, uint8_t source_id)
@@ -39,35 +46,80 @@ public:
 
 	bool mayUseDx() const { return !soundEditor.editingKit() && sourceId_ == 0; }
 
-	void readCurrentValue() override {
-		int32_t rawVal = static_cast<int32_t>(soundEditor.currentSound->sources[sourceId_].oscType);
-		if (!mayUseDx() && rawVal > static_cast<int32_t>(OscType::DX7)) {
-			rawVal -= 1;
+	/// Build OscType list matching getOptions() order for current context.
+	/// Phi family sits with basic/wavetable (same as on-main); machines are kit-friendly source-0 engines.
+	void buildTypeList(std::vector<OscType>& out) const {
+		out.clear();
+		out.push_back(OscType::SINE);
+		out.push_back(OscType::TRIANGLE);
+		out.push_back(OscType::SQUARE);
+		out.push_back(OscType::ANALOG_SQUARE);
+		out.push_back(OscType::SAW);
+		out.push_back(OscType::ANALOG_SAW_2);
+		out.push_back(OscType::WAVETABLE);
+		out.push_back(OscType::PHI_MORPH);
+		out.push_back(OscType::PHI_STAIR);
+		out.push_back(OscType::PHI_WEAVE);
+		out.push_back(OscType::PHI_VOX);
+		out.push_back(OscType::PHI_SWARM);
+		out.push_back(OscType::PHI_GENDY);
+
+		if (soundEditor.currentSound->getSynthMode() == SynthMode::RINGMOD) {
+			return;
 		}
-		setValue(rawVal);
+
+		out.push_back(OscType::SAMPLE);
+
+		if (mayUseMachine(sourceId_)) {
+			out.push_back(OscType::FM_TONE);
+			out.push_back(OscType::WAVETONE);
+			out.push_back(OscType::FM_DRUM);
+			out.push_back(OscType::PERC);
+		}
+
+		if (mayUseDx()) {
+			out.push_back(OscType::DX7);
+		}
+
+		if (AudioEngine::micPluggedIn || AudioEngine::lineInPluggedIn) {
+			out.push_back(OscType::INPUT_L);
+			out.push_back(OscType::INPUT_R);
+			out.push_back(OscType::INPUT_STEREO);
+		}
+		else {
+			out.push_back(OscType::INPUT_L); // shown as "Input"
+		}
 	}
+
+	void readCurrentValue() override {
+		std::vector<OscType> types;
+		buildTypeList(types);
+		OscType cur = soundEditor.currentSound->sources[sourceId_].oscType;
+		int32_t idx = 0;
+		for (size_t i = 0; i < types.size(); i++) {
+			if (types[i] == cur) {
+				idx = static_cast<int32_t>(i);
+				break;
+			}
+		}
+		setValue(idx);
+	}
+
 	void writeCurrentValue() override {
 		OscType oldValue = soundEditor.currentSound->sources[sourceId_].oscType;
-		auto newValue = getValue<OscType>();
-		if (!mayUseDx() && static_cast<int32_t>(newValue) >= static_cast<int32_t>(OscType::DX7)) {
-			newValue = static_cast<OscType>(static_cast<int32_t>(newValue) + 1);
+		std::vector<OscType> types;
+		buildTypeList(types);
+		int32_t idx = getValue();
+		if (idx < 0 || idx >= static_cast<int32_t>(types.size())) {
+			return;
 		}
+		OscType newValue = types[idx];
 
 		const auto needs_unassignment = {
-		    OscType::INPUT_L,
-		    OscType::INPUT_R,
-		    OscType::INPUT_STEREO,
-		    OscType::SAMPLE,
-		    OscType::DX7,
-
-		    // Haven't actually really determined if this needs to be here - maybe not?
-		    OscType::WAVETABLE,
-		    OscType::PHI_MORPH,
-		    OscType::PHI_STAIR,
-		    OscType::PHI_WEAVE,
-		    OscType::PHI_VOX,
-		    OscType::PHI_SWARM,
-		    OscType::PHI_GENDY,
+		    OscType::INPUT_L,   OscType::INPUT_R,   OscType::INPUT_STEREO, OscType::SAMPLE,
+		    OscType::DX7,       OscType::WAVETABLE, OscType::PHI_MORPH,    OscType::PHI_STAIR,
+		    OscType::PHI_WEAVE, OscType::PHI_VOX,   OscType::PHI_SWARM,    OscType::PHI_GENDY,
+		    OscType::FM_TONE,   OscType::WAVETONE,  OscType::FM_DRUM,      OscType::PERC,
 		};
 
 		if (util::one_of(oldValue, needs_unassignment) || util::one_of(newValue, needs_unassignment)) {
@@ -86,41 +138,85 @@ public:
 	deluge::vector<std::string_view> getOptions(OptType optType) override {
 		(void)optType;
 		using enum l10n::String;
-		deluge::vector options = {
-		    l10n::getView(STRING_FOR_SINE),          //<
-		    l10n::getView(STRING_FOR_TRIANGLE),      //<
-		    l10n::getView(STRING_FOR_SQUARE),        //<
-		    l10n::getView(STRING_FOR_ANALOG_SQUARE), //<
-		    l10n::getView(STRING_FOR_SAW),           //<
-		    l10n::getView(STRING_FOR_ANALOG_SAW),    //<
-		    l10n::getView(STRING_FOR_WAVETABLE),     //<
-		    l10n::getView(STRING_FOR_PHI_MORPH),     //<
-		    l10n::getView(STRING_FOR_PHI_STAIR),     //<
-		    l10n::getView(STRING_FOR_PHI_WEAVE),     //<
-		    l10n::getView(STRING_FOR_PHI_VOX),       //<
-		    l10n::getView(STRING_FOR_PHI_SWARM),     //<
-		    l10n::getView(STRING_FOR_PHI_GENDY),     //<
-		};
-
-		if (soundEditor.currentSound->getSynthMode() == SynthMode::RINGMOD) {
-			return options;
+		std::vector<OscType> types;
+		buildTypeList(types);
+		deluge::vector<std::string_view> options;
+		options.reserve(types.size());
+		for (OscType t : types) {
+			switch (t) {
+			case OscType::SINE:
+				options.emplace_back(l10n::getView(STRING_FOR_SINE));
+				break;
+			case OscType::TRIANGLE:
+				options.emplace_back(l10n::getView(STRING_FOR_TRIANGLE));
+				break;
+			case OscType::SQUARE:
+				options.emplace_back(l10n::getView(STRING_FOR_SQUARE));
+				break;
+			case OscType::ANALOG_SQUARE:
+				options.emplace_back(l10n::getView(STRING_FOR_ANALOG_SQUARE));
+				break;
+			case OscType::SAW:
+				options.emplace_back(l10n::getView(STRING_FOR_SAW));
+				break;
+			case OscType::ANALOG_SAW_2:
+				options.emplace_back(l10n::getView(STRING_FOR_ANALOG_SAW));
+				break;
+			case OscType::WAVETABLE:
+				options.emplace_back(l10n::getView(STRING_FOR_WAVETABLE));
+				break;
+			case OscType::PHI_MORPH:
+				options.emplace_back(l10n::getView(STRING_FOR_PHI_MORPH));
+				break;
+			case OscType::PHI_STAIR:
+				options.emplace_back(l10n::getView(STRING_FOR_PHI_STAIR));
+				break;
+			case OscType::PHI_WEAVE:
+				options.emplace_back(l10n::getView(STRING_FOR_PHI_WEAVE));
+				break;
+			case OscType::PHI_VOX:
+				options.emplace_back(l10n::getView(STRING_FOR_PHI_VOX));
+				break;
+			case OscType::PHI_SWARM:
+				options.emplace_back(l10n::getView(STRING_FOR_PHI_SWARM));
+				break;
+			case OscType::PHI_GENDY:
+				options.emplace_back(l10n::getView(STRING_FOR_PHI_GENDY));
+				break;
+			case OscType::SAMPLE:
+				options.emplace_back(l10n::getView(STRING_FOR_SAMPLE));
+				break;
+			case OscType::DX7:
+				options.emplace_back(l10n::getView(STRING_FOR_DX7));
+				break;
+			case OscType::FM_TONE:
+				options.emplace_back(l10n::getView(STRING_FOR_FM_TONE));
+				break;
+			case OscType::WAVETONE:
+				options.emplace_back(l10n::getView(STRING_FOR_WAVETONE));
+				break;
+			case OscType::FM_DRUM:
+				options.emplace_back(l10n::getView(STRING_FOR_FM_DRUM));
+				break;
+			case OscType::PERC:
+				options.emplace_back(l10n::getView(STRING_FOR_PERC));
+				break;
+			case OscType::INPUT_L:
+				if (!(AudioEngine::micPluggedIn || AudioEngine::lineInPluggedIn)) {
+					options.emplace_back(l10n::getView(STRING_FOR_INPUT));
+				}
+				else {
+					options.emplace_back(l10n::getView(STRING_FOR_INPUT_LEFT));
+				}
+				break;
+			case OscType::INPUT_R:
+				options.emplace_back(l10n::getView(STRING_FOR_INPUT_RIGHT));
+				break;
+			case OscType::INPUT_STEREO:
+				options.emplace_back(l10n::getView(STRING_FOR_INPUT_STEREO));
+				break;
+			}
 		}
-
-		options.emplace_back(l10n::getView(STRING_FOR_SAMPLE));
-
-		if (mayUseDx()) {
-			options.emplace_back(l10n::getView(STRING_FOR_DX7));
-		}
-
-		if (AudioEngine::micPluggedIn || AudioEngine::lineInPluggedIn) {
-			options.emplace_back(l10n::getView(STRING_FOR_INPUT_LEFT));
-			options.emplace_back(l10n::getView(STRING_FOR_INPUT_RIGHT));
-			options.emplace_back(l10n::getView(STRING_FOR_INPUT_STEREO));
-		}
-		else {
-			options.emplace_back(l10n::getView(STRING_FOR_INPUT));
-		}
-
 		return options;
 	}
 
@@ -180,6 +276,14 @@ public:
 				return OLED::phiGendyIcon;
 			case OscType::PHI_STAIR:
 				return OLED::phiStairIcon;
+			case OscType::FM_TONE:
+				return OLED::fmToneIcon;
+			case OscType::WAVETONE:
+				return OLED::waveToneIcon;
+			case OscType::FM_DRUM:
+				return OLED::fmDrumIcon;
+			case OscType::PERC:
+				return OLED::percIcon;
 			default:
 				return OLED::sineIcon;
 			}

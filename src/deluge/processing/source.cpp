@@ -18,6 +18,7 @@
 #include "processing/source.h"
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
+#include "dsp/machine/patches.h"
 #include "dsp/phi_gendy.hpp"
 #include "dsp/phi_morph.hpp"
 #include "dsp/phi_stair.hpp"
@@ -37,6 +38,7 @@
 #include "storage/wave_table/wave_table.h"
 #include "util/functions.h"
 #include <cstring>
+#include <new>
 
 Source::Source() {
 
@@ -61,6 +63,10 @@ Source::~Source() {
 		dxPatch = nullptr;
 	}
 	destructAllMultiRanges();
+	delete fmTonePatch;
+	delete fmDrumPatch;
+	delete waveTonePatch;
+	delete percPatch;
 	delete phiMorphCache;
 	delete phiWeaveCache;
 	delete phiVoxCache;
@@ -313,6 +319,9 @@ doChangeType:
 	if (oscType == OscType::DX7) {
 		ensureDxPatch();
 	}
+	else {
+		ensureMachinePatchForType(oscType);
+	}
 }
 
 DxPatch* Source::ensureDxPatch() {
@@ -321,6 +330,57 @@ DxPatch* Source::ensureDxPatch() {
 	}
 	return dxPatch;
 };
+
+void Source::ensureMachinePatchForType(OscType type) {
+	switch (type) {
+	case OscType::FM_TONE:
+		ensureFmTonePatch();
+		break;
+	case OscType::FM_DRUM:
+		ensureFmDrumPatch();
+		break;
+	case OscType::WAVETONE:
+		ensureWaveTonePatch();
+		break;
+	case OscType::PERC:
+		ensurePercPatch();
+		break;
+	default:
+		break;
+	}
+}
+
+deluge::dsp::machine::FmTonePatch* Source::ensureFmTonePatch() {
+	if (fmTonePatch == nullptr) {
+		fmTonePatch = new deluge::dsp::machine::FmTonePatch();
+		fmTonePatch->initDefaults();
+	}
+	return fmTonePatch;
+}
+
+deluge::dsp::machine::FmDrumPatch* Source::ensureFmDrumPatch() {
+	if (fmDrumPatch == nullptr) {
+		fmDrumPatch = new deluge::dsp::machine::FmDrumPatch();
+		fmDrumPatch->initDefaults();
+	}
+	return fmDrumPatch;
+}
+
+deluge::dsp::machine::WaveTonePatch* Source::ensureWaveTonePatch() {
+	if (waveTonePatch == nullptr) {
+		waveTonePatch = new deluge::dsp::machine::WaveTonePatch();
+		waveTonePatch->initDefaults();
+	}
+	return waveTonePatch;
+}
+
+deluge::dsp::machine::PercPatch* Source::ensurePercPatch() {
+	if (percPatch == nullptr) {
+		percPatch = new deluge::dsp::machine::PercPatch();
+		percPatch->initDefaults();
+	}
+	return percPatch;
+}
 
 /*
     for (int32_t e = 0; e < ranges.getNumElements(); e++) {

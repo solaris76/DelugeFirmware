@@ -20,6 +20,7 @@
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
 #include "dsp/filter/filter_set.h"
+#include "dsp/machine/render.h"
 #include "dsp/oscillators/sine_osc.h"
 #include "dsp/phi_gendy.hpp"
 #include "dsp/phi_morph.hpp"
@@ -639,6 +640,11 @@ void Voice::noteOff(ModelStackWithSoundFlags* modelStack, bool allowReleaseStage
 					if (unisonParts[u].sources[s].dxVoice) {
 						unisonParts[u].sources[s].dxVoice->keyup();
 					}
+				}
+			}
+			else if (sound.sources[s].isMachineOsc()) {
+				for (int u = 0; u < sound.numUnison; u++) {
+					unisonParts[u].sources[s].machineState.noteOn = false;
 				}
 			}
 		}
@@ -2732,6 +2738,49 @@ dontUseCache: {}
 				for (int i = 0; i < numSamples; i++) {
 					sourceAmplitudeNow += amplitudeIncrement;
 					oscBuffer[i] += multiply_32x32_rshift32(uniBuf[i], sourceAmplitudeNow) << 6;
+				}
+			}
+
+			// Or machine engines (Digitone / perc)
+		}
+		else if (sound.sources[s].isMachineOsc()) {
+			int32_t* renderBuffer = oscBuffer;
+			static int32_t machineBuf[SSI_TX_BUFFER_NUM_SAMPLES] __attribute__((aligned(CACHE_LINE_SIZE)));
+			memset(machineBuf, 0, numSamples * sizeof(int32_t));
+
+			auto& mstate = unisonParts[u].sources[s].machineState;
+			Source& src = sound.sources[s];
+			switch (src.oscType) {
+			case OscType::FM_TONE:
+				deluge::dsp::machine::renderFmTone(*src.ensureFmTonePatch(), mstate, machineBuf, numSamples,
+				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement);
+				break;
+			case OscType::FM_DRUM:
+				deluge::dsp::machine::renderFmDrum(*src.ensureFmDrumPatch(), mstate, machineBuf, numSamples,
+				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement);
+				break;
+			case OscType::WAVETONE:
+				deluge::dsp::machine::renderWaveTone(*src.ensureWaveTonePatch(), mstate, machineBuf, numSamples,
+				                                     phaseIncrement, sourceAmplitude, amplitudeIncrement);
+				break;
+			case OscType::PERC:
+				deluge::dsp::machine::renderPerc(*src.ensurePercPatch(), mstate, machineBuf, numSamples, phaseIncrement,
+				                                 sourceAmplitude, amplitudeIncrement);
+				break;
+			default:
+				break;
+			}
+
+			if (stereoUnison) {
+				for (int i = 0; i < numSamples; i++) {
+					int amplified = machineBuf[i];
+					oscBuffer[(i << 1)] += multiply_32x32_rshift32(amplified, amplitudeL) << 2;
+					oscBuffer[(i << 1) + 1] += multiply_32x32_rshift32(amplified, amplitudeR) << 2;
+				}
+			}
+			else {
+				for (int i = 0; i < numSamples; i++) {
+					oscBuffer[i] += machineBuf[i];
 				}
 			}
 

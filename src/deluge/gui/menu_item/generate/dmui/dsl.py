@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 __all__ = [
+    "ExternalMenu",
     "Menu",
     "MultiContextMenu",
     "MultiModeMenu",
@@ -134,6 +135,26 @@ class Menu:
 
     def visit(self, visitor):
         return visitor.visit_menu(self)
+
+
+class ExternalMenu(Menu):
+    """Reference a MenuItem defined elsewhere (e.g. menus.cpp).
+
+    Emits only as a child pointer in submenu arrays — no C++ definition.
+    """
+
+    def __init__(self, cpp_name: str, available_when: str | None = None):
+        # name is unused for codegen; placeholder satisfies Menu invariants
+        Menu.__init__(
+            self,
+            "/*external*/",
+            cpp_name,
+            [],
+            None,
+            name="STRING_FOR_TYPE",
+            available_when=available_when,
+        )
+        self._cpp_emitted = True
 
 
 class MultiContextMenu(Menu): ...

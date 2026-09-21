@@ -89,6 +89,7 @@
 #include "gui/menu_item/keyboard/layout.h"
 #include "gui/menu_item/lfo/sync.h"
 #include "gui/menu_item/lfo/type.h"
+#include "gui/menu_item/machine/params.h"
 #include "gui/menu_item/master_transpose.h"
 #include "gui/menu_item/menu_item.h"
 #include "gui/menu_item/midi/after_touch_to_mono.h"
@@ -249,6 +250,70 @@ using namespace deluge;
 using namespace gui::menu_item;
 using namespace gui;
 namespace params = deluge::modulation::params;
+
+using machine::U8Param;
+
+// Machine SYN params (source 0) — isRelevant gates by OscType
+// FM Tone P1
+PLACE_SDRAM_DATA U8Param fmToneAlgoMenu{STRING_FOR_MACHINE_ALGO, machine::fmToneAlgo, OscType::FM_TONE, 7};
+PLACE_SDRAM_DATA U8Param fmToneRatioCMenu{STRING_FOR_MACHINE_RATIO, machine::fmToneRatioC, OscType::FM_TONE, 18};
+PLACE_SDRAM_DATA U8Param fmToneRatioAMenu{STRING_FOR_MACHINE_RATIO, machine::fmToneRatioA, OscType::FM_TONE, 35};
+PLACE_SDRAM_DATA U8Param fmToneRatioBMenu{STRING_FOR_MACHINE_RATIO, machine::fmToneRatioB, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneHarmMenu{STRING_FOR_MACHINE_HARMONICS, machine::fmToneHarm, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneDetuneMenu{STRING_FOR_MACHINE_DETUNE, machine::fmToneDetune, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneFbMenu{STRING_FOR_FEEDBACK, machine::fmToneFb, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneMixMenu{STRING_FOR_MACHINE_MIX, machine::fmToneMix, OscType::FM_TONE};
+// FM Tone P2 — FM-index envelopes
+PLACE_SDRAM_DATA U8Param fmToneAAtkMenu{STRING_FOR_ATTACK, machine::fmToneAAtk, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneADecMenu{STRING_FOR_DECAY, machine::fmToneADec, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneAEndMenu{STRING_FOR_END_POINT, machine::fmToneAEnd, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneALevMenu{STRING_FOR_AMOUNT, machine::fmToneALev, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneBAtkMenu{STRING_FOR_ATTACK, machine::fmToneBAtk, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneBDecMenu{STRING_FOR_DECAY, machine::fmToneBDec, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneBEndMenu{STRING_FOR_END_POINT, machine::fmToneBEnd, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneBLevMenu{STRING_FOR_AMOUNT, machine::fmToneBLev, OscType::FM_TONE};
+
+// FM Drum
+PLACE_SDRAM_DATA U8Param fmDrumTuneMenu{STRING_FOR_PITCH, machine::fmDrumTune, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumSweepTMenu{STRING_FOR_MACHINE_SWEEP, machine::fmDrumSweepT, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumSweepDMenu{STRING_FOR_AMOUNT, machine::fmDrumSweepD, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumAlgoMenu{STRING_FOR_MACHINE_ALGO, machine::fmDrumAlgo, OscType::FM_DRUM, 6};
+PLACE_SDRAM_DATA U8Param fmDrumFbMenu{STRING_FOR_FEEDBACK, machine::fmDrumFb, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumFoldMenu{STRING_FOR_MACHINE_FOLD, machine::fmDrumFold, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumModAMenu{STRING_FOR_AMOUNT, machine::fmDrumModA, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumModBMenu{STRING_FOR_AMOUNT, machine::fmDrumModB, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumBodyDecMenu{STRING_FOR_DECAY, machine::fmDrumBodyDec, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumBodyLevMenu{STRING_FOR_VOLUME_LEVEL, machine::fmDrumBodyLev, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumNoiseLevMenu{STRING_FOR_NOISE_LEVEL, machine::fmDrumNoiseLev, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumNoiseDecMenu{STRING_FOR_DECAY, machine::fmDrumNoiseDec, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumTransMenu{STRING_FOR_MACHINE_TRANSIENT, machine::fmDrumTrans, OscType::FM_DRUM};
+
+// Wavetone
+PLACE_SDRAM_DATA U8Param wtWave1Menu{STRING_FOR_WAVEFORM, machine::wtOsc1Wave, OscType::WAVETONE, 120};
+PLACE_SDRAM_DATA U8Param wtPd1Menu{STRING_FOR_MACHINE_PHASE_DIST, machine::wtOsc1Pd, OscType::WAVETONE, 100};
+PLACE_SDRAM_DATA U8Param wtLev1Menu{STRING_FOR_VOLUME_LEVEL, machine::wtOsc1Lev, OscType::WAVETONE};
+PLACE_SDRAM_DATA U8Param wtWave2Menu{STRING_FOR_WAVEFORM, machine::wtOsc2Wave, OscType::WAVETONE, 120};
+PLACE_SDRAM_DATA U8Param wtPd2Menu{STRING_FOR_MACHINE_PHASE_DIST, machine::wtOsc2Pd, OscType::WAVETONE, 100};
+PLACE_SDRAM_DATA U8Param wtLev2Menu{STRING_FOR_VOLUME_LEVEL, machine::wtOsc2Lev, OscType::WAVETONE};
+PLACE_SDRAM_DATA U8Param wtModMenu{STRING_FOR_MACHINE_OSC_MOD, machine::wtOscMod, OscType::WAVETONE, 3};
+PLACE_SDRAM_DATA U8Param wtDriftMenu{STRING_FOR_MACHINE_DETUNE, machine::wtDrift, OscType::WAVETONE};
+PLACE_SDRAM_DATA U8Param wtNoiseMenu{STRING_FOR_NOISE_LEVEL, machine::wtNoiseLev, OscType::WAVETONE};
+PLACE_SDRAM_DATA U8Param wtNoiseTypeMenu{STRING_FOR_TYPE, machine::wtNoiseType, OscType::WAVETONE, 2};
+PLACE_SDRAM_DATA U8Param wtNoiseCharMenu{STRING_FOR_MACHINE_COLOR, machine::wtNoiseChar, OscType::WAVETONE};
+
+// Perc
+PLACE_SDRAM_DATA machine::PercRole percRoleMenu{STRING_FOR_MACHINE_ROLE};
+PLACE_SDRAM_DATA U8Param percPitchMenu{STRING_FOR_PITCH, machine::percPitch, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percPitchEnvMenu{STRING_FOR_AMOUNT, machine::percPitchEnv, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percPitchEnvTMenu{STRING_FOR_DECAY, machine::percPitchEnvT, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percColorMenu{STRING_FOR_MACHINE_COLOR, machine::percColor, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percToneMenu{STRING_FOR_WAVEFORM, machine::percTone, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percClickMenu{STRING_FOR_MACHINE_CLICK, machine::percClick, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percDriveMenu{STRING_FOR_MACHINE_DRIVE, machine::percDrive, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percNoiseMenu{STRING_FOR_NOISE_LEVEL, machine::percNoiseLev, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percNoiseDecMenu{STRING_FOR_DECAY, machine::percNoiseDec, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percBodyDecMenu{STRING_FOR_DECAY, machine::percBodyDec, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percHoldMenu{STRING_FOR_MACHINE_HOLD, machine::percHold, OscType::PERC};
 
 // Include the autogenerated menu structures
 #include "gui/menu_item/audio_clip/specific_output_source_selector.h"

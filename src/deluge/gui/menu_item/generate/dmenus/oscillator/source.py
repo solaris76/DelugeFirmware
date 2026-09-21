@@ -1,6 +1,70 @@
-from dmui.dsl import Menu
+from dmui.dsl import ExternalMenu, Menu
 
 _available_txt = 'Oscillator has its type set to <string-for name="STRING_FOR_SAMPLE">SAMPLE</string-for>'
+_machine_when = (
+    "Oscillator type is a machine engine (FM Tone / Wavetone / FM Drum / Perc)"
+)
+
+# Defined in menus.cpp — source 0 SYN machine params only
+_machine_menus_osc0 = [
+    # FM Tone P1
+    ExternalMenu("fmToneAlgoMenu", available_when=_machine_when),
+    ExternalMenu("fmToneRatioCMenu", available_when=_machine_when),
+    ExternalMenu("fmToneRatioAMenu", available_when=_machine_when),
+    ExternalMenu("fmToneRatioBMenu", available_when=_machine_when),
+    ExternalMenu("fmToneHarmMenu", available_when=_machine_when),
+    ExternalMenu("fmToneDetuneMenu", available_when=_machine_when),
+    ExternalMenu("fmToneFbMenu", available_when=_machine_when),
+    ExternalMenu("fmToneMixMenu", available_when=_machine_when),
+    # FM Tone P2
+    ExternalMenu("fmToneAAtkMenu", available_when=_machine_when),
+    ExternalMenu("fmToneADecMenu", available_when=_machine_when),
+    ExternalMenu("fmToneAEndMenu", available_when=_machine_when),
+    ExternalMenu("fmToneALevMenu", available_when=_machine_when),
+    ExternalMenu("fmToneBAtkMenu", available_when=_machine_when),
+    ExternalMenu("fmToneBDecMenu", available_when=_machine_when),
+    ExternalMenu("fmToneBEndMenu", available_when=_machine_when),
+    ExternalMenu("fmToneBLevMenu", available_when=_machine_when),
+    # FM Drum
+    ExternalMenu("fmDrumTuneMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumSweepTMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumSweepDMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumAlgoMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumFbMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumFoldMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumModAMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumModBMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumBodyDecMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumBodyLevMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumNoiseLevMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumNoiseDecMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumTransMenu", available_when=_machine_when),
+    # Wavetone
+    ExternalMenu("wtWave1Menu", available_when=_machine_when),
+    ExternalMenu("wtPd1Menu", available_when=_machine_when),
+    ExternalMenu("wtLev1Menu", available_when=_machine_when),
+    ExternalMenu("wtWave2Menu", available_when=_machine_when),
+    ExternalMenu("wtPd2Menu", available_when=_machine_when),
+    ExternalMenu("wtLev2Menu", available_when=_machine_when),
+    ExternalMenu("wtModMenu", available_when=_machine_when),
+    ExternalMenu("wtDriftMenu", available_when=_machine_when),
+    ExternalMenu("wtNoiseMenu", available_when=_machine_when),
+    ExternalMenu("wtNoiseTypeMenu", available_when=_machine_when),
+    ExternalMenu("wtNoiseCharMenu", available_when=_machine_when),
+    # Perc
+    ExternalMenu("percRoleMenu", available_when=_machine_when),
+    ExternalMenu("percPitchMenu", available_when=_machine_when),
+    ExternalMenu("percPitchEnvMenu", available_when=_machine_when),
+    ExternalMenu("percPitchEnvTMenu", available_when=_machine_when),
+    ExternalMenu("percColorMenu", available_when=_machine_when),
+    ExternalMenu("percToneMenu", available_when=_machine_when),
+    ExternalMenu("percClickMenu", available_when=_machine_when),
+    ExternalMenu("percDriveMenu", available_when=_machine_when),
+    ExternalMenu("percNoiseMenu", available_when=_machine_when),
+    ExternalMenu("percNoiseDecMenu", available_when=_machine_when),
+    ExternalMenu("percBodyDecMenu", available_when=_machine_when),
+    ExternalMenu("percHoldMenu", available_when=_machine_when),
+]
 
 sync = Menu(
     "osc::Sync",
@@ -118,6 +182,7 @@ for i in range(2):
             title="STRING_FOR_OSC_R_PHASE_MENU_TITLE",
             available_when="Voice is in FM mode, or the oscillator is not in sample mode",
         ),
+        *(_machine_menus_osc0 if i == 0 else []),
         Menu(
             "sample::Reverse",
             f"sample{i}ReverseMenu",

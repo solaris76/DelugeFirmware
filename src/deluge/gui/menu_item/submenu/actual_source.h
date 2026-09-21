@@ -15,6 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 #pragma once
+#include "dsp/machine/patches.h"
 #include "gui/ui/sound_editor.h"
 #include "processing/sound/sound.h"
 #include "string.h"
@@ -29,11 +30,39 @@ public:
 	[[nodiscard]] std::string_view getTitle() const override {
 		auto l10nString = title;
 
-		// If we are in the sample oscillator menu and not on the first page,
-		// we display OSC1/2 SAMPLE as the menu title
 		const auto& source = soundEditor.currentSound->sources[source_id_];
-		if (renderingStyle() == HORIZONTAL && source.oscType == OscType::SAMPLE && paging.visiblePageNumber > 0) {
-			l10nString = l10n::String::STRING_FOR_OSC_SAMPLE_MENU_TITLE;
+		if (renderingStyle() == HORIZONTAL) {
+			// Sample page title
+			if (source.oscType == OscType::SAMPLE && paging.visiblePageNumber > 0) {
+				l10nString = l10n::String::STRING_FOR_OSC_SAMPLE_MENU_TITLE;
+			}
+			// Machine SYN title e.g. "Osc1 FM Tone"
+			else if (deluge::dsp::machine::isMachineOscType(source.oscType)) {
+				l10n::String typeStr = l10n::String::STRING_FOR_FM_TONE;
+				switch (source.oscType) {
+				case OscType::FM_TONE:
+					typeStr = l10n::String::STRING_FOR_FM_TONE;
+					break;
+				case OscType::WAVETONE:
+					typeStr = l10n::String::STRING_FOR_WAVETONE;
+					break;
+				case OscType::FM_DRUM:
+					typeStr = l10n::String::STRING_FOR_FM_DRUM;
+					break;
+				case OscType::PERC:
+					typeStr = l10n::String::STRING_FOR_PERC;
+					break;
+				default:
+					break;
+				}
+				name_or_title_ = "Osc";
+				char num[4];
+				intToString(source_id_ + 1, num);
+				name_or_title_ += num;
+				name_or_title_ += ' ';
+				name_or_title_ += l10n::get(typeStr);
+				return name_or_title_;
+			}
 		}
 
 		return getNameOrTitle(l10nString);
