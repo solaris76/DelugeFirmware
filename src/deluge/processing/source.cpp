@@ -319,8 +319,12 @@ doChangeType:
 	if (oscType == OscType::DX7) {
 		ensureDxPatch();
 	}
-	else {
+	else if (deluge::dsp::machine::isMachineOscType(oscType)) {
 		ensureMachinePatchForType(oscType);
+		// Entering Perc always starts from Metal factory defaults (fresh type, not leftover dials).
+		if (oscType == OscType::PERC && percPatch != nullptr) {
+			percPatch->loadRoleDefaults(0);
+		}
 	}
 }
 
@@ -344,6 +348,12 @@ void Source::ensureMachinePatchForType(OscType type) {
 		break;
 	case OscType::PERC:
 		ensurePercPatch();
+		break;
+	case OscType::SKIN:
+		ensureSkinPatch();
+		break;
+	case OscType::RESONATOR:
+		ensureResonatorPatch();
 		break;
 	default:
 		break;
@@ -380,6 +390,22 @@ deluge::dsp::machine::PercPatch* Source::ensurePercPatch() {
 		percPatch->initDefaults();
 	}
 	return percPatch;
+}
+
+deluge::dsp::machine::SkinPatch* Source::ensureSkinPatch() {
+	if (skinPatch == nullptr) {
+		skinPatch = new deluge::dsp::machine::SkinPatch();
+		skinPatch->initDefaults();
+	}
+	return skinPatch;
+}
+
+deluge::dsp::machine::ResonatorPatch* Source::ensureResonatorPatch() {
+	if (resonatorPatch == nullptr) {
+		resonatorPatch = new deluge::dsp::machine::ResonatorPatch();
+		resonatorPatch->initDefaults();
+	}
+	return resonatorPatch;
 }
 
 /*

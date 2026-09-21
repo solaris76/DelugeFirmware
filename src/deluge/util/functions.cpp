@@ -826,6 +826,12 @@ char const* oscTypeToString(OscType oscType) {
 	case OscType::PERC:
 		return "perc";
 
+	case OscType::SKIN:
+		return "skin";
+
+	case OscType::RESONATOR:
+		return "resonator";
+
 	default:
 		__builtin_unreachable();
 	}
@@ -895,6 +901,12 @@ OscType stringToOscType(char const* string) {
 	}
 	else if (!strcmp(string, "perc")) {
 		return OscType::PERC;
+	}
+	else if (!strcmp(string, "skin")) {
+		return OscType::SKIN;
+	}
+	else if (!strcmp(string, "resonator")) {
+		return OscType::RESONATOR;
 	}
 	else {
 		return OscType::TRIANGLE;

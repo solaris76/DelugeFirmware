@@ -245,6 +245,8 @@
     "STRING_FOR_WAVETONE": "Wavetone",
     "STRING_FOR_FM_DRUM": "FM Drum",
     "STRING_FOR_PERC": "Perc",
+    "STRING_FOR_SKIN": "Skin",
+    "STRING_FOR_RESONATOR": "Resonator",
     "STRING_FOR_MACHINE_ALGO": "Algorithm",
     "STRING_FOR_MACHINE_RATIO": "Ratio",
     "STRING_FOR_MACHINE_HARMONICS": "Harmonics",

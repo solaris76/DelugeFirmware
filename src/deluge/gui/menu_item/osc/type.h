@@ -75,6 +75,8 @@ public:
 			out.push_back(OscType::WAVETONE);
 			out.push_back(OscType::FM_DRUM);
 			out.push_back(OscType::PERC);
+			out.push_back(OscType::SKIN);
+			out.push_back(OscType::RESONATOR);
 		}
 
 		if (mayUseDx()) {
@@ -116,10 +118,10 @@ public:
 		OscType newValue = types[idx];
 
 		const auto needs_unassignment = {
-		    OscType::INPUT_L,   OscType::INPUT_R,   OscType::INPUT_STEREO, OscType::SAMPLE,
-		    OscType::DX7,       OscType::WAVETABLE, OscType::PHI_MORPH,    OscType::PHI_STAIR,
-		    OscType::PHI_WEAVE, OscType::PHI_VOX,   OscType::PHI_SWARM,    OscType::PHI_GENDY,
-		    OscType::FM_TONE,   OscType::WAVETONE,  OscType::FM_DRUM,      OscType::PERC,
+		    OscType::INPUT_L,   OscType::INPUT_R,   OscType::INPUT_STEREO, OscType::SAMPLE,    OscType::DX7,
+		    OscType::WAVETABLE, OscType::PHI_MORPH, OscType::PHI_STAIR,    OscType::PHI_WEAVE, OscType::PHI_VOX,
+		    OscType::PHI_SWARM, OscType::PHI_GENDY, OscType::FM_TONE,      OscType::WAVETONE,  OscType::FM_DRUM,
+		    OscType::PERC,      OscType::SKIN,      OscType::RESONATOR,
 		};
 
 		if (util::one_of(oldValue, needs_unassignment) || util::one_of(newValue, needs_unassignment)) {
@@ -200,6 +202,12 @@ public:
 				break;
 			case OscType::PERC:
 				options.emplace_back(l10n::getView(STRING_FOR_PERC));
+				break;
+			case OscType::SKIN:
+				options.emplace_back(l10n::getView(STRING_FOR_SKIN));
+				break;
+			case OscType::RESONATOR:
+				options.emplace_back(l10n::getView(STRING_FOR_RESONATOR));
 				break;
 			case OscType::INPUT_L:
 				if (!(AudioEngine::micPluggedIn || AudioEngine::lineInPluggedIn)) {
@@ -283,6 +291,10 @@ public:
 			case OscType::FM_DRUM:
 				return OLED::fmDrumIcon;
 			case OscType::PERC:
+				return OLED::percIcon;
+			case OscType::SKIN:
+				return OLED::percIcon;
+			case OscType::RESONATOR:
 				return OLED::percIcon;
 			default:
 				return OLED::sineIcon;

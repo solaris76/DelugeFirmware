@@ -52,6 +52,12 @@ public:
 				case OscType::PERC:
 					typeStr = l10n::String::STRING_FOR_PERC;
 					break;
+				case OscType::SKIN:
+					typeStr = l10n::String::STRING_FOR_SKIN;
+					break;
+				case OscType::RESONATOR:
+					typeStr = l10n::String::STRING_FOR_RESONATOR;
+					break;
 				default:
 					break;
 				}

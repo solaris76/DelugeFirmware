@@ -61,6 +61,8 @@ public:
 	deluge::dsp::machine::FmDrumPatch* fmDrumPatch{nullptr};
 	deluge::dsp::machine::WaveTonePatch* waveTonePatch{nullptr};
 	deluge::dsp::machine::PercPatch* percPatch{nullptr};
+	deluge::dsp::machine::SkinPatch* skinPatch{nullptr};
+	deluge::dsp::machine::ResonatorPatch* resonatorPatch{nullptr};
 
 	SampleRepeatMode repeatMode;
 
@@ -150,6 +152,8 @@ public:
 	deluge::dsp::machine::FmDrumPatch* ensureFmDrumPatch();
 	deluge::dsp::machine::WaveTonePatch* ensureWaveTonePatch();
 	deluge::dsp::machine::PercPatch* ensurePercPatch();
+	deluge::dsp::machine::SkinPatch* ensureSkinPatch();
+	deluge::dsp::machine::ResonatorPatch* ensureResonatorPatch();
 
 	[[nodiscard]] bool isMachineOsc() const { return deluge::dsp::machine::isMachineOscType(oscType); }
 

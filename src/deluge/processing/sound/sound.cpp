@@ -3534,6 +3534,16 @@ Error Sound::readSourceFromFile(Deserializer& reader, int32_t s, ParamManagerFor
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
 			reader.exitTag("percPatch");
 		}
+		else if (!strcmp(tagName, "skinPatch")) {
+			auto* patch = source->ensureSkinPatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("skinPatch");
+		}
+		else if (!strcmp(tagName, "resonatorPatch")) {
+			auto* patch = source->ensureResonatorPatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("resonatorPatch");
+		}
 		/*
 		else if (!strcmp(tagName, "sampleSync")) {
 		    source->sampleSync = stringToBool(reader.readTagContents());
@@ -3906,6 +3916,18 @@ void Sound::writeSourceToFile(Serializer& writer, int32_t s, char const* tagName
 				if (source->percPatch) {
 					writer.writeAttributeHexBytes("percPatch", reinterpret_cast<uint8_t*>(source->percPatch),
 					                              sizeof(*source->percPatch));
+				}
+				break;
+			case OscType::SKIN:
+				if (source->skinPatch) {
+					writer.writeAttributeHexBytes("skinPatch", reinterpret_cast<uint8_t*>(source->skinPatch),
+					                              sizeof(*source->skinPatch));
+				}
+				break;
+			case OscType::RESONATOR:
+				if (source->resonatorPatch) {
+					writer.writeAttributeHexBytes("resonatorPatch", reinterpret_cast<uint8_t*>(source->resonatorPatch),
+					                              sizeof(*source->resonatorPatch));
 				}
 				break;
 			default:

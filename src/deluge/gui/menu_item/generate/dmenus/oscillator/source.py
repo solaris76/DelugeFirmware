@@ -1,45 +1,27 @@
 from dmui.dsl import ExternalMenu, Menu
 
 _available_txt = 'Oscillator has its type set to <string-for name="STRING_FOR_SAMPLE">SAMPLE</string-for>'
-_machine_when = (
-    "Oscillator type is a machine engine (FM Tone / Wavetone / FM Drum / Perc)"
-)
+_machine_when = "Oscillator type is a machine engine (FM Tone / Wavetone / FM Drum / Perc / Skin / Resonator)"
 
 # Defined in menus.cpp — source 0 SYN machine params only
 _machine_menus_osc0 = [
-    # FM Tone P1
+    # FM Tone
     ExternalMenu("fmToneAlgoMenu", available_when=_machine_when),
-    ExternalMenu("fmToneRatioCMenu", available_when=_machine_when),
-    ExternalMenu("fmToneRatioAMenu", available_when=_machine_when),
-    ExternalMenu("fmToneRatioBMenu", available_when=_machine_when),
+    ExternalMenu("fmToneRatioMenu", available_when=_machine_when),
     ExternalMenu("fmToneHarmMenu", available_when=_machine_when),
     ExternalMenu("fmToneDetuneMenu", available_when=_machine_when),
     ExternalMenu("fmToneFbMenu", available_when=_machine_when),
     ExternalMenu("fmToneMixMenu", available_when=_machine_when),
-    # FM Tone P2
-    ExternalMenu("fmToneAAtkMenu", available_when=_machine_when),
-    ExternalMenu("fmToneADecMenu", available_when=_machine_when),
-    ExternalMenu("fmToneAEndMenu", available_when=_machine_when),
-    ExternalMenu("fmToneALevMenu", available_when=_machine_when),
-    ExternalMenu("fmToneBAtkMenu", available_when=_machine_when),
-    ExternalMenu("fmToneBDecMenu", available_when=_machine_when),
-    ExternalMenu("fmToneBEndMenu", available_when=_machine_when),
-    ExternalMenu("fmToneBLevMenu", available_when=_machine_when),
+    ExternalMenu("fmToneDecayMenu", available_when=_machine_when),
     # FM Drum
-    ExternalMenu("fmDrumTuneMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumSweepTMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumSweepDMenu", available_when=_machine_when),
     ExternalMenu("fmDrumAlgoMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumFbMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumTuneMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumSweepMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumModMenu", available_when=_machine_when),
     ExternalMenu("fmDrumFoldMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumModAMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumModBMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumBodyDecMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumBodyLevMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumNoiseLevMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumNoiseDecMenu", available_when=_machine_when),
-    ExternalMenu("fmDrumTransMenu", available_when=_machine_when),
-    # Wavetone
+    ExternalMenu("fmDrumDecayMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumNoiseMenu", available_when=_machine_when),
+    # Wavetone (full)
     ExternalMenu("wtWave1Menu", available_when=_machine_when),
     ExternalMenu("wtPd1Menu", available_when=_machine_when),
     ExternalMenu("wtLev1Menu", available_when=_machine_when),
@@ -54,16 +36,24 @@ _machine_menus_osc0 = [
     # Perc
     ExternalMenu("percRoleMenu", available_when=_machine_when),
     ExternalMenu("percPitchMenu", available_when=_machine_when),
-    ExternalMenu("percPitchEnvMenu", available_when=_machine_when),
-    ExternalMenu("percPitchEnvTMenu", available_when=_machine_when),
     ExternalMenu("percColorMenu", available_when=_machine_when),
-    ExternalMenu("percToneMenu", available_when=_machine_when),
-    ExternalMenu("percClickMenu", available_when=_machine_when),
-    ExternalMenu("percDriveMenu", available_when=_machine_when),
     ExternalMenu("percNoiseMenu", available_when=_machine_when),
-    ExternalMenu("percNoiseDecMenu", available_when=_machine_when),
-    ExternalMenu("percBodyDecMenu", available_when=_machine_when),
-    ExternalMenu("percHoldMenu", available_when=_machine_when),
+    ExternalMenu("percDecayMenu", available_when=_machine_when),
+    ExternalMenu("percCrunchMenu", available_when=_machine_when),
+    # Skin
+    ExternalMenu("skinModeMenu", available_when=_machine_when),
+    ExternalMenu("skinPitchMenu", available_when=_machine_when),
+    ExternalMenu("skinHarmMenu", available_when=_machine_when),
+    ExternalMenu("skinMorphMenu", available_when=_machine_when),
+    ExternalMenu("skinFoldMenu", available_when=_machine_when),
+    ExternalMenu("skinDecayMenu", available_when=_machine_when),
+    # Resonator
+    ExternalMenu("resonatorModelMenu", available_when=_machine_when),
+    ExternalMenu("resonatorStructureMenu", available_when=_machine_when),
+    ExternalMenu("resonatorBrightMenu", available_when=_machine_when),
+    ExternalMenu("resonatorDampingMenu", available_when=_machine_when),
+    ExternalMenu("resonatorPositionMenu", available_when=_machine_when),
+    ExternalMenu("resonatorExciteMenu", available_when=_machine_when),
 ]
 
 sync = Menu(

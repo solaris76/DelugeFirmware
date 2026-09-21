@@ -385,10 +385,12 @@ enum class OscType : uint8_t {
 	PHI_GENDY,
 	SAMPLE,
 	DX7,
-	FM_TONE,  // Digitone-like 4-op FM
-	WAVETONE, // Digitone-like dual morph / phase-dist
-	FM_DRUM,  // Digitone-like FM drum
-	PERC,     // Ableton DS / Nord-style Tone+Noise+Click
+	FM_TONE,   // Digitone-like 4-op FM
+	WAVETONE,  // Digitone-like dual morph / phase-dist
+	FM_DRUM,   // Digitone-like FM drum
+	PERC,      // Archer's Rig–style metallic / hat sources
+	SKIN,      // Six-osc Skin/Liquid/Metal drum voice (+ fold)
+	RESONATOR, // Rings-inspired modal / strings / wire
 	INPUT_L,
 	INPUT_R,
 	INPUT_STEREO,

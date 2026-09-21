@@ -2750,22 +2750,34 @@ dontUseCache: {}
 
 			auto& mstate = unisonParts[u].sources[s].machineState;
 			Source& src = sound.sources[s];
+			// Sound Env1 Decay stretches machine body/noise/mod envelopes so Mod Decay lengthens hits
+			// (and filter/FX still have something to work on). Role dials keep relative shape.
+			float timeScale =
+			    deluge::dsp::machine::envelopeTimeScaleFromDecayParam(paramFinalValues[params::LOCAL_ENV_0_DECAY]);
 			switch (src.oscType) {
 			case OscType::FM_TONE:
 				deluge::dsp::machine::renderFmTone(*src.ensureFmTonePatch(), mstate, machineBuf, numSamples,
-				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement);
+				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
 			case OscType::FM_DRUM:
 				deluge::dsp::machine::renderFmDrum(*src.ensureFmDrumPatch(), mstate, machineBuf, numSamples,
-				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement);
+				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
 			case OscType::WAVETONE:
 				deluge::dsp::machine::renderWaveTone(*src.ensureWaveTonePatch(), mstate, machineBuf, numSamples,
-				                                     phaseIncrement, sourceAmplitude, amplitudeIncrement);
+				                                     phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
 			case OscType::PERC:
 				deluge::dsp::machine::renderPerc(*src.ensurePercPatch(), mstate, machineBuf, numSamples, phaseIncrement,
-				                                 sourceAmplitude, amplitudeIncrement);
+				                                 sourceAmplitude, amplitudeIncrement, timeScale);
+				break;
+			case OscType::SKIN:
+				deluge::dsp::machine::renderSkin(*src.ensureSkinPatch(), mstate, machineBuf, numSamples, phaseIncrement,
+				                                 sourceAmplitude, amplitudeIncrement, timeScale);
+				break;
+			case OscType::RESONATOR:
+				deluge::dsp::machine::renderResonator(*src.ensureResonatorPatch(), mstate, machineBuf, numSamples,
+				                                      phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
 			default:
 				break;

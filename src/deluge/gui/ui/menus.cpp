@@ -254,41 +254,25 @@ namespace params = deluge::modulation::params;
 using machine::U8Param;
 
 // Machine SYN params (source 0) — isRelevant gates by OscType
-// FM Tone P1
+// FM Tone — Algo + 6 dials
 PLACE_SDRAM_DATA U8Param fmToneAlgoMenu{STRING_FOR_MACHINE_ALGO, machine::fmToneAlgo, OscType::FM_TONE, 7};
-PLACE_SDRAM_DATA U8Param fmToneRatioCMenu{STRING_FOR_MACHINE_RATIO, machine::fmToneRatioC, OscType::FM_TONE, 18};
-PLACE_SDRAM_DATA U8Param fmToneRatioAMenu{STRING_FOR_MACHINE_RATIO, machine::fmToneRatioA, OscType::FM_TONE, 35};
-PLACE_SDRAM_DATA U8Param fmToneRatioBMenu{STRING_FOR_MACHINE_RATIO, machine::fmToneRatioB, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneRatioMenu{STRING_FOR_MACHINE_RATIO, machine::fmToneRatio, OscType::FM_TONE, 18};
 PLACE_SDRAM_DATA U8Param fmToneHarmMenu{STRING_FOR_MACHINE_HARMONICS, machine::fmToneHarm, OscType::FM_TONE};
 PLACE_SDRAM_DATA U8Param fmToneDetuneMenu{STRING_FOR_MACHINE_DETUNE, machine::fmToneDetune, OscType::FM_TONE};
 PLACE_SDRAM_DATA U8Param fmToneFbMenu{STRING_FOR_FEEDBACK, machine::fmToneFb, OscType::FM_TONE};
 PLACE_SDRAM_DATA U8Param fmToneMixMenu{STRING_FOR_MACHINE_MIX, machine::fmToneMix, OscType::FM_TONE};
-// FM Tone P2 — FM-index envelopes
-PLACE_SDRAM_DATA U8Param fmToneAAtkMenu{STRING_FOR_ATTACK, machine::fmToneAAtk, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneADecMenu{STRING_FOR_DECAY, machine::fmToneADec, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneAEndMenu{STRING_FOR_END_POINT, machine::fmToneAEnd, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneALevMenu{STRING_FOR_AMOUNT, machine::fmToneALev, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneBAtkMenu{STRING_FOR_ATTACK, machine::fmToneBAtk, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneBDecMenu{STRING_FOR_DECAY, machine::fmToneBDec, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneBEndMenu{STRING_FOR_END_POINT, machine::fmToneBEnd, OscType::FM_TONE};
-PLACE_SDRAM_DATA U8Param fmToneBLevMenu{STRING_FOR_AMOUNT, machine::fmToneBLev, OscType::FM_TONE};
+PLACE_SDRAM_DATA U8Param fmToneDecayMenu{STRING_FOR_DECAY, machine::fmToneDecay, OscType::FM_TONE};
 
-// FM Drum
-PLACE_SDRAM_DATA U8Param fmDrumTuneMenu{STRING_FOR_PITCH, machine::fmDrumTune, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumSweepTMenu{STRING_FOR_MACHINE_SWEEP, machine::fmDrumSweepT, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumSweepDMenu{STRING_FOR_AMOUNT, machine::fmDrumSweepD, OscType::FM_DRUM};
+// FM Drum — Algo + 6 dials
 PLACE_SDRAM_DATA U8Param fmDrumAlgoMenu{STRING_FOR_MACHINE_ALGO, machine::fmDrumAlgo, OscType::FM_DRUM, 6};
-PLACE_SDRAM_DATA U8Param fmDrumFbMenu{STRING_FOR_FEEDBACK, machine::fmDrumFb, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumTuneMenu{STRING_FOR_PITCH, machine::fmDrumTune, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumSweepMenu{STRING_FOR_MACHINE_SWEEP, machine::fmDrumSweep, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumModMenu{STRING_FOR_AMOUNT, machine::fmDrumMod, OscType::FM_DRUM};
 PLACE_SDRAM_DATA U8Param fmDrumFoldMenu{STRING_FOR_MACHINE_FOLD, machine::fmDrumFold, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumModAMenu{STRING_FOR_AMOUNT, machine::fmDrumModA, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumModBMenu{STRING_FOR_AMOUNT, machine::fmDrumModB, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumBodyDecMenu{STRING_FOR_DECAY, machine::fmDrumBodyDec, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumBodyLevMenu{STRING_FOR_VOLUME_LEVEL, machine::fmDrumBodyLev, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumNoiseLevMenu{STRING_FOR_NOISE_LEVEL, machine::fmDrumNoiseLev, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumNoiseDecMenu{STRING_FOR_DECAY, machine::fmDrumNoiseDec, OscType::FM_DRUM};
-PLACE_SDRAM_DATA U8Param fmDrumTransMenu{STRING_FOR_MACHINE_TRANSIENT, machine::fmDrumTrans, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumDecayMenu{STRING_FOR_DECAY, machine::fmDrumDecay, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumNoiseMenu{STRING_FOR_NOISE_LEVEL, machine::fmDrumNoise, OscType::FM_DRUM};
 
-// Wavetone
+// Wavetone — full palette (kept)
 PLACE_SDRAM_DATA U8Param wtWave1Menu{STRING_FOR_WAVEFORM, machine::wtOsc1Wave, OscType::WAVETONE, 120};
 PLACE_SDRAM_DATA U8Param wtPd1Menu{STRING_FOR_MACHINE_PHASE_DIST, machine::wtOsc1Pd, OscType::WAVETONE, 100};
 PLACE_SDRAM_DATA U8Param wtLev1Menu{STRING_FOR_VOLUME_LEVEL, machine::wtOsc1Lev, OscType::WAVETONE};
@@ -301,19 +285,30 @@ PLACE_SDRAM_DATA U8Param wtNoiseMenu{STRING_FOR_NOISE_LEVEL, machine::wtNoiseLev
 PLACE_SDRAM_DATA U8Param wtNoiseTypeMenu{STRING_FOR_TYPE, machine::wtNoiseType, OscType::WAVETONE, 2};
 PLACE_SDRAM_DATA U8Param wtNoiseCharMenu{STRING_FOR_MACHINE_COLOR, machine::wtNoiseChar, OscType::WAVETONE};
 
-// Perc
+// Perc — Role + 5 dials
 PLACE_SDRAM_DATA machine::PercRole percRoleMenu{STRING_FOR_MACHINE_ROLE};
 PLACE_SDRAM_DATA U8Param percPitchMenu{STRING_FOR_PITCH, machine::percPitch, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percPitchEnvMenu{STRING_FOR_AMOUNT, machine::percPitchEnv, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percPitchEnvTMenu{STRING_FOR_DECAY, machine::percPitchEnvT, OscType::PERC};
 PLACE_SDRAM_DATA U8Param percColorMenu{STRING_FOR_MACHINE_COLOR, machine::percColor, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percToneMenu{STRING_FOR_WAVEFORM, machine::percTone, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percClickMenu{STRING_FOR_MACHINE_CLICK, machine::percClick, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percDriveMenu{STRING_FOR_MACHINE_DRIVE, machine::percDrive, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percNoiseMenu{STRING_FOR_NOISE_LEVEL, machine::percNoiseLev, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percNoiseDecMenu{STRING_FOR_DECAY, machine::percNoiseDec, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percBodyDecMenu{STRING_FOR_DECAY, machine::percBodyDec, OscType::PERC};
-PLACE_SDRAM_DATA U8Param percHoldMenu{STRING_FOR_MACHINE_HOLD, machine::percHold, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percNoiseMenu{STRING_FOR_NOISE_LEVEL, machine::percNoise, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percDecayMenu{STRING_FOR_DECAY, machine::percDecay, OscType::PERC};
+PLACE_SDRAM_DATA U8Param percCrunchMenu{STRING_FOR_MACHINE_DRIVE, machine::percCrunch, OscType::PERC};
+
+// Skin — Mode + 5 dials
+PLACE_SDRAM_DATA machine::SkinMode skinModeMenu{STRING_FOR_MACHINE_ALGO};
+PLACE_SDRAM_DATA U8Param skinPitchMenu{STRING_FOR_PITCH, machine::skinPitch, OscType::SKIN};
+PLACE_SDRAM_DATA U8Param skinHarmMenu{STRING_FOR_MACHINE_HARMONICS, machine::skinHarm, OscType::SKIN};
+PLACE_SDRAM_DATA U8Param skinMorphMenu{STRING_FOR_WAVEFORM, machine::skinMorph, OscType::SKIN};
+PLACE_SDRAM_DATA U8Param skinFoldMenu{STRING_FOR_MACHINE_FOLD, machine::skinFold, OscType::SKIN};
+PLACE_SDRAM_DATA U8Param skinDecayMenu{STRING_FOR_DECAY, machine::skinDecay, OscType::SKIN};
+
+// Resonator — Model + 5 dials (Rings-inspired)
+PLACE_SDRAM_DATA machine::ResonatorModel resonatorModelMenu{STRING_FOR_MACHINE_ALGO};
+PLACE_SDRAM_DATA U8Param resonatorStructureMenu{STRING_FOR_MACHINE_HARMONICS, machine::resStructure,
+                                                OscType::RESONATOR};
+PLACE_SDRAM_DATA U8Param resonatorBrightMenu{STRING_FOR_MACHINE_COLOR, machine::resBright, OscType::RESONATOR};
+PLACE_SDRAM_DATA U8Param resonatorDampingMenu{STRING_FOR_DECAY, machine::resDamping, OscType::RESONATOR};
+PLACE_SDRAM_DATA U8Param resonatorPositionMenu{STRING_FOR_MACHINE_MIX, machine::resPosition, OscType::RESONATOR};
+PLACE_SDRAM_DATA U8Param resonatorExciteMenu{STRING_FOR_MACHINE_TRANSIENT, machine::resExcite, OscType::RESONATOR};
 
 // Include the autogenerated menu structures
 #include "gui/menu_item/audio_clip/specific_output_source_selector.h"

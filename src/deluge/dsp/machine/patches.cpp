@@ -1,4 +1,5 @@
 #include "dsp/machine/patches.h"
+#include <algorithm>
 
 namespace deluge::dsp::machine {
 
@@ -8,12 +9,6 @@ void FmTonePatch::initDefaults() {
 
 void FmDrumPatch::initDefaults() {
 	*this = FmDrumPatch{};
-	sweepTime = 28;
-	sweepDepth = 90;
-	bodyDecay = 50;
-	noiseDecay = 28;
-	noiseLevel = 30;
-	transientLevel = 70;
 }
 
 void WaveTonePatch::initDefaults() {
@@ -25,84 +20,133 @@ void PercPatch::initDefaults() {
 	applyRoleDefaults();
 }
 
+void PercPatch::loadRoleDefaults(uint8_t newRole) {
+	*this = PercPatch{};
+	role = static_cast<uint8_t>(std::min<uint8_t>(newRole, static_cast<uint8_t>(PercRole::COUNT) - 1));
+	applyRoleDefaults();
+}
+
 void PercPatch::applyRoleDefaults() {
 	switch (static_cast<PercRole>(role)) {
-	case PercRole::Kick:
-		pitch = 40;
-		pitchEnv = 100;
-		pitchEnvTime = 28; // short bend
-		color = 30;
-		tone = 20;
-		click = 80;
-		drive = 40;
-		noiseLevel = 10;
-		noiseDecay = 12;
-		bodyDecay = 48; // ~mid of short-biased 1–50 range
+	case PercRole::Metal:
+		pitch = 88;
+		color = 75;
+		noise = 25;
+		decay = 45;
+		crunch = 50;
 		break;
-	case PercRole::Snare:
-		pitch = 70;
-		pitchEnv = 50;
-		pitchEnvTime = 16;
-		color = 60;
-		tone = 70;
-		click = 60;
-		drive = 20;
-		noiseLevel = 90;
-		noiseFilterType = 1;
-		noiseDecay = 32;
-		bodyDecay = 22;
+	case PercRole::Bell:
+		pitch = 82;
+		color = 40;
+		noise = 8;
+		decay = 58;
+		crunch = 45;
 		break;
-	case PercRole::HH:
+	case PercRole::Hat808:
 		pitch = 100;
-		pitchEnv = 10;
-		pitchEnvTime = 8;
+		color = 55;
+		noise = 90;
+		decay = 28;
+		crunch = 55;
+		break;
+	case PercRole::FM:
+		pitch = 78;
 		color = 90;
-		tone = 80;
-		click = 40;
-		drive = 10;
-		noiseLevel = 110;
-		noiseFilterType = 1;
-		noiseDecay = 18;
-		bodyDecay = 8;
+		noise = 18;
+		decay = 40;
+		crunch = 48;
 		break;
-	case PercRole::Tom:
-		pitch = 55;
-		pitchEnv = 70;
-		pitchEnvTime = 30;
-		color = 50;
-		tone = 40;
-		click = 50;
-		drive = 15;
-		noiseLevel = 20;
-		noiseDecay = 14;
-		bodyDecay = 40;
+	case PercRole::XOR:
+		pitch = 92;
+		color = 80;
+		noise = 30;
+		decay = 36;
+		crunch = 60;
 		break;
-	case PercRole::Clap:
-		pitch = 80;
-		pitchEnv = 20;
-		pitchEnvTime = 12;
-		color = 70;
-		tone = 90;
-		click = 20;
-		drive = 25;
-		noiseLevel = 100;
-		noiseFilterType = 2;
-		noiseDecay = 28;
-		bodyDecay = 16;
-		hold = 6;
+	case PercRole::Grains:
+		pitch = 70;
+		color = 55;
+		noise = 118;
+		decay = 52;
+		crunch = 25;
 		break;
-	case PercRole::Cymbal:
-		pitch = 90;
-		pitchEnv = 15;
-		pitchEnvTime = 40;
-		color = 100;
-		tone = 85;
-		click = 30;
-		drive = 10;
-		noiseLevel = 100;
-		noiseFilterType = 1;
-		noiseDecay = 70; // longer noise wash uses upper dial
-		bodyDecay = 55;
+	default:
+		break;
+	}
+}
+
+void SkinPatch::initDefaults() {
+	*this = SkinPatch{};
+	applyModeDefaults();
+}
+
+void SkinPatch::loadModeDefaults(uint8_t newMode) {
+	*this = SkinPatch{};
+	mode = static_cast<uint8_t>(std::min<uint8_t>(newMode, static_cast<uint8_t>(SkinMode::COUNT) - 1));
+	applyModeDefaults();
+}
+
+void SkinPatch::applyModeDefaults() {
+	switch (static_cast<SkinMode>(mode)) {
+	case SkinMode::Skin:
+		pitch = 28;
+		harm = 95;
+		morph = 15;
+		fold = 18;
+		decay = 78;
+		break;
+	case SkinMode::Liquid:
+		pitch = 22;
+		harm = 105;
+		morph = 10;
+		fold = 32;
+		decay = 70;
+		break;
+	case SkinMode::Metal:
+		pitch = 72;
+		harm = 115;
+		morph = 55;
+		fold = 48;
+		decay = 55;
+		break;
+	default:
+		break;
+	}
+}
+
+void ResonatorPatch::initDefaults() {
+	*this = ResonatorPatch{};
+	applyModelDefaults();
+}
+
+void ResonatorPatch::loadModelDefaults(uint8_t newModel) {
+	*this = ResonatorPatch{};
+	model = static_cast<uint8_t>(std::min<uint8_t>(newModel, static_cast<uint8_t>(ResonatorModel::COUNT) - 1));
+	applyModelDefaults();
+}
+
+void ResonatorPatch::applyModelDefaults() {
+	switch (static_cast<ResonatorModel>(model)) {
+	case ResonatorModel::Modal:
+		structure = 55;
+		brightness = 75;
+		damping = 60;
+		position = 35;
+		excite = 80;
+		break;
+	case ResonatorModel::Strings:
+		structure = 70;
+		brightness = 55;
+		damping = 85;
+		position = 50;
+		excite = 65;
+		break;
+	case ResonatorModel::Wire:
+		structure = 90;
+		brightness = 60;
+		damping = 45;
+		position = 40;
+		excite = 90;
 		break;
 	default:
 		break;
@@ -113,6 +157,19 @@ void MachineVoiceState::reset() {
 	for (auto& p : phase) {
 		p = 0;
 	}
+	for (auto& e : oscEnv) {
+		e = 0.f;
+	}
+	for (auto& z : resZ1) {
+		z = 0.f;
+	}
+	for (auto& z : resZ2) {
+		z = 0.f;
+	}
+	for (auto& c : combBuf) {
+		c = 0.f;
+	}
+	combPos = 0;
 	noiseState = 1;
 	sampleCount = 0;
 	clickSamplesLeft = 0;

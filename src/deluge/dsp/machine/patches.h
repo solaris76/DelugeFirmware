@@ -1,6 +1,9 @@
 /*
  * Digitone / Nord / Ableton-style machine patches for OscType engines.
  * Shared amp/filter/FX stay on Sound — these structs are SYN-only.
+ *
+ * Design: few dials, each with wide sonic range; Mode/Algo picks the character
+ * (BIA / Digitone philosophy — not a wall of micro-params).
  */
 #pragma once
 
@@ -10,101 +13,52 @@
 namespace deluge::dsp::machine {
 
 inline constexpr bool isMachineOscType(OscType t) {
-	return t == OscType::FM_TONE || t == OscType::WAVETONE || t == OscType::FM_DRUM || t == OscType::PERC;
+	return t == OscType::FM_TONE || t == OscType::WAVETONE || t == OscType::FM_DRUM || t == OscType::PERC
+	       || t == OscType::SKIN || t == OscType::RESONATOR;
 }
 
-// Digitone FM Tone — 4 operators A, B1, B2, C
+// FM Tone — Algo + 5 dials
 struct FmTonePatch {
-	uint8_t algorithm{0}; // 0–7
-	uint8_t ratioC{3};    // indexed harmonic ratios
-	uint8_t ratioA{3};
-	uint8_t ratioB{4}; // combined B1/B2 dial
-	uint8_t harmonics{64};
-	uint8_t detune{0};
+	uint8_t algorithm{0};  // 0–7 routing
+	uint8_t ratio{3};      // primary ratio; A/B derived
+	uint8_t harmonics{48}; // FM depth + mod levels
+	uint8_t detune{12};
 	uint8_t feedback{0};
-	uint8_t mix{64}; // X/Y crossfade
-
-	uint8_t aEnvAtk{0};
-	uint8_t aEnvDec{32};
-	uint8_t aEnvEnd{127};
-	uint8_t aLevel{64};
-	uint8_t bEnvAtk{0};
-	uint8_t bEnvDec{32};
-	uint8_t bEnvEnd{127};
-	uint8_t bLevel{64};
-
-	uint8_t aDelay{0};
-	uint8_t aTrig{1};
-	uint8_t aEnvReset{1};
-	uint8_t phaseReset{1}; // 0 off, 1 all, …
-	uint8_t bDelay{0};
-	uint8_t bTrig{1};
-	uint8_t bEnvReset{1};
-
-	uint8_t ratioCOffset{64};
-	uint8_t ratioAOffset{64};
-	uint8_t ratioB1Offset{64};
-	uint8_t ratioB2Offset{64};
-	uint8_t keyTrackA{0};
-	uint8_t keyTrackB1{0};
-	uint8_t keyTrackB2{0};
+	uint8_t mix{40};
+	uint8_t decay{50}; // shared mod-env decay
 
 	void initDefaults();
 };
 
+// FM Drum — Algo + 6 dials
 struct FmDrumPatch {
-	uint8_t tune{64};
-	uint8_t sweepTime{40};
-	uint8_t sweepDepth{80};
-	uint8_t algorithm{0}; // 0–6
-	uint8_t opCWave{0};
-	uint8_t opABWave{0};
-	uint8_t feedback{0};
-	uint8_t waveFold{0};
-
-	uint8_t ratioA{32};
-	uint8_t decayA{40};
-	uint8_t endA{64};
-	uint8_t modA{80};
-	uint8_t ratioB{48};
-	uint8_t decayB{50};
-	uint8_t endB{64};
-	uint8_t modB{60};
-
-	uint8_t bodyHold{0};
-	uint8_t bodyDecay{80};
-	uint8_t opCPhase{0};
-	uint8_t bodyLevel{127};
-	uint8_t noiseReset{0};
-	uint8_t noiseRingMod{0};
-
-	uint8_t noiseHold{0};
-	uint8_t noiseDecay{50};
-	uint8_t drumTransient{20};
-	uint8_t transientLevel{64};
-	uint8_t noiseBase{40};
-	uint8_t noiseWidth{80};
-	uint8_t noiseGrain{0};
-	uint8_t noiseLevel{40};
+	uint8_t algorithm{0}; // 0–6 flavour
+	uint8_t tune{22};
+	uint8_t sweep{60}; // depth + time coupled
+	uint8_t mod{70};   // mod index + ratios
+	uint8_t fold{10};  // fold + mild feedback
+	uint8_t decay{70}; // body length
+	uint8_t noise{35}; // noise + transient
 
 	void initDefaults();
 };
 
+// Wavetone — keep the full dual-osc palette (user favourite)
 struct WaveTonePatch {
-	uint8_t osc1Wave{0};
+	uint8_t osc1Wave{0}; // sine
 	uint8_t osc1PhaseDist{50};
-	uint8_t osc1Level{100};
-	uint8_t osc2Wave{0};
+	uint8_t osc1Level{110};
+	uint8_t osc2Wave{20}; // slight tri blend
 	uint8_t osc2PhaseDist{50};
-	uint8_t osc2Level{100};
+	uint8_t osc2Level{70};
 
 	uint8_t osc1LinOffset{64};
 	uint8_t osc1WaveTable{0}; // 0 prim, 1 harm
 	uint8_t oscMod{0};        // off / RM / RM fixed / hard sync
 	uint8_t phaseReset{1};
-	uint8_t osc2LinOffset{64};
+	uint8_t osc2LinOffset{68}; // slight detune
 	uint8_t osc2WaveTable{0};
-	uint8_t oscDrift{0};
+	uint8_t oscDrift{12};
 
 	uint8_t noiseAtk{0};
 	uint8_t noiseHold{0};
@@ -118,40 +72,81 @@ struct WaveTonePatch {
 	void initDefaults();
 };
 
+// Perc — Role + 5 dials (Archer-style sources)
 enum class PercRole : uint8_t {
-	Kick = 0,
-	Snare,
-	HH,
-	Tom,
-	Clap,
-	Cymbal,
+	Metal = 0,
+	Bell,
+	Hat808,
+	FM,
+	XOR,
+	Grains,
 	COUNT,
 };
 
 struct PercPatch {
-	uint8_t role{0}; // PercRole
-	uint8_t pitch{64};
-	uint8_t pitchEnv{80}; // amount
-	uint8_t pitchEnvTime{40};
-	uint8_t color{64};
-	uint8_t tone{64};
-	uint8_t click{64};
-	uint8_t drive{20};
-
-	uint8_t noiseLevel{40};
-	uint8_t noiseFilter{64};    // LP←→HP style
-	uint8_t noiseFilterType{0}; // 0 LP 1 HP 2 BP
-	uint8_t noiseDecay{40};
-	uint8_t bodyDecay{70};
-	uint8_t hold{0};
+	uint8_t role{0};
+	uint8_t pitch{72};
+	uint8_t color{70};  // inharmonicity + hardness
+	uint8_t noise{40};  // level + tail
+	uint8_t decay{50};  // body length
+	uint8_t crunch{40}; // click + drive
 
 	void initDefaults();
 	void applyRoleDefaults();
+	void loadRoleDefaults(uint8_t newRole);
 };
 
-// Per-voice runtime for machine render
+// Skin — Mode + 5 dials (Skin / Liquid / Metal)
+enum class SkinMode : uint8_t {
+	Skin = 0,
+	Liquid,
+	Metal,
+	COUNT,
+};
+
+struct SkinPatch {
+	uint8_t mode{0};
+	uint8_t pitch{36}; // register (bass→treble across dial)
+	uint8_t harm{90};  // partial count + spread
+	uint8_t morph{20}; // sine→square
+	uint8_t fold{25};
+	uint8_t decay{72}; // length; attack character derived
+
+	void initDefaults();
+	void applyModeDefaults();
+	void loadModeDefaults(uint8_t newMode);
+};
+
+// Rings-inspired resonator (MIT-licensed MI Rings ideas; internal exciter).
+// Model + 5 dials — Structure / Brightness / Damping / Position / Excite.
+enum class ResonatorModel : uint8_t {
+	Modal = 0, // band-pass partials
+	Strings,   // sympathetic combs
+	Wire,      // nonlinear string / KS-ish
+	COUNT,
+};
+
+struct ResonatorPatch {
+	uint8_t model{0};
+	uint8_t structure{64};  // partial spacing / detune / dispersion
+	uint8_t brightness{70}; // high partials / brightness
+	uint8_t damping{55};    // sustain (high = longer)
+	uint8_t position{40};   // strike / pickup position
+	uint8_t excite{70};     // impulse / noise hit amount
+
+	void initDefaults();
+	void applyModelDefaults();
+	void loadModelDefaults(uint8_t newModel);
+};
+
 struct MachineVoiceState {
-	uint32_t phase[4]{};
+	uint32_t phase[6]{};
+	float oscEnv[6]{};
+	// Resonator modal / comb state (reused across machine types)
+	float resZ1[16]{};
+	float resZ2[16]{};
+	float combBuf[256]{};
+	uint16_t combPos{0};
 	uint32_t noiseState{1};
 	uint32_t sampleCount{0};
 	uint32_t clickSamplesLeft{0};
