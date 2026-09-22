@@ -171,4 +171,13 @@ struct MachineVoiceState {
 	void reset();
 };
 
+constexpr int kNumMachineDialParams = 12;
+
+/// Collect continuous dial bytes for the current machine OscType into slots 0…11 (unused = 0).
+void collectMachineDials(OscType type, void const* patch, uint8_t out[kNumMachineDialParams]);
+/// Apply dial slots onto a stack-copied patch (algo/mode/role fields untouched).
+void applyMachineDials(OscType type, void* patch, uint8_t const in[kNumMachineDialParams]);
+/// Fill dials[0…11] from Voice hybrid paramFinalValues (LOCAL_MACHINE_*).
+void dialsFromParamFinals(int32_t const* paramFinalValues, uint8_t out[kNumMachineDialParams]);
+
 } // namespace deluge::dsp::machine

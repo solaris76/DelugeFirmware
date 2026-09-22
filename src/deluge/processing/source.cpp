@@ -362,6 +362,29 @@ void Source::ensureMachinePatchForType(OscType type) {
 	}
 }
 
+void* Source::machinePatchPtr() {
+	if (!isMachineOsc()) {
+		return nullptr;
+	}
+	ensureMachinePatchForType(oscType);
+	switch (oscType) {
+	case OscType::FM_DRUM:
+		return fmDrumPatch;
+	case OscType::WAVETONE:
+		return waveTonePatch;
+	case OscType::PERC:
+		return percPatch;
+	case OscType::SKIN:
+		return skinPatch;
+	case OscType::RESONATOR:
+		return resonatorPatch;
+	case OscType::SY_OSC:
+		return syOscPatch;
+	default:
+		return nullptr;
+	}
+}
+
 deluge::dsp::machine::FmDrumPatch* Source::ensureFmDrumPatch() {
 	if (fmDrumPatch == nullptr) {
 		fmDrumPatch = new deluge::dsp::machine::FmDrumPatch();

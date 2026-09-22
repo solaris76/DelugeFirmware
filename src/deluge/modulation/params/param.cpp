@@ -137,6 +137,18 @@ char const* getPatchedParamShortName(ParamType type) {
 	    [LOCAL_OSC_A_WAVE_INDEX]         = "Osc1 wave",
 	    [LOCAL_OSC_B_WAVE_INDEX]         = "Osc2 wave",
 	    [LOCAL_PAN]                      = "Pan",
+	    [LOCAL_MACHINE_0]                = "Mach0",
+	    [LOCAL_MACHINE_1]                = "Mach1",
+	    [LOCAL_MACHINE_2]                = "Mach2",
+	    [LOCAL_MACHINE_3]                = "Mach3",
+	    [LOCAL_MACHINE_4]                = "Mach4",
+	    [LOCAL_MACHINE_5]                = "Mach5",
+	    [LOCAL_MACHINE_6]                = "Mach6",
+	    [LOCAL_MACHINE_7]                = "Mach7",
+	    [LOCAL_MACHINE_8]                = "Mach8",
+	    [LOCAL_MACHINE_9]                = "Mach9",
+	    [LOCAL_MACHINE_10]               = "Mach10",
+	    [LOCAL_MACHINE_11]               = "Mach11",
 	    [LOCAL_LPF_FREQ]                 = "LPf freq",
 	    [LOCAL_PITCH_ADJUST]             = "Pitch",
 	    [LOCAL_OSC_A_PITCH_ADJUST]       = "Osc1 pitch",
@@ -226,6 +238,19 @@ char const* getPatchedParamDisplayName(int32_t p) {
 	    [LOCAL_OSC_A_WAVE_INDEX] = STRING_FOR_PARAM_LOCAL_OSC_A_WAVE_INDEX,
 	    [LOCAL_OSC_B_WAVE_INDEX] = STRING_FOR_PARAM_LOCAL_OSC_B_WAVE_INDEX,
 	    [LOCAL_PAN] = STRING_FOR_PARAM_LOCAL_PAN,
+	    // Machine dials: display falls back to short name in getPatchedParamDisplayName
+	    [LOCAL_MACHINE_0] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_1] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_2] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_3] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_4] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_5] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_6] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_7] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_8] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_9] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_10] = STRING_FOR_NONE,
+	    [LOCAL_MACHINE_11] = STRING_FOR_NONE,
 	    [LOCAL_LPF_FREQ] = STRING_FOR_PARAM_LOCAL_LPF_FREQ,
 	    [LOCAL_PITCH_ADJUST] = STRING_FOR_PARAM_LOCAL_PITCH_ADJUST,
 	    [LOCAL_OSC_A_PITCH_ADJUST] = STRING_FOR_PARAM_LOCAL_OSC_A_PITCH_ADJUST,
@@ -260,6 +285,9 @@ char const* getPatchedParamDisplayName(int32_t p) {
 	};
 
 	if (p < GLOBAL_NONE) {
+		if (p >= LOCAL_MACHINE_0 && p <= LOCAL_MACHINE_11) {
+			return getPatchedParamShortName(static_cast<ParamType>(p));
+		}
 		// These can basically be 13 chars long, or 14 if the last one is a dot.
 		return l10n::get(NAMES[p]);
 	}
@@ -736,6 +764,31 @@ constexpr char const* paramNameForFileConst(Kind const kind, ParamType const par
 
 		case LOCAL_FOLD:
 			return "waveFold";
+
+		case LOCAL_MACHINE_0:
+			return "machineParam0";
+		case LOCAL_MACHINE_1:
+			return "machineParam1";
+		case LOCAL_MACHINE_2:
+			return "machineParam2";
+		case LOCAL_MACHINE_3:
+			return "machineParam3";
+		case LOCAL_MACHINE_4:
+			return "machineParam4";
+		case LOCAL_MACHINE_5:
+			return "machineParam5";
+		case LOCAL_MACHINE_6:
+			return "machineParam6";
+		case LOCAL_MACHINE_7:
+			return "machineParam7";
+		case LOCAL_MACHINE_8:
+			return "machineParam8";
+		case LOCAL_MACHINE_9:
+			return "machineParam9";
+		case LOCAL_MACHINE_10:
+			return "machineParam10";
+		case LOCAL_MACHINE_11:
+			return "machineParam11";
 
 		case LOCAL_LAST:
 		    // Intentionally not handled

@@ -74,7 +74,7 @@ public:
 
 protected:
 	void readCurrentValue() override;
-	void writeCurrentValue() final;
+	void writeCurrentValue() override;
 	virtual int32_t getFinalValue();
 
 private:

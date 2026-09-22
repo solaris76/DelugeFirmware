@@ -154,10 +154,12 @@ public:
 	deluge::dsp::machine::SkinPatch* ensureSkinPatch();
 	deluge::dsp::machine::ResonatorPatch* ensureResonatorPatch();
 	deluge::dsp::machine::SyOscPatch* ensureSyOscPatch();
+	void ensureMachinePatchForType(OscType type);
+	/// Live patch blob for the current machine OscType, or nullptr.
+	void* machinePatchPtr();
 
 	[[nodiscard]] bool isMachineOsc() const { return deluge::dsp::machine::isMachineOscType(oscType); }
 
 private:
 	void destructAllMultiRanges();
-	void ensureMachinePatchForType(OscType type);
 };

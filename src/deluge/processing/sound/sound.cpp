@@ -18,7 +18,9 @@
 #include "processing/sound/sound.h"
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
+#include "dsp/machine/patches.h"
 #include "gui/l10n/l10n.h"
+#include "gui/menu_item/value_scaling.h"
 #include "gui/ui/root_ui.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/views/view.h"
@@ -64,6 +66,9 @@
 #include <algorithm>
 #include <array>
 #include <bits/ranges_algo.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <ranges>
 
@@ -256,6 +261,64 @@ void Sound::setupAsDefaultSynth(ParamManager* paramManager) {
 	transpose = -12;
 
 	doneReadingFromFile();
+}
+
+/// Exact match for "machineParamN" where N is 0…11. Returns -1 if not a machine dial tag.
+static int parseMachineParamIndex(char const* tagName) {
+	constexpr char kPrefix[] = "machineParam";
+	constexpr size_t kPrefixLen = sizeof(kPrefix) - 1;
+	if (strncmp(tagName, kPrefix, kPrefixLen) != 0) {
+		return -1;
+	}
+	char const* digits = tagName + kPrefixLen;
+	if (*digits < '0' || *digits > '9') {
+		return -1;
+	}
+	char* end = nullptr;
+	long idx = strtol(digits, &end, 10);
+	if (end == digits || *end != '\0') {
+		return -1;
+	}
+	if (idx < 0 || idx >= deluge::dsp::machine::kNumMachineDialParams) {
+		return -1;
+	}
+	return static_cast<int>(idx);
+}
+
+void Sound::syncMachineDialAutoparamsFromPatch(int32_t sourceIndex, ParamManager* paramManager) {
+	if (paramManager == nullptr || sourceIndex < 0 || sourceIndex >= kNumSources) {
+		return;
+	}
+	Source& source = sources[sourceIndex];
+	if (!source.isMachineOsc()) {
+		return;
+	}
+	void* patch = source.machinePatchPtr();
+	uint8_t dials[deluge::dsp::machine::kNumMachineDialParams]{};
+	deluge::dsp::machine::collectMachineDials(source.oscType, patch, dials);
+	PatchedParamSet* patchedParams = paramManager->getPatchedParamSet();
+	for (int i = 0; i < deluge::dsp::machine::kNumMachineDialParams; i++) {
+		patchedParams->params[params::LOCAL_MACHINE_0 + i].setCurrentValueBasicForSetup(
+		    computeFinalValueForMachineDial(dials[i]));
+	}
+}
+
+void Sound::syncMachinePatchFromDialAutoparams(int32_t sourceIndex, ParamManager* paramManager) {
+	if (paramManager == nullptr || sourceIndex < 0 || sourceIndex >= kNumSources) {
+		return;
+	}
+	Source& source = sources[sourceIndex];
+	if (!source.isMachineOsc()) {
+		return;
+	}
+	void* patch = source.machinePatchPtr();
+	PatchedParamSet* patchedParams = paramManager->getPatchedParamSet();
+	uint8_t dials[deluge::dsp::machine::kNumMachineDialParams]{};
+	for (int i = 0; i < deluge::dsp::machine::kNumMachineDialParams; i++) {
+		dials[i] = static_cast<uint8_t>(
+		    computeCurrentValueForMachineDial(patchedParams->params[params::LOCAL_MACHINE_0 + i].getCurrentValue()));
+	}
+	deluge::dsp::machine::applyMachineDials(source.oscType, patch, dials);
 }
 
 void Sound::possiblySetupDefaultExpressionPatching(ParamManager* paramManager) {
@@ -1275,6 +1338,12 @@ Error Sound::readTagFromFileOrError(Deserializer& reader, char const* tagName, P
 		patchedParams->readParam(reader, patchedParamsSummary, params::LOCAL_FOLD, readAutomationUpToPos);
 		reader.exitTag("waveFold");
 	}
+	else if (int machIdx = parseMachineParamIndex(tagName); machIdx >= 0) {
+		ENSURE_PARAM_MANAGER_EXISTS
+		patchedParams->readParam(reader, patchedParamsSummary, params::LOCAL_MACHINE_0 + machIdx,
+		                         readAutomationUpToPos);
+		reader.exitTag();
+	}
 	else if (!strcmp(tagName, "midiOutput")) {
 		reader.match('{');
 		while (*(tagName = reader.readNextTagOrAttributeName())) {
@@ -1340,6 +1409,11 @@ PatchCableAcceptance Sound::maySourcePatchToParam(PatchSource s, uint8_t p, Para
 
 	if (p != 255 && s != PatchSource::NOT_AVAILABLE && s >= kFirstLocalSource && p >= params::FIRST_GLOBAL) {
 		return PatchCableAcceptance::DISALLOWED; // Can't patch local source to global param
+	}
+
+	if (p >= params::LOCAL_MACHINE_0 && p <= params::LOCAL_MACHINE_11) {
+		// ALLOWED (not EDITABLE): only ALLOWED cables enter the live Destination list.
+		return sources[0].isMachineOsc() ? PatchCableAcceptance::ALLOWED : PatchCableAcceptance::DISALLOWED;
 	}
 
 	PatchedParamSet* patchedParams = paramManager->getPatchedParamSet();
@@ -3518,31 +3592,37 @@ Error Sound::readSourceFromFile(Deserializer& reader, int32_t s, ParamManagerFor
 			auto* patch = source->ensureFmDrumPatch();
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
 			reader.exitTag("fmdrumPatch");
+			syncMachineDialAutoparamsFromPatch(s, paramManager);
 		}
 		else if (!strcmp(tagName, "wavetonePatch")) {
 			auto* patch = source->ensureWaveTonePatch();
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
 			reader.exitTag("wavetonePatch");
+			syncMachineDialAutoparamsFromPatch(s, paramManager);
 		}
 		else if (!strcmp(tagName, "percPatch")) {
 			auto* patch = source->ensurePercPatch();
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
 			reader.exitTag("percPatch");
+			syncMachineDialAutoparamsFromPatch(s, paramManager);
 		}
 		else if (!strcmp(tagName, "skinPatch")) {
 			auto* patch = source->ensureSkinPatch();
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
 			reader.exitTag("skinPatch");
+			syncMachineDialAutoparamsFromPatch(s, paramManager);
 		}
 		else if (!strcmp(tagName, "resonatorPatch")) {
 			auto* patch = source->ensureResonatorPatch();
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
 			reader.exitTag("resonatorPatch");
+			syncMachineDialAutoparamsFromPatch(s, paramManager);
 		}
 		else if (!strcmp(tagName, "syOscPatch")) {
 			auto* patch = source->ensureSyOscPatch();
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
 			reader.exitTag("syOscPatch");
+			syncMachineDialAutoparamsFromPatch(s, paramManager);
 		}
 		/*
 		else if (!strcmp(tagName, "sampleSync")) {
@@ -4122,6 +4202,11 @@ bool Sound::readParamTagFromFile(Deserializer& reader, char const* tagName, Para
 		patchedParams->readParam(reader, patchedParamsSummary, params::LOCAL_FOLD, readAutomationUpToPos);
 		reader.exitTag("waveFold");
 	}
+	else if (int machIdx = parseMachineParamIndex(tagName); machIdx >= 0) {
+		patchedParams->readParam(reader, patchedParamsSummary, params::LOCAL_MACHINE_0 + machIdx,
+		                         readAutomationUpToPos);
+		reader.exitTag();
+	}
 
 	else if (!strcmp(tagName, "envelope1")) {
 		reader.match('{');
@@ -4400,6 +4485,12 @@ void Sound::writeParamsToFile(Serializer& writer, ParamManager* paramManager, bo
 
 	patchedParams->writeParamAsAttribute(writer, "waveFold", params::LOCAL_FOLD, writeAutomation);
 
+	for (int i = 0; i < deluge::dsp::machine::kNumMachineDialParams; i++) {
+		char name[20];
+		snprintf(name, sizeof(name), "machineParam%d", i);
+		patchedParams->writeParamAsAttribute(writer, name, params::LOCAL_MACHINE_0 + i, writeAutomation);
+	}
+
 	writer.writeOpeningTagEnd();
 
 	// Envelopes
@@ -4462,6 +4553,11 @@ void Sound::writeToFile(Serializer& writer, bool savingSong, ParamManager* param
 	writer.writeAttribute("maxVoices", maxVoiceCount);
 
 	writer.writeOpeningTagEnd();
+
+	if (paramManager) {
+		syncMachinePatchFromDialAutoparams(0, paramManager);
+		syncMachinePatchFromDialAutoparams(1, paramManager);
+	}
 
 	writeSourceToFile(writer, 0, "osc1");
 	writeSourceToFile(writer, 1, "osc2");

@@ -98,6 +98,21 @@ enum Local : ParamType {
 	LOCAL_OSC_B_WAVE_INDEX,
 	LOCAL_PAN,
 
+	// Shared pool for machine OscType continuous dials (index → LOCAL_MACHINE_0 + i).
+	// Hybrid (neutral 0) so Velocity/LFO/Env can drive 0…127 dials like wave index.
+	LOCAL_MACHINE_0,
+	LOCAL_MACHINE_1,
+	LOCAL_MACHINE_2,
+	LOCAL_MACHINE_3,
+	LOCAL_MACHINE_4,
+	LOCAL_MACHINE_5,
+	LOCAL_MACHINE_6,
+	LOCAL_MACHINE_7,
+	LOCAL_MACHINE_8,
+	LOCAL_MACHINE_9,
+	LOCAL_MACHINE_10,
+	LOCAL_MACHINE_11,
+
 	// Local exp params begin
 	FIRST_LOCAL_EXP,
 	LOCAL_LPF_FREQ = FIRST_LOCAL_EXP,
@@ -307,12 +322,14 @@ constexpr uint32_t kNoParamID = 0xFFFFFFFF;
 /// used in automation view and in midi follow
 // clang-format off
 const uint32_t patchedParamShortcuts[kDisplayWidth][kDisplayHeight] = {
+    // Cols 0–1 left empty: sound-editor sample/direction pads + Automation Interpolation / pad-select UI
     {kNoParamID              , kNoParamID                    , kNoParamID                    , kNoParamID             , kNoParamID     , kNoParamID                , kNoParamID            , kNoParamID},
     {kNoParamID              , kNoParamID                    , kNoParamID                    , kNoParamID             , kNoParamID     , kNoParamID                , kNoParamID            , kNoParamID},
     {LOCAL_OSC_A_VOLUME      , LOCAL_OSC_A_PITCH_ADJUST      , kNoParamID                    , LOCAL_OSC_A_PHASE_WIDTH, kNoParamID     , LOCAL_CARRIER_0_FEEDBACK  , LOCAL_OSC_A_WAVE_INDEX, LOCAL_NOISE_VOLUME},
     {LOCAL_OSC_B_VOLUME      , LOCAL_OSC_B_PITCH_ADJUST      , kNoParamID                    , LOCAL_OSC_B_PHASE_WIDTH, kNoParamID     , LOCAL_CARRIER_1_FEEDBACK  , LOCAL_OSC_B_WAVE_INDEX, kNoParamID},
-    {LOCAL_MODULATOR_0_VOLUME, LOCAL_MODULATOR_0_PITCH_ADJUST, kNoParamID                    , kNoParamID             , kNoParamID     , LOCAL_MODULATOR_0_FEEDBACK, kNoParamID            , kNoParamID},
-    {LOCAL_MODULATOR_1_VOLUME, LOCAL_MODULATOR_1_PITCH_ADJUST, kNoParamID                    , kNoParamID             , kNoParamID     , LOCAL_MODULATOR_1_FEEDBACK, kNoParamID            , kNoParamID},
+    // FM mod cols: keep Volume/Pitch/Feedback; fill empties with machine dial pool (max engine uses 9)
+    {LOCAL_MODULATOR_0_VOLUME, LOCAL_MODULATOR_0_PITCH_ADJUST, LOCAL_MACHINE_0               , LOCAL_MACHINE_1        , LOCAL_MACHINE_2, LOCAL_MODULATOR_0_FEEDBACK, LOCAL_MACHINE_3       , LOCAL_MACHINE_4},
+    {LOCAL_MODULATOR_1_VOLUME, LOCAL_MODULATOR_1_PITCH_ADJUST, LOCAL_MACHINE_5               , LOCAL_MACHINE_6        , LOCAL_MACHINE_7, LOCAL_MODULATOR_1_FEEDBACK, LOCAL_MACHINE_8       , LOCAL_MACHINE_9},
     {GLOBAL_VOLUME_POST_FX   , LOCAL_PITCH_ADJUST            , kNoParamID                    , LOCAL_PAN              , kNoParamID     , kNoParamID                , kNoParamID            , kNoParamID},
     {kNoParamID              , kNoParamID                    , kNoParamID                    , kNoParamID             , kNoParamID     , kNoParamID                , kNoParamID            , LOCAL_FOLD},
     {LOCAL_ENV_0_RELEASE     , LOCAL_ENV_0_SUSTAIN           , LOCAL_ENV_0_DECAY             , LOCAL_ENV_0_ATTACK     , LOCAL_LPF_MORPH, kNoParamID                , LOCAL_LPF_RESONANCE   , LOCAL_LPF_FREQ},

@@ -1,4 +1,6 @@
 #include "dsp/machine/patches.h"
+#include "gui/menu_item/value_scaling.h"
+#include "modulation/params/param.h"
 #include <algorithm>
 
 namespace deluge::dsp::machine {
@@ -236,6 +238,157 @@ void MachineVoiceState::reset() {
 	noiseEnv = 0.f;
 	pitchEnv = 1.f;
 	noteOn = true;
+}
+
+void collectMachineDials(OscType type, void const* patch, uint8_t out[kNumMachineDialParams]) {
+	for (int i = 0; i < kNumMachineDialParams; i++) {
+		out[i] = 0;
+	}
+	if (patch == nullptr) {
+		return;
+	}
+	switch (type) {
+	case OscType::FM_DRUM: {
+		auto const& p = *static_cast<FmDrumPatch const*>(patch);
+		out[0] = p.tune;
+		out[1] = p.sweep;
+		out[2] = p.mod;
+		out[3] = p.fold;
+		out[4] = p.decay;
+		out[5] = p.noise;
+		break;
+	}
+	case OscType::PERC: {
+		auto const& p = *static_cast<PercPatch const*>(patch);
+		out[0] = p.pitch;
+		out[1] = p.color;
+		out[2] = p.noise;
+		out[3] = p.decay;
+		out[4] = p.crunch;
+		break;
+	}
+	case OscType::SKIN: {
+		auto const& p = *static_cast<SkinPatch const*>(patch);
+		out[0] = p.pitch;
+		out[1] = p.harm;
+		out[2] = p.morph;
+		out[3] = p.fold;
+		out[4] = p.decay;
+		break;
+	}
+	case OscType::RESONATOR: {
+		auto const& p = *static_cast<ResonatorPatch const*>(patch);
+		out[0] = p.structure;
+		out[1] = p.brightness;
+		out[2] = p.damping;
+		out[3] = p.position;
+		out[4] = p.excite;
+		break;
+	}
+	case OscType::SY_OSC: {
+		auto const& p = *static_cast<SyOscPatch const*>(patch);
+		out[0] = p.pitch;
+		out[1] = p.sweep;
+		out[2] = p.ratio;
+		out[3] = p.color;
+		out[4] = p.noise;
+		out[5] = p.decay;
+		break;
+	}
+	case OscType::WAVETONE: {
+		auto const& p = *static_cast<WaveTonePatch const*>(patch);
+		out[0] = p.osc1Wave;
+		out[1] = p.osc1PhaseDist;
+		out[2] = p.osc1Level;
+		out[3] = p.osc2Wave;
+		out[4] = p.osc2PhaseDist;
+		out[5] = p.osc2Level;
+		out[6] = p.oscDrift;
+		out[7] = p.noiseLevel;
+		out[8] = p.noiseCharacter;
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void applyMachineDials(OscType type, void* patch, uint8_t const in[kNumMachineDialParams]) {
+	if (patch == nullptr) {
+		return;
+	}
+	switch (type) {
+	case OscType::FM_DRUM: {
+		auto& p = *static_cast<FmDrumPatch*>(patch);
+		p.tune = in[0];
+		p.sweep = in[1];
+		p.mod = in[2];
+		p.fold = in[3];
+		p.decay = in[4];
+		p.noise = in[5];
+		break;
+	}
+	case OscType::PERC: {
+		auto& p = *static_cast<PercPatch*>(patch);
+		p.pitch = in[0];
+		p.color = in[1];
+		p.noise = in[2];
+		p.decay = in[3];
+		p.crunch = in[4];
+		break;
+	}
+	case OscType::SKIN: {
+		auto& p = *static_cast<SkinPatch*>(patch);
+		p.pitch = in[0];
+		p.harm = in[1];
+		p.morph = in[2];
+		p.fold = in[3];
+		p.decay = in[4];
+		break;
+	}
+	case OscType::RESONATOR: {
+		auto& p = *static_cast<ResonatorPatch*>(patch);
+		p.structure = in[0];
+		p.brightness = in[1];
+		p.damping = in[2];
+		p.position = in[3];
+		p.excite = in[4];
+		break;
+	}
+	case OscType::SY_OSC: {
+		auto& p = *static_cast<SyOscPatch*>(patch);
+		p.pitch = in[0];
+		p.sweep = in[1];
+		p.ratio = in[2];
+		p.color = in[3];
+		p.noise = in[4];
+		p.decay = in[5];
+		break;
+	}
+	case OscType::WAVETONE: {
+		auto& p = *static_cast<WaveTonePatch*>(patch);
+		p.osc1Wave = in[0];
+		p.osc1PhaseDist = in[1];
+		p.osc1Level = in[2];
+		p.osc2Wave = in[3];
+		p.osc2PhaseDist = in[4];
+		p.osc2Level = in[5];
+		p.oscDrift = in[6];
+		p.noiseLevel = in[7];
+		p.noiseCharacter = in[8];
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void dialsFromParamFinals(int32_t const* paramFinalValues, uint8_t out[kNumMachineDialParams]) {
+	namespace params = deluge::modulation::params;
+	for (int i = 0; i < kNumMachineDialParams; i++) {
+		out[i] = static_cast<uint8_t>(
+		    computeCurrentValueForMachineDialHybrid(paramFinalValues[params::LOCAL_MACHINE_0 + i]));
+	}
 }
 
 } // namespace deluge::dsp::machine

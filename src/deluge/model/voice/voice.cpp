@@ -2750,35 +2750,55 @@ dontUseCache: {}
 
 			auto& mstate = unisonParts[u].sources[s].machineState;
 			Source& src = sound.sources[s];
-			// Sound Env1 Decay stretches machine body/noise/mod envelopes so Mod Decay lengthens hits
-			// (and filter/FX still have something to work on). Role dials keep relative shape.
 			float timeScale =
 			    deluge::dsp::machine::envelopeTimeScaleFromDecayParam(paramFinalValues[params::LOCAL_ENV_0_DECAY]);
+
+			uint8_t dials[deluge::dsp::machine::kNumMachineDialParams]{};
+			deluge::dsp::machine::dialsFromParamFinals(paramFinalValues.data(), dials);
+
 			switch (src.oscType) {
-			case OscType::FM_DRUM:
-				deluge::dsp::machine::renderFmDrum(*src.ensureFmDrumPatch(), mstate, machineBuf, numSamples,
-				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+			case OscType::FM_DRUM: {
+				auto patch = *src.ensureFmDrumPatch();
+				deluge::dsp::machine::applyMachineDials(src.oscType, &patch, dials);
+				deluge::dsp::machine::renderFmDrum(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                   sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
-			case OscType::WAVETONE:
-				deluge::dsp::machine::renderWaveTone(*src.ensureWaveTonePatch(), mstate, machineBuf, numSamples,
-				                                     phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::WAVETONE: {
+				auto patch = *src.ensureWaveTonePatch();
+				deluge::dsp::machine::applyMachineDials(src.oscType, &patch, dials);
+				deluge::dsp::machine::renderWaveTone(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                     sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
-			case OscType::PERC:
-				deluge::dsp::machine::renderPerc(*src.ensurePercPatch(), mstate, machineBuf, numSamples, phaseIncrement,
-				                                 sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::PERC: {
+				auto patch = *src.ensurePercPatch();
+				deluge::dsp::machine::applyMachineDials(src.oscType, &patch, dials);
+				deluge::dsp::machine::renderPerc(patch, mstate, machineBuf, numSamples, phaseIncrement, sourceAmplitude,
+				                                 amplitudeIncrement, timeScale);
 				break;
-			case OscType::SKIN:
-				deluge::dsp::machine::renderSkin(*src.ensureSkinPatch(), mstate, machineBuf, numSamples, phaseIncrement,
-				                                 sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::SKIN: {
+				auto patch = *src.ensureSkinPatch();
+				deluge::dsp::machine::applyMachineDials(src.oscType, &patch, dials);
+				deluge::dsp::machine::renderSkin(patch, mstate, machineBuf, numSamples, phaseIncrement, sourceAmplitude,
+				                                 amplitudeIncrement, timeScale);
 				break;
-			case OscType::RESONATOR:
-				deluge::dsp::machine::renderResonator(*src.ensureResonatorPatch(), mstate, machineBuf, numSamples,
-				                                      phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::RESONATOR: {
+				auto patch = *src.ensureResonatorPatch();
+				deluge::dsp::machine::applyMachineDials(src.oscType, &patch, dials);
+				deluge::dsp::machine::renderResonator(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                      sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
-			case OscType::SY_OSC:
-				deluge::dsp::machine::renderSyOsc(*src.ensureSyOscPatch(), mstate, machineBuf, numSamples,
-				                                  phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::SY_OSC: {
+				auto patch = *src.ensureSyOscPatch();
+				deluge::dsp::machine::applyMachineDials(src.oscType, &patch, dials);
+				deluge::dsp::machine::renderSyOsc(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                  sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
+			}
 			default:
 				break;
 			}

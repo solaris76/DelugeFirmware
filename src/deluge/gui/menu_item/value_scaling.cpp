@@ -71,3 +71,35 @@ void computeFinalValuesForTranspose(int32_t value, int32_t* transpose, int32_t* 
 	*cents = currentValue - semitones * 100;
 	*transpose = semitones - 256;
 }
+
+int32_t computeCurrentValueForMachineDial(int32_t value) {
+	int32_t v = static_cast<int32_t>((((int64_t)value + 2147483648LL) * 127 + 2147483648LL) >> 32);
+	if (v < 0) {
+		return 0;
+	}
+	if (v > 127) {
+		return 127;
+	}
+	return v;
+}
+
+int32_t computeFinalValueForMachineDial(int32_t value) {
+	if (value >= 127) {
+		return 2147483647;
+	}
+	if (value <= 0) {
+		return -2147483648;
+	}
+	return static_cast<int32_t>(static_cast<uint32_t>(value) * 33818641u - 2147483648u);
+}
+
+int32_t computeCurrentValueForMachineDialHybrid(int32_t finalValue) {
+	int64_t recovered = (int64_t)finalValue << 1;
+	if (recovered > 2147483647LL) {
+		recovered = 2147483647LL;
+	}
+	if (recovered < -2147483648LL) {
+		recovered = -2147483648LL;
+	}
+	return computeCurrentValueForMachineDial(static_cast<int32_t>(recovered));
+}

@@ -130,7 +130,13 @@ public:
 
 		soundEditor.currentSound->sources[sourceId_].setOscType(newValue);
 
-		if (oldValue == OscType::SQUARE || newValue == OscType::SQUARE) {
+		if (soundEditor.currentSound->sources[sourceId_].isMachineOsc() && soundEditor.currentParamManager) {
+			soundEditor.currentSound->syncMachineDialAutoparamsFromPatch(sourceId_, soundEditor.currentParamManager);
+		}
+
+		// Machine dial cables flip ALLOWED↔DISALLOWED with OscType; rebuild Destination lists.
+		if (deluge::dsp::machine::isMachineOscType(oldValue) || deluge::dsp::machine::isMachineOscType(newValue)
+		    || oldValue == OscType::SQUARE || newValue == OscType::SQUARE) {
 			soundEditor.currentSound->setupPatchingForAllParamManagers(currentSong);
 		}
 	}

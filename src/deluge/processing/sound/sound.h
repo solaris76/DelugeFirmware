@@ -238,6 +238,10 @@ public:
 	bool renderingOscillatorSyncEver(ParamManager* paramManager);
 	void setupAsBlankSynth(ParamManager* paramManager, bool is_dx = false);
 	void setupAsDefaultSynth(ParamManager* paramManager);
+	/// Copy machine OscType dial bytes into LOCAL_MACHINE_* Autoparams (call after hex load / osc type change).
+	void syncMachineDialAutoparamsFromPatch(int32_t sourceIndex, ParamManager* paramManager);
+	/// Copy LOCAL_MACHINE_* Autoparam currents back onto the live patch (before hex save).
+	void syncMachinePatchFromDialAutoparams(int32_t sourceIndex, ParamManager* paramManager);
 	void modButtonAction(uint8_t whichModButton, bool on, ParamManagerForTimeline* paramManager) final;
 	bool modEncoderButtonAction(uint8_t whichModEncoder, bool on, ModelStackWithThreeMainThings* modelStack) final;
 	static void writeParamsToFile(Serializer& writer, ParamManager* paramManager, bool writeAutomation);

@@ -120,3 +120,12 @@ uint32_t computeFinalValueForUnsignedMenuItem(int32_t value);
 
 int32_t computeCurrentValueForTranspose(int32_t transpose, int32_t cents);
 void computeFinalValuesForTranspose(int32_t current, int32_t* transpose, int32_t* cents);
+
+/** Scales INT32_MIN–INT32_MAX Autoparam to machine dial 0–127 for display / hex mirror. */
+int32_t computeCurrentValueForMachineDial(int32_t value);
+
+/** Scales machine dial 0–127 to INT32_MIN–INT32_MAX Autoparam storage. */
+int32_t computeFinalValueForMachineDial(int32_t value);
+
+/** Hybrid paramFinalValues (≈ Autoparam >> 1) → machine dial 0–127. */
+int32_t computeCurrentValueForMachineDialHybrid(int32_t finalValue);
