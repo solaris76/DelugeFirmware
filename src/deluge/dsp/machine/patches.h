@@ -14,7 +14,7 @@ namespace deluge::dsp::machine {
 
 inline constexpr bool isMachineOscType(OscType t) {
 	return t == OscType::WAVETONE || t == OscType::FM_DRUM || t == OscType::PERC || t == OscType::SKIN
-	       || t == OscType::RESONATOR;
+	       || t == OscType::RESONATOR || t == OscType::SY_OSC;
 }
 
 // FM Drum — Algo + 6 dials
@@ -124,6 +124,31 @@ struct ResonatorPatch {
 	void initDefaults();
 	void applyModelDefaults();
 	void loadModelDefaults(uint8_t newModel);
+};
+
+// Syncussion SY-1 / SY0.5–inspired one channel: dual VCO + noise, Mode + 6 dials.
+enum class SyOscMode : uint8_t {
+	Dual = 0, // A+B mix
+	Sync,     // B hard-syncs to A (classic sweep)
+	FM,       // A phase-mods B
+	Ring,     // A×B
+	Noise,    // noise-forward + tone
+	Sweep,    // strong pitch env on both (laser / zap)
+	COUNT,
+};
+
+struct SyOscPatch {
+	uint8_t mode{1}; // default Sync — the signature sound
+	uint8_t pitch{70};
+	uint8_t sweep{75}; // depth + time coupled
+	uint8_t ratio{80}; // B vs A
+	uint8_t color{55}; // tone / LP brightness
+	uint8_t noise{30};
+	uint8_t decay{55};
+
+	void initDefaults();
+	void applyModeDefaults();
+	void loadModeDefaults(uint8_t newMode);
 };
 
 struct MachineVoiceState {

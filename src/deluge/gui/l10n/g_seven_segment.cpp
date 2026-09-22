@@ -158,6 +158,7 @@ PLACE_SDRAM_DATA Language seven_segment{
         {STRING_FOR_PERC, "PERC"},
         {STRING_FOR_SKIN, "SKIN"},
         {STRING_FOR_RESONATOR, "RESO"},
+        {STRING_FOR_SY_OSC, "SYOS"},
         {STRING_FOR_MACHINE_ALGO, "ALGO"},
         {STRING_FOR_MACHINE_RATIO, "RATI"},
         {STRING_FOR_MACHINE_HARMONICS, "HARM"},

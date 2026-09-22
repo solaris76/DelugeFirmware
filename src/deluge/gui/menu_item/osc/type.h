@@ -76,6 +76,7 @@ public:
 			out.push_back(OscType::PERC);
 			out.push_back(OscType::SKIN);
 			out.push_back(OscType::RESONATOR);
+			out.push_back(OscType::SY_OSC);
 		}
 
 		if (mayUseDx()) {
@@ -120,7 +121,7 @@ public:
 		    OscType::INPUT_L,   OscType::INPUT_R,   OscType::INPUT_STEREO, OscType::SAMPLE,    OscType::DX7,
 		    OscType::WAVETABLE, OscType::PHI_MORPH, OscType::PHI_STAIR,    OscType::PHI_WEAVE, OscType::PHI_VOX,
 		    OscType::PHI_SWARM, OscType::PHI_GENDY, OscType::WAVETONE,     OscType::FM_DRUM,   OscType::PERC,
-		    OscType::SKIN,      OscType::RESONATOR,
+		    OscType::SKIN,      OscType::RESONATOR, OscType::SY_OSC,
 		};
 
 		if (util::one_of(oldValue, needs_unassignment) || util::one_of(newValue, needs_unassignment)) {
@@ -204,6 +205,9 @@ public:
 				break;
 			case OscType::RESONATOR:
 				options.emplace_back(l10n::getView(STRING_FOR_RESONATOR));
+				break;
+			case OscType::SY_OSC:
+				options.emplace_back(l10n::getView(STRING_FOR_SY_OSC));
 				break;
 			case OscType::INPUT_L:
 				if (!(AudioEngine::micPluggedIn || AudioEngine::lineInPluggedIn)) {
@@ -290,6 +294,8 @@ public:
 				return OLED::percIcon;
 			case OscType::RESONATOR:
 				return OLED::percIcon;
+			case OscType::SY_OSC:
+				return OLED::fmDrumIcon;
 			default:
 				return OLED::sineIcon;
 			}

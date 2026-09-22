@@ -259,6 +259,7 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_PERC, "Perc"},
         {STRING_FOR_SKIN, "Skin"},
         {STRING_FOR_RESONATOR, "Resonator"},
+        {STRING_FOR_SY_OSC, "SY Osc"},
         {STRING_FOR_MACHINE_ALGO, "Algorithm"},
         {STRING_FOR_MACHINE_RATIO, "Ratio"},
         {STRING_FOR_MACHINE_HARMONICS, "Harmonics"},

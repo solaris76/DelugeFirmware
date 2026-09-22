@@ -3539,6 +3539,11 @@ Error Sound::readSourceFromFile(Deserializer& reader, int32_t s, ParamManagerFor
 			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
 			reader.exitTag("resonatorPatch");
 		}
+		else if (!strcmp(tagName, "syOscPatch")) {
+			auto* patch = source->ensureSyOscPatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("syOscPatch");
+		}
 		/*
 		else if (!strcmp(tagName, "sampleSync")) {
 		    source->sampleSync = stringToBool(reader.readTagContents());
@@ -3917,6 +3922,12 @@ void Sound::writeSourceToFile(Serializer& writer, int32_t s, char const* tagName
 				if (source->resonatorPatch) {
 					writer.writeAttributeHexBytes("resonatorPatch", reinterpret_cast<uint8_t*>(source->resonatorPatch),
 					                              sizeof(*source->resonatorPatch));
+				}
+				break;
+			case OscType::SY_OSC:
+				if (source->syOscPatch) {
+					writer.writeAttributeHexBytes("syOscPatch", reinterpret_cast<uint8_t*>(source->syOscPatch),
+					                              sizeof(*source->syOscPatch));
 				}
 				break;
 			default:

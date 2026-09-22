@@ -55,6 +55,9 @@ public:
 				case OscType::RESONATOR:
 					typeStr = l10n::String::STRING_FOR_RESONATOR;
 					break;
+				case OscType::SY_OSC:
+					typeStr = l10n::String::STRING_FOR_SY_OSC;
+					break;
 				default:
 					break;
 				}

@@ -829,6 +829,9 @@ char const* oscTypeToString(OscType oscType) {
 	case OscType::RESONATOR:
 		return "resonator";
 
+	case OscType::SY_OSC:
+		return "syosc";
+
 	default:
 		__builtin_unreachable();
 	}
@@ -901,6 +904,9 @@ OscType stringToOscType(char const* string) {
 	}
 	else if (!strcmp(string, "resonator")) {
 		return OscType::RESONATOR;
+	}
+	else if (!strcmp(string, "syosc")) {
+		return OscType::SY_OSC;
 	}
 	else {
 		return OscType::TRIANGLE;

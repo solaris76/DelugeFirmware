@@ -62,6 +62,7 @@ public:
 	deluge::dsp::machine::PercPatch* percPatch{nullptr};
 	deluge::dsp::machine::SkinPatch* skinPatch{nullptr};
 	deluge::dsp::machine::ResonatorPatch* resonatorPatch{nullptr};
+	deluge::dsp::machine::SyOscPatch* syOscPatch{nullptr};
 
 	SampleRepeatMode repeatMode;
 
@@ -152,6 +153,7 @@ public:
 	deluge::dsp::machine::PercPatch* ensurePercPatch();
 	deluge::dsp::machine::SkinPatch* ensureSkinPatch();
 	deluge::dsp::machine::ResonatorPatch* ensureResonatorPatch();
+	deluge::dsp::machine::SyOscPatch* ensureSyOscPatch();
 
 	[[nodiscard]] bool isMachineOsc() const { return deluge::dsp::machine::isMachineOscType(oscType); }
 

@@ -149,6 +149,72 @@ void ResonatorPatch::applyModelDefaults() {
 	}
 }
 
+void SyOscPatch::initDefaults() {
+	*this = SyOscPatch{};
+	applyModeDefaults();
+}
+
+void SyOscPatch::loadModeDefaults(uint8_t newMode) {
+	*this = SyOscPatch{};
+	mode = static_cast<uint8_t>(std::min<uint8_t>(newMode, static_cast<uint8_t>(SyOscMode::COUNT) - 1));
+	applyModeDefaults();
+}
+
+void SyOscPatch::applyModeDefaults() {
+	switch (static_cast<SyOscMode>(mode)) {
+	case SyOscMode::Dual:
+		pitch = 72;
+		sweep = 35;
+		ratio = 64;
+		color = 70;
+		noise = 15;
+		decay = 60;
+		break;
+	case SyOscMode::Sync:
+		pitch = 70;
+		sweep = 85;
+		ratio = 95;
+		color = 55;
+		noise = 20;
+		decay = 50;
+		break;
+	case SyOscMode::FM:
+		pitch = 68;
+		sweep = 45;
+		ratio = 88;
+		color = 60;
+		noise = 12;
+		decay = 55;
+		break;
+	case SyOscMode::Ring:
+		pitch = 75;
+		sweep = 40;
+		ratio = 70;
+		color = 65;
+		noise = 25;
+		decay = 48;
+		break;
+	case SyOscMode::Noise:
+		pitch = 80;
+		sweep = 30;
+		ratio = 50;
+		color = 75;
+		noise = 100;
+		decay = 35;
+		break;
+	case SyOscMode::Sweep:
+		pitch = 65;
+		sweep = 110;
+		ratio = 100;
+		color = 50;
+		noise = 18;
+		decay = 58;
+		break;
+	default:
+		break;
+	}
+}
+
 void MachineVoiceState::reset() {
 	for (auto& p : phase) {
 		p = 0;

@@ -63,6 +63,9 @@ private:
 		case OscType::RESONATOR:
 			src.ensureResonatorPatch();
 			break;
+		case OscType::SY_OSC:
+			src.ensureSyOscPatch();
+			break;
 		default:
 			break;
 		}
@@ -110,6 +113,23 @@ public:
 	deluge::vector<std::string_view> getOptions(OptType) override { return {"Modal", "Strings", "Wire"}; }
 	bool isRelevant(ModControllableAudio*, int32_t) const override {
 		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::RESONATOR;
+	}
+};
+
+class SyOscMode final : public Selection {
+public:
+	SyOscMode(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureSyOscPatch()->mode); }
+	void writeCurrentValue() override {
+		// Mode only — keep Pitch / Sweep / Ratio / Color / Noise / Decay.
+		soundEditor.currentSound->sources[0].ensureSyOscPatch()->mode = static_cast<uint8_t>(getValue());
+		soundEditor.currentSound->killAllVoices();
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Dual", "Sync", "FM", "Ring", "Noise", "Sweep"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::SY_OSC;
 	}
 };
 
@@ -220,6 +240,26 @@ inline uint8_t* resPosition(Source& s) {
 }
 inline uint8_t* resExcite(Source& s) {
 	return &s.ensureResonatorPatch()->excite;
+}
+
+// --- SY Osc ---
+inline uint8_t* syOscPitch(Source& s) {
+	return &s.ensureSyOscPatch()->pitch;
+}
+inline uint8_t* syOscSweep(Source& s) {
+	return &s.ensureSyOscPatch()->sweep;
+}
+inline uint8_t* syOscRatio(Source& s) {
+	return &s.ensureSyOscPatch()->ratio;
+}
+inline uint8_t* syOscColor(Source& s) {
+	return &s.ensureSyOscPatch()->color;
+}
+inline uint8_t* syOscNoise(Source& s) {
+	return &s.ensureSyOscPatch()->noise;
+}
+inline uint8_t* syOscDecay(Source& s) {
+	return &s.ensureSyOscPatch()->decay;
 }
 
 } // namespace deluge::gui::menu_item::machine

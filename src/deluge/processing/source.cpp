@@ -68,6 +68,7 @@ Source::~Source() {
 	delete percPatch;
 	delete skinPatch;
 	delete resonatorPatch;
+	delete syOscPatch;
 	delete phiMorphCache;
 	delete phiWeaveCache;
 	delete phiVoxCache;
@@ -353,6 +354,9 @@ void Source::ensureMachinePatchForType(OscType type) {
 	case OscType::RESONATOR:
 		ensureResonatorPatch();
 		break;
+	case OscType::SY_OSC:
+		ensureSyOscPatch();
+		break;
 	default:
 		break;
 	}
@@ -396,6 +400,14 @@ deluge::dsp::machine::ResonatorPatch* Source::ensureResonatorPatch() {
 		resonatorPatch->initDefaults();
 	}
 	return resonatorPatch;
+}
+
+deluge::dsp::machine::SyOscPatch* Source::ensureSyOscPatch() {
+	if (syOscPatch == nullptr) {
+		syOscPatch = new deluge::dsp::machine::SyOscPatch();
+		syOscPatch->initDefaults();
+	}
+	return syOscPatch;
 }
 
 /*

@@ -2775,6 +2775,10 @@ dontUseCache: {}
 				deluge::dsp::machine::renderResonator(*src.ensureResonatorPatch(), mstate, machineBuf, numSamples,
 				                                      phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
+			case OscType::SY_OSC:
+				deluge::dsp::machine::renderSyOsc(*src.ensureSyOscPatch(), mstate, machineBuf, numSamples,
+				                                  phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+				break;
 			default:
 				break;
 			}

@@ -815,4 +815,153 @@ void renderResonator(ResonatorPatch const& patch, MachineVoiceState& st, int32_t
 	}
 }
 
+void renderSyOsc(SyOscPatch const& patch, MachineVoiceState& st, int32_t* dest, int32_t numSamples,
+                 uint32_t phaseIncrement, int32_t amplitude, int32_t amplitudeIncrement, float timeScale) {
+	timeScale = clampTimeScale(timeScale);
+	auto mode = static_cast<SyOscMode>(patch.mode % static_cast<uint8_t>(SyOscMode::COUNT));
+
+	float tuneMul = 0.12f + u8f(patch.pitch) * 1.15f;
+	uint32_t baseInc = static_cast<uint32_t>(static_cast<float>(phaseIncrement) * tuneMul);
+
+	float sweepAmt = u8f(patch.sweep);
+	float sweepDepth = sweepAmt * (mode == SyOscMode::Sweep ? 3.2f : 2.2f);
+	uint8_t sweepTime = static_cast<uint8_t>(10 + (1.f - sweepAmt) * 45.f + sweepAmt * 80.f);
+	float bodyDecCoef = clampBodyDecCoef(drumDecayCoef(patch.decay) / timeScale);
+	float noiseDecCoef = clampBodyDecCoef(drumDecayCoef(static_cast<uint8_t>(8 + patch.noise / 2)) / timeScale);
+	float sweepCoef = drumPitchEnvCoef(sweepTime) / timeScale;
+
+	float ratio = 0.5f + u8f(patch.ratio) * 3.5f;
+	float color = u8f(patch.color);
+	float noiseAmt = u8f(patch.noise);
+	// Color = brightness: more LP when low (same idea as Skin fold easing)
+	float lpAmt = 1.f - color * 0.85f; // 1 = dark, ~0.15 = bright
+
+	float mixA = 0.45f;
+	float mixB = 0.45f;
+	float noiseBias = 0.3f;
+	float fmIdx = 0.f;
+	float popAmt = 0.22f + noiseAmt * 0.25f;
+	bool hardSync = false;
+	bool doRing = false;
+	bool doFm = false;
+	bool softWave = false; // sine A — Dual / quieter tops
+
+	switch (mode) {
+	case SyOscMode::Dual:
+		mixA = 0.42f;
+		mixB = 0.38f;
+		noiseBias = 0.18f;
+		softWave = true;
+		popAmt = 0.16f + noiseAmt * 0.15f;
+		break;
+	case SyOscMode::Sync:
+		hardSync = true;
+		mixA = 0.18f;
+		mixB = 0.72f;
+		noiseBias = 0.22f;
+		popAmt = 0.14f + noiseAmt * 0.12f; // sync edges already transient-y
+		break;
+	case SyOscMode::FM:
+		doFm = true;
+		fmIdx = 0.5f + u8f(patch.ratio) * 2.4f;
+		mixA = 0.12f;
+		mixB = 0.78f;
+		noiseBias = 0.12f;
+		popAmt = 0.14f + noiseAmt * 0.12f;
+		break;
+	case SyOscMode::Ring:
+		doRing = true;
+		mixA = 0.f;
+		mixB = 0.f;
+		noiseBias = 0.25f;
+		popAmt = 0.18f + noiseAmt * 0.15f;
+		break;
+	case SyOscMode::Noise:
+		mixA = 0.28f;
+		mixB = 0.15f;
+		noiseBias = 0.95f; // was 1.35 — keep kit levels in line
+		popAmt = 0.2f + noiseAmt * 0.2f;
+		break;
+	case SyOscMode::Sweep:
+		hardSync = true;
+		mixA = 0.15f;
+		mixB = 0.75f;
+		noiseBias = 0.18f;
+		popAmt = 0.12f + noiseAmt * 0.1f;
+		break;
+	default:
+		break;
+	}
+
+	if (st.sampleCount == 0) {
+		st.bodyEnv = 1.f;
+		st.noiseEnv = 1.f;
+		st.pitchEnv = 1.f;
+		st.phase[0] = 0;
+		st.phase[1] = 0x20000000u;
+		st.combBuf[0] = 0.f; // LP state
+		float clickLen = hardSync ? (4.f + popAmt * 16.f) : (6.f + popAmt * 24.f);
+		st.envB = clickLen;
+		st.clickSamplesLeft = static_cast<uint32_t>(clickLen);
+	}
+
+	int32_t amp = amplitude;
+	float clickTotal = st.envB > 1.f ? st.envB : 1.f;
+	float noiseScale = noiseAmt * 0.45f * noiseBias;
+	// Match Perc kit level — dual squares + sync run hot otherwise.
+	constexpr float kSyLevel = 0.34f;
+
+	for (int32_t i = 0; i < numSamples; i++) {
+		st.sampleCount++;
+		st.bodyEnv *= (1.f - bodyDecCoef);
+		st.noiseEnv *= (1.f - noiseDecCoef);
+		st.pitchEnv *= (1.f - sweepCoef);
+
+		float pitchScale = 1.f + sweepDepth * st.pitchEnv;
+		uint32_t incA = static_cast<uint32_t>(static_cast<float>(baseInc) * pitchScale);
+		uint32_t incB = static_cast<uint32_t>(static_cast<float>(baseInc) * ratio * pitchScale);
+
+		uint32_t prevA = st.phase[0];
+		int32_t oA = softWave ? getSine(st.phase[0]) : getSquare(st.phase[0]);
+		st.phase[0] += incA;
+
+		if (hardSync && st.phase[0] < prevA) {
+			st.phase[1] = 0;
+		}
+
+		int32_t oB;
+		if (doFm) {
+			oB = getSquare(st.phase[1] + phaseMod(oA, fmIdx * st.bodyEnv));
+			st.phase[1] += incB;
+		}
+		else {
+			oB = getSquare(st.phase[1]);
+			st.phase[1] += incB;
+		}
+
+		int32_t body;
+		if (doRing) {
+			body = multiply_32x32_rshift32(oA, oB) << 1;
+		}
+		else {
+			body = static_cast<int32_t>(oA * mixA + oB * mixB);
+		}
+		body = static_cast<int32_t>(body * st.bodyEnv);
+
+		int32_t noise = noiseSample(st.noiseState);
+		noise = static_cast<int32_t>(noise * st.noiseEnv * noiseScale);
+		int32_t click = windowedNoiseBurst(st.noiseState, st.clickSamplesLeft, clickTotal, popAmt, 3);
+
+		float f = (body + noise + click) * kInvInt32;
+		// 1-pole LP; ease with body so short Decay doesn't leave a filtered spike
+		float& lp = st.combBuf[0];
+		float coef = 0.12f + (1.f - lpAmt) * 0.82f;
+		lp += coef * (f - lp);
+		f = lp * lpAmt + f * (1.f - lpAmt);
+		f = softClip(f) * kSyLevel;
+
+		accumulateSample(&dest[i], floatToSample(f), amp, amplitudeIncrement);
+	}
+}
+
 } // namespace deluge::dsp::machine
