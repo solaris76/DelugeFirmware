@@ -313,7 +313,7 @@ void renderPerc(PercPatch const& patch, MachineVoiceState& st, int32_t* dest, in
 	float bodyDecCoef = drumDecayCoef(patch.decay) / timeScale;
 	float noiseDecCoef = drumDecayCoef(static_cast<uint8_t>(10 + patch.noise / 2)) / timeScale;
 	float crunch = u8f(patch.crunch);
-	float drive = 1.f + crunch * 4.5f;
+	float drive = 1.f + crunch * 2.4f;
 	float noiseAmt = u8f(patch.noise);
 
 	float ratios[6] = {1.f,
@@ -452,6 +452,8 @@ void renderPerc(PercPatch const& patch, MachineVoiceState& st, int32_t* dest, in
 
 		float f = (body + noise + click) * (1.f / 2147483648.f);
 		f = std::tanh(f * drive);
+		// Partials + click sit hotter than FM Drum / Skin — bring default hits in line.
+		f *= 0.48f;
 		int32_t sample = static_cast<int32_t>(f * 2147483647.f);
 
 		amp += amplitudeIncrement;

@@ -74,7 +74,6 @@ public:
 	PercRole(l10n::String name) : Selection(name) {}
 	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensurePercPatch()->role); }
 	void writeCurrentValue() override {
-		// Role only — leave Pitch / Color / Noise / Decay / Crunch as dialled.
 		soundEditor.currentSound->sources[0].ensurePercPatch()->role = static_cast<uint8_t>(getValue());
 		soundEditor.currentSound->killAllVoices();
 	}
@@ -91,7 +90,6 @@ public:
 	SkinMode(l10n::String name) : Selection(name) {}
 	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureSkinPatch()->mode); }
 	void writeCurrentValue() override {
-		// Algo only — leave Pitch / Harm / Morph / Fold / Decay as dialled.
 		soundEditor.currentSound->sources[0].ensureSkinPatch()->mode = static_cast<uint8_t>(getValue());
 		soundEditor.currentSound->killAllVoices();
 	}
@@ -106,7 +104,6 @@ public:
 	ResonatorModel(l10n::String name) : Selection(name) {}
 	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureResonatorPatch()->model); }
 	void writeCurrentValue() override {
-		// Model only — leave Structure / Bright / Damping / Position / Excite as dialled.
 		soundEditor.currentSound->sources[0].ensureResonatorPatch()->model = static_cast<uint8_t>(getValue());
 		soundEditor.currentSound->killAllVoices();
 	}
