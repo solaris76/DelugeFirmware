@@ -190,11 +190,12 @@ goAgainWithoutIncrement:
 		if (!ourDescriptor->isJustAParam()) {
 
 			// Find the range-adjust*ed* cable, whose range/depth we're adjusting.
+			// Must be in the usable prefix (0…numUsablePatchCables-1): an unusable adjusted
+			// cable leaves no Destination and would trip E434 below.
 			int32_t destinationCableIndex = getPatchCableIndex(ourDescriptor->getBottomLevelSource(),
 			                                                   ourDescriptor->getDestination(), nullptr, false);
 
-			// If doesn't exist, make this range-adjust*ing* cable "unusable".
-			if (destinationCableIndex == 255) {
+			if (destinationCableIndex == 255 || destinationCableIndex >= numUsablePatchCables) {
 				numUsablePatchCables--;
 				if (numUsablePatchCables == c) {
 					break;
@@ -298,18 +299,18 @@ goAgainWithoutIncrement:
 				// Ensure that any changes to the range/depth (because of sources patched to the range/depth, i.e. the
 				// cable we're looking at right now) also cause the cable whose range/depth we're adjusting (and so also
 				// the param that that goes to) to recompute.
+				Destination* destinationsEnd = &destinations[globality][numDestinations[globality]];
 				Destination* thatDestination = destination + 1;
-				while (thatDestination->destinationParamDescriptor != cableDestination) {
+				while (thatDestination < destinationsEnd
+				       && thatDestination->destinationParamDescriptor != cableDestination) {
 					thatDestination++;
-
+				}
+				if (thatDestination >= destinationsEnd) {
+					// Adjusted Destination missing (should have been filtered above). Don't walk off the list.
 #if ALPHA_OR_BETA_VERSION
-					// If getting crashes here, well I previously fixed a bug where sometimes the range-adjust*ed* cable
-					// was not "allowed", so was not present here, but the adjust*ing* cable still was here, which this
-					// code can't handle. So check that again?
-					if (thatDestination >= (&destinations[globality][numDestinations[globality]])) {
-						FREEZE_WITH_ERROR("E434");
-					}
+					FREEZE_WITH_ERROR("E434");
 #endif
+					continue;
 				}
 				thatDestination->sources |= destination->sources;
 

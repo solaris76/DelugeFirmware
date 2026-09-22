@@ -266,6 +266,8 @@ constexpr ParamType PATCH_CABLE = 190;
 
 /// None is the last global param, 0 indexed so it's also the number of patched params
 constexpr ParamType kNumParams = GLOBAL_NONE;
+static_assert(((kNumParams + 31) / 32) <= kMaxNumUnsignedIntegerstoRepAllParams,
+              "Increase kMaxNumUnsignedIntegerstoRepAllParams — patched param bitfields overflow");
 constexpr ParamType kMaxNumUnpatchedParams =
     std::max<ParamType>(util::to_underlying(UNPATCHED_GLOBAL_MAX_NUM), util::to_underlying(UNPATCHED_SOUND_MAX_NUM));
 
