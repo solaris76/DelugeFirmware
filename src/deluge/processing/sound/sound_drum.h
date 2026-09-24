@@ -30,7 +30,11 @@ public:
 	String path;
 	bool nameIsDiscardable = false;
 
-	SoundDrum() : Drum(DrumType::SOUND) {}
+	SoundDrum() : Drum(DrumType::SOUND) {
+		// Same as setupAsSample: kit rows use Master Pitch on mod mode 7 bottom enc, not Portamento
+		// (portamento is the Sound default and is useless for single-pitch kit triggers).
+		modKnobs[6][0].paramDescriptor.setToHaveParamOnly(deluge::modulation::params::LOCAL_PITCH_ADJUST);
+	}
 
 	using Sound::allowNoteTails;
 	using Sound::anyNoteIsOn;
