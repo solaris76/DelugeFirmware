@@ -3521,6 +3521,36 @@ Error Sound::readSourceFromFile(Deserializer& reader, int32_t s, ParamManagerFor
 			source->phiStereoZone = reader.readTagOrAttributeValueInt();
 			reader.exitTag("phiStereoZone");
 		}
+		else if (!strcmp(tagName, "fmdrumPatch")) {
+			auto* patch = source->ensureFmDrumPatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("fmdrumPatch");
+		}
+		else if (!strcmp(tagName, "wavetonePatch")) {
+			auto* patch = source->ensureWaveTonePatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("wavetonePatch");
+		}
+		else if (!strcmp(tagName, "percPatch")) {
+			auto* patch = source->ensurePercPatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("percPatch");
+		}
+		else if (!strcmp(tagName, "skinPatch")) {
+			auto* patch = source->ensureSkinPatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("skinPatch");
+		}
+		else if (!strcmp(tagName, "resonatorPatch")) {
+			auto* patch = source->ensureResonatorPatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("resonatorPatch");
+		}
+		else if (!strcmp(tagName, "syOscPatch")) {
+			auto* patch = source->ensureSyOscPatch();
+			reader.readTagOrAttributeValueHexBytes(reinterpret_cast<uint8_t*>(patch), sizeof(*patch));
+			reader.exitTag("syOscPatch");
+		}
 		/*
 		else if (!strcmp(tagName, "sampleSync")) {
 		    source->sampleSync = stringToBool(reader.readTagContents());
@@ -3866,6 +3896,49 @@ void Sound::writeSourceToFile(Serializer& writer, int32_t s, char const* tagName
 				if (patch->random_detune != 0) {
 					writer.writeAttribute("dx7randomdetune", patch->random_detune);
 				}
+			}
+			goto justCloseTag;
+		}
+		else if (source->isMachineOsc() && synthMode != SynthMode::FM) {
+			switch (source->oscType) {
+			case OscType::FM_DRUM:
+				if (source->fmDrumPatch) {
+					writer.writeAttributeHexBytes("fmdrumPatch", reinterpret_cast<uint8_t*>(source->fmDrumPatch),
+					                              sizeof(*source->fmDrumPatch));
+				}
+				break;
+			case OscType::WAVETONE:
+				if (source->waveTonePatch) {
+					writer.writeAttributeHexBytes("wavetonePatch", reinterpret_cast<uint8_t*>(source->waveTonePatch),
+					                              sizeof(*source->waveTonePatch));
+				}
+				break;
+			case OscType::PERC:
+				if (source->percPatch) {
+					writer.writeAttributeHexBytes("percPatch", reinterpret_cast<uint8_t*>(source->percPatch),
+					                              sizeof(*source->percPatch));
+				}
+				break;
+			case OscType::SKIN:
+				if (source->skinPatch) {
+					writer.writeAttributeHexBytes("skinPatch", reinterpret_cast<uint8_t*>(source->skinPatch),
+					                              sizeof(*source->skinPatch));
+				}
+				break;
+			case OscType::RESONATOR:
+				if (source->resonatorPatch) {
+					writer.writeAttributeHexBytes("resonatorPatch", reinterpret_cast<uint8_t*>(source->resonatorPatch),
+					                              sizeof(*source->resonatorPatch));
+				}
+				break;
+			case OscType::SY_OSC:
+				if (source->syOscPatch) {
+					writer.writeAttributeHexBytes("syOscPatch", reinterpret_cast<uint8_t*>(source->syOscPatch),
+					                              sizeof(*source->syOscPatch));
+				}
+				break;
+			default:
+				break;
 			}
 			goto justCloseTag;
 		}

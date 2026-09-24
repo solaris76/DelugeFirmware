@@ -814,6 +814,24 @@ char const* oscTypeToString(OscType oscType) {
 	case OscType::DX7:
 		return "dx7";
 
+	case OscType::WAVETONE:
+		return "wavetone";
+
+	case OscType::FM_DRUM:
+		return "fmdrum";
+
+	case OscType::PERC:
+		return "perc";
+
+	case OscType::SKIN:
+		return "skin";
+
+	case OscType::RESONATOR:
+		return "resonator";
+
+	case OscType::SY_OSC:
+		return "syosc";
+
 	default:
 		__builtin_unreachable();
 	}
@@ -871,6 +889,24 @@ OscType stringToOscType(char const* string) {
 	}
 	else if (!strcmp(string, "dx7")) {
 		return OscType::DX7;
+	}
+	else if (!strcmp(string, "wavetone")) {
+		return OscType::WAVETONE;
+	}
+	else if (!strcmp(string, "fmdrum")) {
+		return OscType::FM_DRUM;
+	}
+	else if (!strcmp(string, "perc")) {
+		return OscType::PERC;
+	}
+	else if (!strcmp(string, "skin")) {
+		return OscType::SKIN;
+	}
+	else if (!strcmp(string, "resonator")) {
+		return OscType::RESONATOR;
+	}
+	else if (!strcmp(string, "syosc")) {
+		return OscType::SY_OSC;
 	}
 	else {
 		return OscType::TRIANGLE;

@@ -18,6 +18,7 @@
 #include "processing/source.h"
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
+#include "dsp/machine/patches.h"
 #include "dsp/phi_gendy.hpp"
 #include "dsp/phi_morph.hpp"
 #include "dsp/phi_stair.hpp"
@@ -37,6 +38,7 @@
 #include "storage/wave_table/wave_table.h"
 #include "util/functions.h"
 #include <cstring>
+#include <new>
 
 Source::Source() {
 
@@ -61,6 +63,12 @@ Source::~Source() {
 		dxPatch = nullptr;
 	}
 	destructAllMultiRanges();
+	delete fmDrumPatch;
+	delete waveTonePatch;
+	delete percPatch;
+	delete skinPatch;
+	delete resonatorPatch;
+	delete syOscPatch;
 	delete phiMorphCache;
 	delete phiWeaveCache;
 	delete phiVoxCache;
@@ -313,6 +321,13 @@ doChangeType:
 	if (oscType == OscType::DX7) {
 		ensureDxPatch();
 	}
+	else if (deluge::dsp::machine::isMachineOscType(oscType)) {
+		ensureMachinePatchForType(oscType);
+		// Entering Perc always starts from Metal factory defaults (fresh type, not leftover dials).
+		if (oscType == OscType::PERC && percPatch != nullptr) {
+			percPatch->loadRoleDefaults(0);
+		}
+	}
 }
 
 DxPatch* Source::ensureDxPatch() {
@@ -321,6 +336,79 @@ DxPatch* Source::ensureDxPatch() {
 	}
 	return dxPatch;
 };
+
+void Source::ensureMachinePatchForType(OscType type) {
+	switch (type) {
+	case OscType::FM_DRUM:
+		ensureFmDrumPatch();
+		break;
+	case OscType::WAVETONE:
+		ensureWaveTonePatch();
+		break;
+	case OscType::PERC:
+		ensurePercPatch();
+		break;
+	case OscType::SKIN:
+		ensureSkinPatch();
+		break;
+	case OscType::RESONATOR:
+		ensureResonatorPatch();
+		break;
+	case OscType::SY_OSC:
+		ensureSyOscPatch();
+		break;
+	default:
+		break;
+	}
+}
+
+deluge::dsp::machine::FmDrumPatch* Source::ensureFmDrumPatch() {
+	if (fmDrumPatch == nullptr) {
+		fmDrumPatch = new deluge::dsp::machine::FmDrumPatch();
+		fmDrumPatch->initDefaults();
+	}
+	return fmDrumPatch;
+}
+
+deluge::dsp::machine::WaveTonePatch* Source::ensureWaveTonePatch() {
+	if (waveTonePatch == nullptr) {
+		waveTonePatch = new deluge::dsp::machine::WaveTonePatch();
+		waveTonePatch->initDefaults();
+	}
+	return waveTonePatch;
+}
+
+deluge::dsp::machine::PercPatch* Source::ensurePercPatch() {
+	if (percPatch == nullptr) {
+		percPatch = new deluge::dsp::machine::PercPatch();
+		percPatch->initDefaults();
+	}
+	return percPatch;
+}
+
+deluge::dsp::machine::SkinPatch* Source::ensureSkinPatch() {
+	if (skinPatch == nullptr) {
+		skinPatch = new deluge::dsp::machine::SkinPatch();
+		skinPatch->initDefaults();
+	}
+	return skinPatch;
+}
+
+deluge::dsp::machine::ResonatorPatch* Source::ensureResonatorPatch() {
+	if (resonatorPatch == nullptr) {
+		resonatorPatch = new deluge::dsp::machine::ResonatorPatch();
+		resonatorPatch->initDefaults();
+	}
+	return resonatorPatch;
+}
+
+deluge::dsp::machine::SyOscPatch* Source::ensureSyOscPatch() {
+	if (syOscPatch == nullptr) {
+		syOscPatch = new deluge::dsp::machine::SyOscPatch();
+		syOscPatch->initDefaults();
+	}
+	return syOscPatch;
+}
 
 /*
     for (int32_t e = 0; e < ranges.getNumElements(); e++) {

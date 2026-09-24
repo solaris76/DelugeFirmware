@@ -20,6 +20,7 @@
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
 #include "dsp/filter/filter_set.h"
+#include "dsp/machine/render.h"
 #include "dsp/oscillators/sine_osc.h"
 #include "dsp/phi_gendy.hpp"
 #include "dsp/phi_morph.hpp"
@@ -639,6 +640,11 @@ void Voice::noteOff(ModelStackWithSoundFlags* modelStack, bool allowReleaseStage
 					if (unisonParts[u].sources[s].dxVoice) {
 						unisonParts[u].sources[s].dxVoice->keyup();
 					}
+				}
+			}
+			else if (sound.sources[s].isMachineOsc()) {
+				for (int u = 0; u < sound.numUnison; u++) {
+					unisonParts[u].sources[s].machineState.noteOn = false;
 				}
 			}
 		}
@@ -2732,6 +2738,87 @@ dontUseCache: {}
 				for (int i = 0; i < numSamples; i++) {
 					sourceAmplitudeNow += amplitudeIncrement;
 					oscBuffer[i] += multiply_32x32_rshift32(uniBuf[i], sourceAmplitudeNow) << 6;
+				}
+			}
+
+			// Or machine engines (Digitone / perc)
+		}
+		else if (sound.sources[s].isMachineOsc()) {
+			int32_t* renderBuffer = oscBuffer;
+			static int32_t machineBuf[SSI_TX_BUFFER_NUM_SAMPLES] __attribute__((aligned(CACHE_LINE_SIZE)));
+			memset(machineBuf, 0, numSamples * sizeof(int32_t));
+
+			auto& mstate = unisonParts[u].sources[s].machineState;
+			Source& src = sound.sources[s];
+			// Sound Env1 Decay stretches machine body/noise/mod envelopes so Mod Decay lengthens hits
+			// (and filter/FX still have something to work on). Role dials keep relative shape.
+			float timeScale =
+			    deluge::dsp::machine::envelopeTimeScaleFromDecayParam(paramFinalValues[params::LOCAL_ENV_0_DECAY]);
+			int32_t velSrc = sourceValues[util::to_underlying(PatchSource::VELOCITY)];
+			int32_t randSrc = sourceValues[util::to_underlying(PatchSource::RANDOM)];
+			switch (src.oscType) {
+			case OscType::FM_DRUM: {
+				auto patch = *src.ensureFmDrumPatch();
+				deluge::dsp::machine::applyVelocityToFmDrum(patch, velSrc);
+				deluge::dsp::machine::applyRandomToFmDrum(patch, randSrc);
+				deluge::dsp::machine::renderFmDrum(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                   sourceAmplitude, amplitudeIncrement, timeScale);
+				break;
+			}
+			case OscType::WAVETONE: {
+				auto patch = *src.ensureWaveTonePatch();
+				deluge::dsp::machine::applyVelocityToWaveTone(patch, velSrc);
+				deluge::dsp::machine::applyRandomToWaveTone(patch, randSrc);
+				deluge::dsp::machine::renderWaveTone(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                     sourceAmplitude, amplitudeIncrement, timeScale);
+				break;
+			}
+			case OscType::PERC: {
+				auto patch = *src.ensurePercPatch();
+				deluge::dsp::machine::applyVelocityToPerc(patch, velSrc);
+				deluge::dsp::machine::applyRandomToPerc(patch, randSrc);
+				deluge::dsp::machine::renderPerc(patch, mstate, machineBuf, numSamples, phaseIncrement, sourceAmplitude,
+				                                 amplitudeIncrement, timeScale);
+				break;
+			}
+			case OscType::SKIN: {
+				auto patch = *src.ensureSkinPatch();
+				deluge::dsp::machine::applyVelocityToSkin(patch, velSrc);
+				deluge::dsp::machine::applyRandomToSkin(patch, randSrc);
+				deluge::dsp::machine::renderSkin(patch, mstate, machineBuf, numSamples, phaseIncrement, sourceAmplitude,
+				                                 amplitudeIncrement, timeScale);
+				break;
+			}
+			case OscType::RESONATOR: {
+				auto patch = *src.ensureResonatorPatch();
+				deluge::dsp::machine::applyVelocityToResonator(patch, velSrc);
+				deluge::dsp::machine::applyRandomToResonator(patch, randSrc);
+				deluge::dsp::machine::renderResonator(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                      sourceAmplitude, amplitudeIncrement, timeScale);
+				break;
+			}
+			case OscType::SY_OSC: {
+				auto patch = *src.ensureSyOscPatch();
+				deluge::dsp::machine::applyVelocityToSyOsc(patch, velSrc);
+				deluge::dsp::machine::applyRandomToSyOsc(patch, randSrc);
+				deluge::dsp::machine::renderSyOsc(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                  sourceAmplitude, amplitudeIncrement, timeScale);
+				break;
+			}
+			default:
+				break;
+			}
+
+			if (stereoUnison) {
+				for (int i = 0; i < numSamples; i++) {
+					int amplified = machineBuf[i];
+					oscBuffer[(i << 1)] += multiply_32x32_rshift32(amplified, amplitudeL) << 2;
+					oscBuffer[(i << 1) + 1] += multiply_32x32_rshift32(amplified, amplitudeR) << 2;
+				}
+			}
+			else {
+				for (int i = 0; i < numSamples; i++) {
+					oscBuffer[i] += machineBuf[i];
 				}
 			}
 

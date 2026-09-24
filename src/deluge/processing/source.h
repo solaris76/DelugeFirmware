@@ -18,6 +18,7 @@
 #pragma once
 
 #include "definitions_cxx.hpp"
+#include "dsp/machine/patches.h"
 #include "model/sample/sample_controls.h"
 #include "storage/multi_range/multi_range_array.h"
 #include "util/phase_increment_fine_tuner.h"
@@ -55,6 +56,14 @@ public:
 
 	DxPatch* dxPatch;
 	bool dxPatchChanged = false;
+
+	deluge::dsp::machine::FmDrumPatch* fmDrumPatch{nullptr};
+	deluge::dsp::machine::WaveTonePatch* waveTonePatch{nullptr};
+	deluge::dsp::machine::PercPatch* percPatch{nullptr};
+	deluge::dsp::machine::SkinPatch* skinPatch{nullptr};
+	deluge::dsp::machine::ResonatorPatch* resonatorPatch{nullptr};
+	deluge::dsp::machine::SyOscPatch* syOscPatch{nullptr};
+
 	SampleRepeatMode repeatMode;
 
 	// PHI_MORPH zone parameters and cache (lazily allocated)
@@ -139,7 +148,16 @@ public:
 	void setOscType(OscType newType);
 
 	DxPatch* ensureDxPatch();
+	deluge::dsp::machine::FmDrumPatch* ensureFmDrumPatch();
+	deluge::dsp::machine::WaveTonePatch* ensureWaveTonePatch();
+	deluge::dsp::machine::PercPatch* ensurePercPatch();
+	deluge::dsp::machine::SkinPatch* ensureSkinPatch();
+	deluge::dsp::machine::ResonatorPatch* ensureResonatorPatch();
+	deluge::dsp::machine::SyOscPatch* ensureSyOscPatch();
+
+	[[nodiscard]] bool isMachineOsc() const { return deluge::dsp::machine::isMachineOscType(oscType); }
 
 private:
 	void destructAllMultiRanges();
+	void ensureMachinePatchForType(OscType type);
 };
