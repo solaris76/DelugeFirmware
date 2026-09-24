@@ -2972,6 +2972,13 @@ void Sound::doneReadingFromFile() {
 	for (int32_t m = 0; m < kNumModulators; m++) {
 		recalculateModulatorTransposer(m, nullptr);
 	}
+
+	// Kit Sound rows: replace Portamento on mod mode 7 bottom with Master Pitch (matches sample kit default).
+	if (isDrum()
+	    && modKnobs[6][0].paramDescriptor.isSetToParamWithNoSource(params::UNPATCHED_START
+	                                                               + params::UNPATCHED_PORTAMENTO)) {
+		modKnobs[6][0].paramDescriptor.setToHaveParamOnly(params::LOCAL_PITCH_ADJUST);
+	}
 }
 
 // Unusually, modelStack may be supplied as NULL, because when unassigning all voices e.g. on song swap, we won't have
