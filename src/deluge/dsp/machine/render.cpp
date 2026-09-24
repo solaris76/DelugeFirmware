@@ -291,7 +291,7 @@ void renderFmDrum(FmDrumPatch const& patch, MachineVoiceState& st, int32_t* dest
 		st.phase[1] += incB;
 
 		uint32_t mod = phaseMod(mA, modA * st.envA) + phaseMod(mB, modB * st.envB) + phaseMod(feedbackMem, fb);
-		int32_t body = getSine(st.phase[3] + mod);
+		int32_t body = morphWaveFast(st.phase[3] + mod, patch.wave, 40);
 		st.phase[3] += inc;
 		feedbackMem = body;
 		if (doFold) {
@@ -312,10 +312,11 @@ void renderFmDrum(FmDrumPatch const& patch, MachineVoiceState& st, int32_t* dest
 void renderWaveTone(WaveTonePatch const& patch, MachineVoiceState& st, int32_t* dest, int32_t numSamples,
                     uint32_t phaseIncrement, int32_t amplitude, int32_t amplitudeIncrement, float timeScale) {
 	timeScale = clampTimeScale(timeScale);
+	float pitchMul = 0.5f + u8f(patch.pitch); // 64 ≈ unity
 	float off1 = 1.f + (static_cast<int>(patch.osc1LinOffset) - 64) * 0.0015f;
 	float off2 = 1.f + (static_cast<int>(patch.osc2LinOffset) - 64) * 0.0015f;
-	uint32_t inc1 = static_cast<uint32_t>(phaseIncrement * off1);
-	uint32_t inc2 = static_cast<uint32_t>(phaseIncrement * off2);
+	uint32_t inc1 = static_cast<uint32_t>(phaseIncrement * off1 * pitchMul);
+	uint32_t inc2 = static_cast<uint32_t>(phaseIncrement * off2 * pitchMul);
 	if (patch.oscDrift) {
 		inc2 += patch.oscDrift << 8;
 	}
@@ -695,6 +696,9 @@ void renderResonator(ResonatorPatch const& patch, MachineVoiceState& st, int32_t
                      uint32_t phaseIncrement, int32_t amplitude, int32_t amplitudeIncrement, float timeScale) {
 	timeScale = clampTimeScale(timeScale);
 	auto model = static_cast<ResonatorModel>(patch.model);
+
+	float pitchMul = 0.5f + u8f(patch.pitch); // 64 ≈ unity
+	phaseIncrement = static_cast<uint32_t>(static_cast<float>(phaseIncrement) * pitchMul);
 
 	float structure = u8f(patch.structure);
 	float bright = u8f(patch.brightness);

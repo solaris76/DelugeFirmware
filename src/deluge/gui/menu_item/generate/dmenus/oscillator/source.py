@@ -8,6 +8,7 @@ _machine_menus_osc0 = [
     # FM Drum
     ExternalMenu("fmDrumAlgoMenu", available_when=_machine_when),
     ExternalMenu("fmDrumTuneMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumWaveMenu", available_when=_machine_when),
     ExternalMenu("fmDrumSweepMenu", available_when=_machine_when),
     ExternalMenu("fmDrumModMenu", available_when=_machine_when),
     ExternalMenu("fmDrumFoldMenu", available_when=_machine_when),
@@ -17,6 +18,7 @@ _machine_menus_osc0 = [
     ExternalMenu("fmDrumRandDestMenu", available_when=_machine_when),
     ExternalMenu("fmDrumRandAmtMenu", available_when=_machine_when),
     # Wavetone (full)
+    ExternalMenu("wtPitchMenu", available_when=_machine_when),
     ExternalMenu("wtWave1Menu", available_when=_machine_when),
     ExternalMenu("wtPd1Menu", available_when=_machine_when),
     ExternalMenu("wtLev1Menu", available_when=_machine_when),
@@ -54,6 +56,7 @@ _machine_menus_osc0 = [
     ExternalMenu("skinRandAmtMenu", available_when=_machine_when),
     # Resonator
     ExternalMenu("resonatorModelMenu", available_when=_machine_when),
+    ExternalMenu("resonatorPitchMenu", available_when=_machine_when),
     ExternalMenu("resonatorStructureMenu", available_when=_machine_when),
     ExternalMenu("resonatorBrightMenu", available_when=_machine_when),
     ExternalMenu("resonatorDampingMenu", available_when=_machine_when),

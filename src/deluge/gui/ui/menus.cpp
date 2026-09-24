@@ -257,6 +257,7 @@ using machine::U8Param;
 // FM Drum — Algo + 6 dials
 PLACE_SDRAM_DATA U8Param fmDrumAlgoMenu{STRING_FOR_MACHINE_ALGO, machine::fmDrumAlgo, OscType::FM_DRUM, 6};
 PLACE_SDRAM_DATA U8Param fmDrumTuneMenu{STRING_FOR_PITCH, machine::fmDrumTune, OscType::FM_DRUM};
+PLACE_SDRAM_DATA U8Param fmDrumWaveMenu{STRING_FOR_WAVEFORM, machine::fmDrumWave, OscType::FM_DRUM, 120};
 PLACE_SDRAM_DATA U8Param fmDrumSweepMenu{STRING_FOR_MACHINE_SWEEP, machine::fmDrumSweep, OscType::FM_DRUM};
 PLACE_SDRAM_DATA U8Param fmDrumModMenu{STRING_FOR_AMOUNT, machine::fmDrumMod, OscType::FM_DRUM};
 PLACE_SDRAM_DATA U8Param fmDrumFoldMenu{STRING_FOR_MACHINE_FOLD, machine::fmDrumFold, OscType::FM_DRUM};
@@ -267,6 +268,7 @@ PLACE_SDRAM_DATA machine::FmDrumRandDest fmDrumRandDestMenu{STRING_FOR_RANDOM};
 PLACE_SDRAM_DATA U8Param fmDrumRandAmtMenu{STRING_FOR_AMOUNT, machine::fmDrumRandAmt, OscType::FM_DRUM};
 
 // Wavetone — full palette (kept)
+PLACE_SDRAM_DATA U8Param wtPitchMenu{STRING_FOR_PITCH, machine::wtPitch, OscType::WAVETONE};
 PLACE_SDRAM_DATA U8Param wtWave1Menu{STRING_FOR_WAVEFORM, machine::wtOsc1Wave, OscType::WAVETONE, 120};
 PLACE_SDRAM_DATA U8Param wtPd1Menu{STRING_FOR_MACHINE_PHASE_DIST, machine::wtOsc1Pd, OscType::WAVETONE, 100};
 PLACE_SDRAM_DATA U8Param wtLev1Menu{STRING_FOR_VOLUME_LEVEL, machine::wtOsc1Lev, OscType::WAVETONE};
@@ -305,8 +307,9 @@ PLACE_SDRAM_DATA machine::SkinVelDest skinVelDestMenu{STRING_FOR_VELOCITY};
 PLACE_SDRAM_DATA machine::SkinRandDest skinRandDestMenu{STRING_FOR_RANDOM};
 PLACE_SDRAM_DATA U8Param skinRandAmtMenu{STRING_FOR_AMOUNT, machine::skinRandAmt, OscType::SKIN};
 
-// Resonator — Model + 5 dials (Rings-inspired)
+// Resonator — Model + pitch + 5 dials (Rings-inspired)
 PLACE_SDRAM_DATA machine::ResonatorModel resonatorModelMenu{STRING_FOR_MACHINE_ALGO};
+PLACE_SDRAM_DATA U8Param resonatorPitchMenu{STRING_FOR_PITCH, machine::resPitch, OscType::RESONATOR};
 PLACE_SDRAM_DATA U8Param resonatorStructureMenu{STRING_FOR_MACHINE_HARMONICS, machine::resStructure,
                                                 OscType::RESONATOR};
 PLACE_SDRAM_DATA U8Param resonatorBrightMenu{STRING_FOR_MACHINE_COLOR, machine::resBright, OscType::RESONATOR};
