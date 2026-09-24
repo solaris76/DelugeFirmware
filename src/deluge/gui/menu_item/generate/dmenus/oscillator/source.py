@@ -39,6 +39,7 @@ _machine_menus_osc0 = [
     ExternalMenu("skinMorphMenu", available_when=_machine_when),
     ExternalMenu("skinFoldMenu", available_when=_machine_when),
     ExternalMenu("skinDecayMenu", available_when=_machine_when),
+    ExternalMenu("skinNoiseMenu", available_when=_machine_when),
     # Resonator
     ExternalMenu("resonatorModelMenu", available_when=_machine_when),
     ExternalMenu("resonatorStructureMenu", available_when=_machine_when),

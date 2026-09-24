@@ -169,6 +169,26 @@ inline int32_t windowedNoiseBurst(uint32_t& noiseState, uint32_t& samplesLeft, f
 	return static_cast<int32_t>(n * amount * win);
 }
 
+// ~1.5ms ease-in so hard onsets don't click into delay/reverb.
+constexpr float kOnsetAttackSamples = 64.f;
+
+inline float onsetAttackGain(uint32_t sampleCount) {
+	if (sampleCount >= static_cast<uint32_t>(kOnsetAttackSamples)) {
+		return 1.f;
+	}
+	float atk = static_cast<float>(sampleCount) / kOnsetAttackSamples;
+	return atk * atk;
+}
+
+inline int32_t withOnsetAttack(int32_t mix, uint32_t sampleCount) {
+	float g = onsetAttackGain(sampleCount);
+	return g >= 1.f ? mix : static_cast<int32_t>(mix * g);
+}
+
+inline float withOnsetAttackF(float f, uint32_t sampleCount) {
+	return f * onsetAttackGain(sampleCount);
+}
+
 } // namespace
 
 void renderFmDrum(FmDrumPatch const& patch, MachineVoiceState& st, int32_t* dest, int32_t numSamples,
@@ -285,7 +305,7 @@ void renderFmDrum(FmDrumPatch const& patch, MachineVoiceState& st, int32_t* dest
 		int32_t click =
 		    windowedNoiseBurst(st.noiseState, st.clickSamplesLeft, clickTotal, noiseAmt * clickBias * 0.85f, 3);
 
-		accumulateSample(&dest[i], body + noise + click, amp, amplitudeIncrement);
+		accumulateSample(&dest[i], withOnsetAttack(body + noise + click, st.sampleCount), amp, amplitudeIncrement);
 	}
 }
 
@@ -536,7 +556,7 @@ void renderPerc(PercPatch const& patch, MachineVoiceState& st, int32_t* dest, in
 		int32_t click = windowedNoiseBurst(st.noiseState, st.clickSamplesLeft, clickTotal, crunch * 0.85f, 3);
 
 		float f = softClip((body + noise + click) * kInvInt32 * drive) * kPercLevel;
-		accumulateSample(&dest[i], floatToSample(f), amp, amplitudeIncrement);
+		accumulateSample(&dest[i], floatToSample(withOnsetAttackF(f, st.sampleCount)), amp, amplitudeIncrement);
 	}
 }
 
@@ -568,10 +588,10 @@ void renderSkin(SkinPatch const& patch, MachineVoiceState& st, int32_t* dest, in
 
 	float decayF = u8f(patch.decay);
 	bool isMetal = mode == SkinMode::Metal;
-	// Short decay used to crank the attack pop — that hard-cut clicks on Metal.
-	float popAmt = isMetal ? (0.14f + (1.f - decayF) * 0.16f) : (0.22f + (1.f - decayF) * 0.28f);
-	float noiseAmt = isMetal ? (0.12f + harm * 0.2f) : (0.05f + (1.f - decayF) * 0.28f);
-	float noiseScale = noiseAmt * 0.45f;
+	float noiseAmt = u8f(patch.noise);
+	// Transient pop + hiss both scale with Noise dial (0 = clean body).
+	float popAmt = noiseAmt * (isMetal ? (0.14f + (1.f - decayF) * 0.16f) : (0.22f + (1.f - decayF) * 0.28f));
+	float noiseScale = noiseAmt * (isMetal ? (0.35f + harm * 0.4f) : 0.45f);
 	bool doFold = fold > 0.01f;
 
 	// Block-constant ratios + osc decay multipliers (pitchScale applied in-loop).
@@ -667,7 +687,7 @@ void renderSkin(SkinPatch const& patch, MachineVoiceState& st, int32_t* dest, in
 		}
 		f *= kSkinLevel;
 
-		accumulateSample(&dest[i], floatToSample(f), amp, amplitudeIncrement);
+		accumulateSample(&dest[i], floatToSample(withOnsetAttackF(f, st.sampleCount)), amp, amplitudeIncrement);
 	}
 }
 
@@ -811,7 +831,7 @@ void renderResonator(ResonatorPatch const& patch, MachineVoiceState& st, int32_t
 			out = -1.f;
 		}
 
-		accumulateSample(&dest[i], floatToSample(out), amp, amplitudeIncrement);
+		accumulateSample(&dest[i], floatToSample(withOnsetAttackF(out, st.sampleCount)), amp, amplitudeIncrement);
 	}
 }
 
@@ -960,7 +980,7 @@ void renderSyOsc(SyOscPatch const& patch, MachineVoiceState& st, int32_t* dest, 
 		f = lp * lpAmt + f * (1.f - lpAmt);
 		f = softClip(f) * kSyLevel;
 
-		accumulateSample(&dest[i], floatToSample(f), amp, amplitudeIncrement);
+		accumulateSample(&dest[i], floatToSample(withOnsetAttackF(f, st.sampleCount)), amp, amplitudeIncrement);
 	}
 }
 

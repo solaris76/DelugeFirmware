@@ -98,6 +98,7 @@ struct SkinPatch {
 	uint8_t morph{20}; // sine→square
 	uint8_t fold{25};
 	uint8_t decay{72}; // length; attack character derived
+	uint8_t noise{35}; // noise + transient (0 = clean)
 
 	void initDefaults();
 	void applyModeDefaults();

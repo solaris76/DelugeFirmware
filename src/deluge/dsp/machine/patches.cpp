@@ -90,6 +90,7 @@ void SkinPatch::applyModeDefaults() {
 		morph = 15;
 		fold = 18;
 		decay = 78;
+		noise = 28;
 		break;
 	case SkinMode::Liquid:
 		pitch = 22;
@@ -97,6 +98,7 @@ void SkinPatch::applyModeDefaults() {
 		morph = 10;
 		fold = 32;
 		decay = 70;
+		noise = 45;
 		break;
 	case SkinMode::Metal:
 		pitch = 72;
@@ -104,6 +106,7 @@ void SkinPatch::applyModeDefaults() {
 		morph = 55;
 		fold = 48;
 		decay = 55;
+		noise = 55;
 		break;
 	default:
 		break;

@@ -224,6 +224,9 @@ inline uint8_t* skinFold(Source& s) {
 inline uint8_t* skinDecay(Source& s) {
 	return &s.ensureSkinPatch()->decay;
 }
+inline uint8_t* skinNoise(Source& s) {
+	return &s.ensureSkinPatch()->noise;
+}
 
 // --- Resonator ---
 inline uint8_t* resStructure(Source& s) {

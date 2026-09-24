@@ -284,13 +284,14 @@ PLACE_SDRAM_DATA U8Param percNoiseMenu{STRING_FOR_NOISE_LEVEL, machine::percNois
 PLACE_SDRAM_DATA U8Param percDecayMenu{STRING_FOR_DECAY, machine::percDecay, OscType::PERC};
 PLACE_SDRAM_DATA U8Param percCrunchMenu{STRING_FOR_MACHINE_DRIVE, machine::percCrunch, OscType::PERC};
 
-// Skin — Mode + 5 dials
+// Skin — Mode + 6 dials
 PLACE_SDRAM_DATA machine::SkinMode skinModeMenu{STRING_FOR_MACHINE_ALGO};
 PLACE_SDRAM_DATA U8Param skinPitchMenu{STRING_FOR_PITCH, machine::skinPitch, OscType::SKIN};
 PLACE_SDRAM_DATA U8Param skinHarmMenu{STRING_FOR_MACHINE_HARMONICS, machine::skinHarm, OscType::SKIN};
 PLACE_SDRAM_DATA U8Param skinMorphMenu{STRING_FOR_WAVEFORM, machine::skinMorph, OscType::SKIN};
 PLACE_SDRAM_DATA U8Param skinFoldMenu{STRING_FOR_MACHINE_FOLD, machine::skinFold, OscType::SKIN};
 PLACE_SDRAM_DATA U8Param skinDecayMenu{STRING_FOR_DECAY, machine::skinDecay, OscType::SKIN};
+PLACE_SDRAM_DATA U8Param skinNoiseMenu{STRING_FOR_NOISE_LEVEL, machine::skinNoise, OscType::SKIN};
 
 // Resonator — Model + 5 dials (Rings-inspired)
 PLACE_SDRAM_DATA machine::ResonatorModel resonatorModelMenu{STRING_FOR_MACHINE_ALGO};
