@@ -36,11 +36,9 @@ inline float envelopeTimeScaleFromDecayParam(int32_t decay_param) {
 	return 0.35f + u * u * 5.65f;
 }
 
-// Bipolar around mid-velocity (64): soft lowers dest dial, hard raises it (~±48 at extremes).
-inline constexpr int32_t kMachineVelDepth = 48;
-
-inline void applyVelToU8(uint8_t& field, int32_t velocitySourceValue) {
-	int32_t delta = static_cast<int32_t>((static_cast<int64_t>(velocitySourceValue) * kMachineVelDepth) / 2147483647);
+// Bipolar offset onto a dial. Vel uses ±48; Random uses ±36 for musical per-hit jitter.
+inline void applySrcToU8(uint8_t& field, int32_t sourceValue, int32_t depth) {
+	int32_t delta = static_cast<int32_t>((static_cast<int64_t>(sourceValue) * depth) / 2147483647);
 	int32_t v = static_cast<int32_t>(field) + delta;
 	if (v < 0) {
 		v = 0;
@@ -51,169 +49,194 @@ inline void applyVelToU8(uint8_t& field, int32_t velocitySourceValue) {
 	field = static_cast<uint8_t>(v);
 }
 
-inline void applyVelocityToFmDrum(FmDrumPatch& p, int32_t velSrc) {
-	uint8_t* f = nullptr;
-	switch (p.velDest) {
+inline constexpr int32_t kMachineVelDepth = 48;
+// Max bipolar dial offset at randAmt=127 (~±56).
+inline constexpr int32_t kMachineRandMaxDepth = 56;
+
+inline int32_t randomDepthFromAmt(uint8_t randAmt) {
+	return (static_cast<int32_t>(randAmt) * kMachineRandMaxDepth) / 127;
+}
+
+inline uint8_t* fmDrumDestField(FmDrumPatch& p, uint8_t dest) {
+	switch (dest) {
 	case 1:
-		f = &p.tune;
-		break;
+		return &p.tune;
 	case 2:
-		f = &p.sweep;
-		break;
+		return &p.sweep;
 	case 3:
-		f = &p.mod;
-		break;
+		return &p.mod;
 	case 4:
-		f = &p.fold;
-		break;
+		return &p.fold;
 	case 5:
-		f = &p.decay;
-		break;
+		return &p.decay;
 	case 6:
-		f = &p.noise;
-		break;
+		return &p.noise;
 	default:
-		return;
+		return nullptr;
 	}
-	applyVelToU8(*f, velSrc);
+}
+
+inline uint8_t* waveToneDestField(WaveTonePatch& p, uint8_t dest) {
+	switch (dest) {
+	case 1:
+		return &p.osc1Wave;
+	case 2:
+		return &p.osc1PhaseDist;
+	case 3:
+		return &p.osc1Level;
+	case 4:
+		return &p.osc2Wave;
+	case 5:
+		return &p.osc2PhaseDist;
+	case 6:
+		return &p.osc2Level;
+	case 7:
+		return &p.oscDrift;
+	case 8:
+		return &p.noiseLevel;
+	case 9:
+		return &p.noiseCharacter;
+	default:
+		return nullptr;
+	}
+}
+
+inline uint8_t* percDestField(PercPatch& p, uint8_t dest) {
+	switch (dest) {
+	case 1:
+		return &p.pitch;
+	case 2:
+		return &p.color;
+	case 3:
+		return &p.noise;
+	case 4:
+		return &p.decay;
+	case 5:
+		return &p.crunch;
+	default:
+		return nullptr;
+	}
+}
+
+inline uint8_t* skinDestField(SkinPatch& p, uint8_t dest) {
+	switch (dest) {
+	case 1:
+		return &p.pitch;
+	case 2:
+		return &p.harm;
+	case 3:
+		return &p.morph;
+	case 4:
+		return &p.fold;
+	case 5:
+		return &p.decay;
+	case 6:
+		return &p.noise;
+	default:
+		return nullptr;
+	}
+}
+
+inline uint8_t* resonatorDestField(ResonatorPatch& p, uint8_t dest) {
+	switch (dest) {
+	case 1:
+		return &p.structure;
+	case 2:
+		return &p.brightness;
+	case 3:
+		return &p.damping;
+	case 4:
+		return &p.position;
+	case 5:
+		return &p.excite;
+	default:
+		return nullptr;
+	}
+}
+
+inline uint8_t* syOscDestField(SyOscPatch& p, uint8_t dest) {
+	switch (dest) {
+	case 1:
+		return &p.pitch;
+	case 2:
+		return &p.sweep;
+	case 3:
+		return &p.ratio;
+	case 4:
+		return &p.color;
+	case 5:
+		return &p.noise;
+	case 6:
+		return &p.decay;
+	default:
+		return nullptr;
+	}
+}
+
+inline void applyVelocityToFmDrum(FmDrumPatch& p, int32_t velSrc) {
+	if (uint8_t* f = fmDrumDestField(p, p.velDest)) {
+		applySrcToU8(*f, velSrc, kMachineVelDepth);
+	}
+}
+inline void applyRandomToFmDrum(FmDrumPatch& p, int32_t randSrc) {
+	if (uint8_t* f = fmDrumDestField(p, p.randDest)) {
+		applySrcToU8(*f, randSrc, randomDepthFromAmt(p.randAmt));
+	}
 }
 
 inline void applyVelocityToWaveTone(WaveTonePatch& p, int32_t velSrc) {
-	uint8_t* f = nullptr;
-	switch (p.velDest) {
-	case 1:
-		f = &p.osc1Wave;
-		break;
-	case 2:
-		f = &p.osc1PhaseDist;
-		break;
-	case 3:
-		f = &p.osc1Level;
-		break;
-	case 4:
-		f = &p.osc2Wave;
-		break;
-	case 5:
-		f = &p.osc2PhaseDist;
-		break;
-	case 6:
-		f = &p.osc2Level;
-		break;
-	case 7:
-		f = &p.oscDrift;
-		break;
-	case 8:
-		f = &p.noiseLevel;
-		break;
-	case 9:
-		f = &p.noiseCharacter;
-		break;
-	default:
-		return;
+	if (uint8_t* f = waveToneDestField(p, p.velDest)) {
+		applySrcToU8(*f, velSrc, kMachineVelDepth);
 	}
-	applyVelToU8(*f, velSrc);
+}
+inline void applyRandomToWaveTone(WaveTonePatch& p, int32_t randSrc) {
+	if (uint8_t* f = waveToneDestField(p, p.randDest)) {
+		applySrcToU8(*f, randSrc, randomDepthFromAmt(p.randAmt));
+	}
 }
 
 inline void applyVelocityToPerc(PercPatch& p, int32_t velSrc) {
-	uint8_t* f = nullptr;
-	switch (p.velDest) {
-	case 1:
-		f = &p.pitch;
-		break;
-	case 2:
-		f = &p.color;
-		break;
-	case 3:
-		f = &p.noise;
-		break;
-	case 4:
-		f = &p.decay;
-		break;
-	case 5:
-		f = &p.crunch;
-		break;
-	default:
-		return;
+	if (uint8_t* f = percDestField(p, p.velDest)) {
+		applySrcToU8(*f, velSrc, kMachineVelDepth);
 	}
-	applyVelToU8(*f, velSrc);
+}
+inline void applyRandomToPerc(PercPatch& p, int32_t randSrc) {
+	if (uint8_t* f = percDestField(p, p.randDest)) {
+		applySrcToU8(*f, randSrc, randomDepthFromAmt(p.randAmt));
+	}
 }
 
 inline void applyVelocityToSkin(SkinPatch& p, int32_t velSrc) {
-	uint8_t* f = nullptr;
-	switch (p.velDest) {
-	case 1:
-		f = &p.pitch;
-		break;
-	case 2:
-		f = &p.harm;
-		break;
-	case 3:
-		f = &p.morph;
-		break;
-	case 4:
-		f = &p.fold;
-		break;
-	case 5:
-		f = &p.decay;
-		break;
-	case 6:
-		f = &p.noise;
-		break;
-	default:
-		return;
+	if (uint8_t* f = skinDestField(p, p.velDest)) {
+		applySrcToU8(*f, velSrc, kMachineVelDepth);
 	}
-	applyVelToU8(*f, velSrc);
+}
+inline void applyRandomToSkin(SkinPatch& p, int32_t randSrc) {
+	if (uint8_t* f = skinDestField(p, p.randDest)) {
+		applySrcToU8(*f, randSrc, randomDepthFromAmt(p.randAmt));
+	}
 }
 
 inline void applyVelocityToResonator(ResonatorPatch& p, int32_t velSrc) {
-	uint8_t* f = nullptr;
-	switch (p.velDest) {
-	case 1:
-		f = &p.structure;
-		break;
-	case 2:
-		f = &p.brightness;
-		break;
-	case 3:
-		f = &p.damping;
-		break;
-	case 4:
-		f = &p.position;
-		break;
-	case 5:
-		f = &p.excite;
-		break;
-	default:
-		return;
+	if (uint8_t* f = resonatorDestField(p, p.velDest)) {
+		applySrcToU8(*f, velSrc, kMachineVelDepth);
 	}
-	applyVelToU8(*f, velSrc);
+}
+inline void applyRandomToResonator(ResonatorPatch& p, int32_t randSrc) {
+	if (uint8_t* f = resonatorDestField(p, p.randDest)) {
+		applySrcToU8(*f, randSrc, randomDepthFromAmt(p.randAmt));
+	}
 }
 
 inline void applyVelocityToSyOsc(SyOscPatch& p, int32_t velSrc) {
-	uint8_t* f = nullptr;
-	switch (p.velDest) {
-	case 1:
-		f = &p.pitch;
-		break;
-	case 2:
-		f = &p.sweep;
-		break;
-	case 3:
-		f = &p.ratio;
-		break;
-	case 4:
-		f = &p.color;
-		break;
-	case 5:
-		f = &p.noise;
-		break;
-	case 6:
-		f = &p.decay;
-		break;
-	default:
-		return;
+	if (uint8_t* f = syOscDestField(p, p.velDest)) {
+		applySrcToU8(*f, velSrc, kMachineVelDepth);
 	}
-	applyVelToU8(*f, velSrc);
+}
+inline void applyRandomToSyOsc(SyOscPatch& p, int32_t randSrc) {
+	if (uint8_t* f = syOscDestField(p, p.randDest)) {
+		applySrcToU8(*f, randSrc, randomDepthFromAmt(p.randAmt));
+	}
 }
 
 } // namespace deluge::dsp::machine

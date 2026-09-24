@@ -28,6 +28,8 @@ struct FmDrumPatch {
 	uint8_t decay{70}; // body length
 	uint8_t noise{35}; // noise + transient
 	uint8_t velDest{0};
+	uint8_t randDest{0}; // same dial indices as velDest
+	uint8_t randAmt{40}; // 0–127 scales random depth
 
 	void initDefaults();
 };
@@ -57,8 +59,10 @@ struct WaveTonePatch {
 	uint8_t noiseFiltWidth{80};
 	uint8_t noiseType{0}; // grain / tuned / s&w
 	uint8_t noiseCharacter{0};
-	// velDest: 0=Off, 1=Wave1, 2=PD1, 3=Lev1, 4=Wave2, 5=PD2, 6=Lev2, 7=Drift, 8=Noise, 9=NChar
+	// velDest/randDest: 0=Off, 1=Wave1, 2=PD1, 3=Lev1, 4=Wave2, 5=PD2, 6=Lev2, 7=Drift, 8=Noise, 9=NChar
 	uint8_t velDest{0};
+	uint8_t randDest{0};
+	uint8_t randAmt{40};
 
 	void initDefaults();
 };
@@ -83,6 +87,8 @@ struct PercPatch {
 	uint8_t decay{50};  // body length
 	uint8_t crunch{40}; // click + drive
 	uint8_t velDest{0};
+	uint8_t randDest{0};
+	uint8_t randAmt{40};
 
 	void initDefaults();
 	void applyRoleDefaults();
@@ -107,6 +113,8 @@ struct SkinPatch {
 	uint8_t decay{72}; // length; attack character derived
 	uint8_t noise{35}; // noise + transient (0 = clean)
 	uint8_t velDest{0};
+	uint8_t randDest{0};
+	uint8_t randAmt{40};
 
 	void initDefaults();
 	void applyModeDefaults();
@@ -131,6 +139,8 @@ struct ResonatorPatch {
 	uint8_t position{40};   // strike / pickup position
 	uint8_t excite{70};     // impulse / noise hit amount
 	uint8_t velDest{0};
+	uint8_t randDest{0};
+	uint8_t randAmt{40};
 
 	void initDefaults();
 	void applyModelDefaults();
@@ -158,6 +168,8 @@ struct SyOscPatch {
 	uint8_t noise{30};
 	uint8_t decay{55};
 	uint8_t velDest{0};
+	uint8_t randDest{0};
+	uint8_t randAmt{40};
 
 	void initDefaults();
 	void applyModeDefaults();

@@ -77,7 +77,7 @@ sample::PitchSpeed sample0PitchSpeedMenu{STRING_FOR_PITCH_SPEED, 0};
 sample::Interpolation sample0InterpolationMenu{STRING_FOR_INTERPOLATION, STRING_FOR_SAMP_INTERP_MENU_TITLE, 0};
 sample::Start sample0StartMenu{STRING_FOR_START_POINT, 0};
 sample::End sample0EndMenu{STRING_FOR_END_POINT, 0};
-std::array<MenuItem*, 68> child6 = {
+std::array<MenuItem*, 80> child6 = {
     &osc0TypeMenu,
     &deluge::gui::menu_item::file0SelectorMenu,
     &osc0PhiZoneAMenu,
@@ -97,6 +97,8 @@ std::array<MenuItem*, 68> child6 = {
     &fmDrumDecayMenu,
     &fmDrumNoiseMenu,
     &fmDrumVelDestMenu,
+    &fmDrumRandDestMenu,
+    &fmDrumRandAmtMenu,
     &wtWave1Menu,
     &wtPd1Menu,
     &wtLev1Menu,
@@ -109,6 +111,8 @@ std::array<MenuItem*, 68> child6 = {
     &wtNoiseTypeMenu,
     &wtNoiseCharMenu,
     &wtVelDestMenu,
+    &wtRandDestMenu,
+    &wtRandAmtMenu,
     &percRoleMenu,
     &percPitchMenu,
     &percColorMenu,
@@ -116,6 +120,8 @@ std::array<MenuItem*, 68> child6 = {
     &percDecayMenu,
     &percCrunchMenu,
     &percVelDestMenu,
+    &percRandDestMenu,
+    &percRandAmtMenu,
     &skinModeMenu,
     &skinPitchMenu,
     &skinHarmMenu,
@@ -124,6 +130,8 @@ std::array<MenuItem*, 68> child6 = {
     &skinDecayMenu,
     &skinNoiseMenu,
     &skinVelDestMenu,
+    &skinRandDestMenu,
+    &skinRandAmtMenu,
     &resonatorModelMenu,
     &resonatorStructureMenu,
     &resonatorBrightMenu,
@@ -131,6 +139,8 @@ std::array<MenuItem*, 68> child6 = {
     &resonatorPositionMenu,
     &resonatorExciteMenu,
     &resonatorVelDestMenu,
+    &resonatorRandDestMenu,
+    &resonatorRandAmtMenu,
     &syOscModeMenu,
     &syOscPitchMenu,
     &syOscSweepMenu,
@@ -139,6 +149,8 @@ std::array<MenuItem*, 68> child6 = {
     &syOscNoiseMenu,
     &syOscDecayMenu,
     &syOscVelDestMenu,
+    &syOscRandDestMenu,
+    &syOscRandAmtMenu,
     &sample0ReverseMenu,
     &sample0RepeatMenu,
     &sample0TimeStretchMenu,

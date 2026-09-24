@@ -2755,10 +2755,12 @@ dontUseCache: {}
 			float timeScale =
 			    deluge::dsp::machine::envelopeTimeScaleFromDecayParam(paramFinalValues[params::LOCAL_ENV_0_DECAY]);
 			int32_t velSrc = sourceValues[util::to_underlying(PatchSource::VELOCITY)];
+			int32_t randSrc = sourceValues[util::to_underlying(PatchSource::RANDOM)];
 			switch (src.oscType) {
 			case OscType::FM_DRUM: {
 				auto patch = *src.ensureFmDrumPatch();
 				deluge::dsp::machine::applyVelocityToFmDrum(patch, velSrc);
+				deluge::dsp::machine::applyRandomToFmDrum(patch, randSrc);
 				deluge::dsp::machine::renderFmDrum(patch, mstate, machineBuf, numSamples, phaseIncrement,
 				                                   sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
@@ -2766,6 +2768,7 @@ dontUseCache: {}
 			case OscType::WAVETONE: {
 				auto patch = *src.ensureWaveTonePatch();
 				deluge::dsp::machine::applyVelocityToWaveTone(patch, velSrc);
+				deluge::dsp::machine::applyRandomToWaveTone(patch, randSrc);
 				deluge::dsp::machine::renderWaveTone(patch, mstate, machineBuf, numSamples, phaseIncrement,
 				                                     sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
@@ -2773,6 +2776,7 @@ dontUseCache: {}
 			case OscType::PERC: {
 				auto patch = *src.ensurePercPatch();
 				deluge::dsp::machine::applyVelocityToPerc(patch, velSrc);
+				deluge::dsp::machine::applyRandomToPerc(patch, randSrc);
 				deluge::dsp::machine::renderPerc(patch, mstate, machineBuf, numSamples, phaseIncrement, sourceAmplitude,
 				                                 amplitudeIncrement, timeScale);
 				break;
@@ -2780,6 +2784,7 @@ dontUseCache: {}
 			case OscType::SKIN: {
 				auto patch = *src.ensureSkinPatch();
 				deluge::dsp::machine::applyVelocityToSkin(patch, velSrc);
+				deluge::dsp::machine::applyRandomToSkin(patch, randSrc);
 				deluge::dsp::machine::renderSkin(patch, mstate, machineBuf, numSamples, phaseIncrement, sourceAmplitude,
 				                                 amplitudeIncrement, timeScale);
 				break;
@@ -2787,6 +2792,7 @@ dontUseCache: {}
 			case OscType::RESONATOR: {
 				auto patch = *src.ensureResonatorPatch();
 				deluge::dsp::machine::applyVelocityToResonator(patch, velSrc);
+				deluge::dsp::machine::applyRandomToResonator(patch, randSrc);
 				deluge::dsp::machine::renderResonator(patch, mstate, machineBuf, numSamples, phaseIncrement,
 				                                      sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
@@ -2794,6 +2800,7 @@ dontUseCache: {}
 			case OscType::SY_OSC: {
 				auto patch = *src.ensureSyOscPatch();
 				deluge::dsp::machine::applyVelocityToSyOsc(patch, velSrc);
+				deluge::dsp::machine::applyRandomToSyOsc(patch, randSrc);
 				deluge::dsp::machine::renderSyOsc(patch, mstate, machineBuf, numSamples, phaseIncrement,
 				                                  sourceAmplitude, amplitudeIncrement, timeScale);
 				break;

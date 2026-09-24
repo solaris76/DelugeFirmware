@@ -224,6 +224,99 @@ public:
 	}
 };
 
+// Random → chosen dial (0 = Off). Per-hit bipolar jitter (~±36).
+class FmDrumRandDest final : public Selection {
+public:
+	FmDrumRandDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureFmDrumPatch()->randDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureFmDrumPatch()->randDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Pitch", "Sweep", "Amount", "Fold", "Decay", "Noise"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::FM_DRUM;
+	}
+};
+
+class WaveToneRandDest final : public Selection {
+public:
+	WaveToneRandDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureWaveTonePatch()->randDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureWaveTonePatch()->randDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Wave1", "PD1", "Lev1", "Wave2", "PD2", "Lev2", "Drift", "Noise", "NChar"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::WAVETONE;
+	}
+};
+
+class PercRandDest final : public Selection {
+public:
+	PercRandDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensurePercPatch()->randDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensurePercPatch()->randDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Pitch", "Color", "Noise", "Decay", "Drive"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::PERC;
+	}
+};
+
+class SkinRandDest final : public Selection {
+public:
+	SkinRandDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureSkinPatch()->randDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureSkinPatch()->randDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Pitch", "Harm", "Wave", "Fold", "Decay", "Noise"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::SKIN;
+	}
+};
+
+class ResonatorRandDest final : public Selection {
+public:
+	ResonatorRandDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override {
+		setValue(soundEditor.currentSound->sources[0].ensureResonatorPatch()->randDest);
+	}
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureResonatorPatch()->randDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Harm", "Color", "Decay", "Mix", "Hit"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::RESONATOR;
+	}
+};
+
+class SyOscRandDest final : public Selection {
+public:
+	SyOscRandDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureSyOscPatch()->randDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureSyOscPatch()->randDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Pitch", "Sweep", "Ratio", "Color", "Noise", "Decay"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::SY_OSC;
+	}
+};
+
 // --- FM Drum ---
 inline uint8_t* fmDrumAlgo(Source& s) {
 	return &s.ensureFmDrumPatch()->algorithm;
@@ -245,6 +338,9 @@ inline uint8_t* fmDrumDecay(Source& s) {
 }
 inline uint8_t* fmDrumNoise(Source& s) {
 	return &s.ensureFmDrumPatch()->noise;
+}
+inline uint8_t* fmDrumRandAmt(Source& s) {
+	return &s.ensureFmDrumPatch()->randAmt;
 }
 
 // --- Wavetone (unchanged full palette) ---
@@ -281,6 +377,9 @@ inline uint8_t* wtNoiseType(Source& s) {
 inline uint8_t* wtNoiseChar(Source& s) {
 	return &s.ensureWaveTonePatch()->noiseCharacter;
 }
+inline uint8_t* wtRandAmt(Source& s) {
+	return &s.ensureWaveTonePatch()->randAmt;
+}
 
 // --- Perc ---
 inline uint8_t* percPitch(Source& s) {
@@ -297,6 +396,9 @@ inline uint8_t* percDecay(Source& s) {
 }
 inline uint8_t* percCrunch(Source& s) {
 	return &s.ensurePercPatch()->crunch;
+}
+inline uint8_t* percRandAmt(Source& s) {
+	return &s.ensurePercPatch()->randAmt;
 }
 
 // --- Skin ---
@@ -318,6 +420,9 @@ inline uint8_t* skinDecay(Source& s) {
 inline uint8_t* skinNoise(Source& s) {
 	return &s.ensureSkinPatch()->noise;
 }
+inline uint8_t* skinRandAmt(Source& s) {
+	return &s.ensureSkinPatch()->randAmt;
+}
 
 // --- Resonator ---
 inline uint8_t* resStructure(Source& s) {
@@ -334,6 +439,9 @@ inline uint8_t* resPosition(Source& s) {
 }
 inline uint8_t* resExcite(Source& s) {
 	return &s.ensureResonatorPatch()->excite;
+}
+inline uint8_t* resRandAmt(Source& s) {
+	return &s.ensureResonatorPatch()->randAmt;
 }
 
 // --- SY Osc ---
@@ -354,6 +462,9 @@ inline uint8_t* syOscNoise(Source& s) {
 }
 inline uint8_t* syOscDecay(Source& s) {
 	return &s.ensureSyOscPatch()->decay;
+}
+inline uint8_t* syOscRandAmt(Source& s) {
+	return &s.ensureSyOscPatch()->randAmt;
 }
 
 } // namespace deluge::gui::menu_item::machine
