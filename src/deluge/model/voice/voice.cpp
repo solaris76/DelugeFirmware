@@ -2754,31 +2754,50 @@ dontUseCache: {}
 			// (and filter/FX still have something to work on). Role dials keep relative shape.
 			float timeScale =
 			    deluge::dsp::machine::envelopeTimeScaleFromDecayParam(paramFinalValues[params::LOCAL_ENV_0_DECAY]);
+			int32_t velSrc = sourceValues[util::to_underlying(PatchSource::VELOCITY)];
 			switch (src.oscType) {
-			case OscType::FM_DRUM:
-				deluge::dsp::machine::renderFmDrum(*src.ensureFmDrumPatch(), mstate, machineBuf, numSamples,
-				                                   phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+			case OscType::FM_DRUM: {
+				auto patch = *src.ensureFmDrumPatch();
+				deluge::dsp::machine::applyVelocityToFmDrum(patch, velSrc);
+				deluge::dsp::machine::renderFmDrum(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                   sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
-			case OscType::WAVETONE:
-				deluge::dsp::machine::renderWaveTone(*src.ensureWaveTonePatch(), mstate, machineBuf, numSamples,
-				                                     phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::WAVETONE: {
+				auto patch = *src.ensureWaveTonePatch();
+				deluge::dsp::machine::applyVelocityToWaveTone(patch, velSrc);
+				deluge::dsp::machine::renderWaveTone(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                     sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
-			case OscType::PERC:
-				deluge::dsp::machine::renderPerc(*src.ensurePercPatch(), mstate, machineBuf, numSamples, phaseIncrement,
-				                                 sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::PERC: {
+				auto patch = *src.ensurePercPatch();
+				deluge::dsp::machine::applyVelocityToPerc(patch, velSrc);
+				deluge::dsp::machine::renderPerc(patch, mstate, machineBuf, numSamples, phaseIncrement, sourceAmplitude,
+				                                 amplitudeIncrement, timeScale);
 				break;
-			case OscType::SKIN:
-				deluge::dsp::machine::renderSkin(*src.ensureSkinPatch(), mstate, machineBuf, numSamples, phaseIncrement,
-				                                 sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::SKIN: {
+				auto patch = *src.ensureSkinPatch();
+				deluge::dsp::machine::applyVelocityToSkin(patch, velSrc);
+				deluge::dsp::machine::renderSkin(patch, mstate, machineBuf, numSamples, phaseIncrement, sourceAmplitude,
+				                                 amplitudeIncrement, timeScale);
 				break;
-			case OscType::RESONATOR:
-				deluge::dsp::machine::renderResonator(*src.ensureResonatorPatch(), mstate, machineBuf, numSamples,
-				                                      phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::RESONATOR: {
+				auto patch = *src.ensureResonatorPatch();
+				deluge::dsp::machine::applyVelocityToResonator(patch, velSrc);
+				deluge::dsp::machine::renderResonator(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                      sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
-			case OscType::SY_OSC:
-				deluge::dsp::machine::renderSyOsc(*src.ensureSyOscPatch(), mstate, machineBuf, numSamples,
-				                                  phaseIncrement, sourceAmplitude, amplitudeIncrement, timeScale);
+			}
+			case OscType::SY_OSC: {
+				auto patch = *src.ensureSyOscPatch();
+				deluge::dsp::machine::applyVelocityToSyOsc(patch, velSrc);
+				deluge::dsp::machine::renderSyOsc(patch, mstate, machineBuf, numSamples, phaseIncrement,
+				                                  sourceAmplitude, amplitudeIncrement, timeScale);
 				break;
+			}
 			default:
 				break;
 			}

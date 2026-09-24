@@ -18,6 +18,7 @@ inline constexpr bool isMachineOscType(OscType t) {
 }
 
 // FM Drum — Algo + 6 dials
+// velDest: 0=Off, 1=Tune, 2=Sweep, 3=Mod, 4=Fold, 5=Decay, 6=Noise
 struct FmDrumPatch {
 	uint8_t algorithm{0}; // 0–6 flavour
 	uint8_t tune{22};
@@ -26,6 +27,7 @@ struct FmDrumPatch {
 	uint8_t fold{10};  // fold + mild feedback
 	uint8_t decay{70}; // body length
 	uint8_t noise{35}; // noise + transient
+	uint8_t velDest{0};
 
 	void initDefaults();
 };
@@ -55,6 +57,8 @@ struct WaveTonePatch {
 	uint8_t noiseFiltWidth{80};
 	uint8_t noiseType{0}; // grain / tuned / s&w
 	uint8_t noiseCharacter{0};
+	// velDest: 0=Off, 1=Wave1, 2=PD1, 3=Lev1, 4=Wave2, 5=PD2, 6=Lev2, 7=Drift, 8=Noise, 9=NChar
+	uint8_t velDest{0};
 
 	void initDefaults();
 };
@@ -70,6 +74,7 @@ enum class PercRole : uint8_t {
 	COUNT,
 };
 
+// velDest: 0=Off, 1=Pitch, 2=Color, 3=Noise, 4=Decay, 5=Crunch
 struct PercPatch {
 	uint8_t role{0};
 	uint8_t pitch{72};
@@ -77,6 +82,7 @@ struct PercPatch {
 	uint8_t noise{40};  // level + tail
 	uint8_t decay{50};  // body length
 	uint8_t crunch{40}; // click + drive
+	uint8_t velDest{0};
 
 	void initDefaults();
 	void applyRoleDefaults();
@@ -91,6 +97,7 @@ enum class SkinMode : uint8_t {
 	COUNT,
 };
 
+// velDest: 0=Off, 1=Pitch, 2=Harm, 3=Morph, 4=Fold, 5=Decay, 6=Noise
 struct SkinPatch {
 	uint8_t mode{0};
 	uint8_t pitch{36}; // register (bass→treble across dial)
@@ -99,6 +106,7 @@ struct SkinPatch {
 	uint8_t fold{25};
 	uint8_t decay{72}; // length; attack character derived
 	uint8_t noise{35}; // noise + transient (0 = clean)
+	uint8_t velDest{0};
 
 	void initDefaults();
 	void applyModeDefaults();
@@ -114,6 +122,7 @@ enum class ResonatorModel : uint8_t {
 	COUNT,
 };
 
+// velDest: 0=Off, 1=Structure, 2=Bright, 3=Damping, 4=Position, 5=Excite
 struct ResonatorPatch {
 	uint8_t model{0};
 	uint8_t structure{64};  // partial spacing / detune / dispersion
@@ -121,6 +130,7 @@ struct ResonatorPatch {
 	uint8_t damping{55};    // sustain (high = longer)
 	uint8_t position{40};   // strike / pickup position
 	uint8_t excite{70};     // impulse / noise hit amount
+	uint8_t velDest{0};
 
 	void initDefaults();
 	void applyModelDefaults();
@@ -138,6 +148,7 @@ enum class SyOscMode : uint8_t {
 	COUNT,
 };
 
+// velDest: 0=Off, 1=Pitch, 2=Sweep, 3=Ratio, 4=Color, 5=Noise, 6=Decay
 struct SyOscPatch {
 	uint8_t mode{1}; // default Sync — the signature sound
 	uint8_t pitch{70};
@@ -146,6 +157,7 @@ struct SyOscPatch {
 	uint8_t color{55}; // tone / LP brightness
 	uint8_t noise{30};
 	uint8_t decay{55};
+	uint8_t velDest{0};
 
 	void initDefaults();
 	void applyModeDefaults();

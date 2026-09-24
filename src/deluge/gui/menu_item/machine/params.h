@@ -133,6 +133,97 @@ public:
 	}
 };
 
+// Velocity → chosen dial (0 = Off). Soft lowers / hard raises around mid-vel.
+class FmDrumVelDest final : public Selection {
+public:
+	FmDrumVelDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureFmDrumPatch()->velDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureFmDrumPatch()->velDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Pitch", "Sweep", "Amount", "Fold", "Decay", "Noise"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::FM_DRUM;
+	}
+};
+
+class WaveToneVelDest final : public Selection {
+public:
+	WaveToneVelDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureWaveTonePatch()->velDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureWaveTonePatch()->velDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Wave1", "PD1", "Lev1", "Wave2", "PD2", "Lev2", "Drift", "Noise", "NChar"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::WAVETONE;
+	}
+};
+
+class PercVelDest final : public Selection {
+public:
+	PercVelDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensurePercPatch()->velDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensurePercPatch()->velDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Pitch", "Color", "Noise", "Decay", "Drive"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::PERC;
+	}
+};
+
+class SkinVelDest final : public Selection {
+public:
+	SkinVelDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureSkinPatch()->velDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureSkinPatch()->velDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Pitch", "Harm", "Wave", "Fold", "Decay", "Noise"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::SKIN;
+	}
+};
+
+class ResonatorVelDest final : public Selection {
+public:
+	ResonatorVelDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureResonatorPatch()->velDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureResonatorPatch()->velDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Harm", "Color", "Decay", "Mix", "Hit"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::RESONATOR;
+	}
+};
+
+class SyOscVelDest final : public Selection {
+public:
+	SyOscVelDest(l10n::String name) : Selection(name) {}
+	void readCurrentValue() override { setValue(soundEditor.currentSound->sources[0].ensureSyOscPatch()->velDest); }
+	void writeCurrentValue() override {
+		soundEditor.currentSound->sources[0].ensureSyOscPatch()->velDest = static_cast<uint8_t>(getValue());
+	}
+	deluge::vector<std::string_view> getOptions(OptType) override {
+		return {"Off", "Pitch", "Sweep", "Ratio", "Color", "Noise", "Decay"};
+	}
+	bool isRelevant(ModControllableAudio*, int32_t) const override {
+		return soundEditor.currentSound && soundEditor.currentSound->sources[0].oscType == OscType::SY_OSC;
+	}
+};
+
 // --- FM Drum ---
 inline uint8_t* fmDrumAlgo(Source& s) {
 	return &s.ensureFmDrumPatch()->algorithm;

@@ -13,6 +13,7 @@ _machine_menus_osc0 = [
     ExternalMenu("fmDrumFoldMenu", available_when=_machine_when),
     ExternalMenu("fmDrumDecayMenu", available_when=_machine_when),
     ExternalMenu("fmDrumNoiseMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumVelDestMenu", available_when=_machine_when),
     # Wavetone (full)
     ExternalMenu("wtWave1Menu", available_when=_machine_when),
     ExternalMenu("wtPd1Menu", available_when=_machine_when),
@@ -25,6 +26,7 @@ _machine_menus_osc0 = [
     ExternalMenu("wtNoiseMenu", available_when=_machine_when),
     ExternalMenu("wtNoiseTypeMenu", available_when=_machine_when),
     ExternalMenu("wtNoiseCharMenu", available_when=_machine_when),
+    ExternalMenu("wtVelDestMenu", available_when=_machine_when),
     # Perc
     ExternalMenu("percRoleMenu", available_when=_machine_when),
     ExternalMenu("percPitchMenu", available_when=_machine_when),
@@ -32,6 +34,7 @@ _machine_menus_osc0 = [
     ExternalMenu("percNoiseMenu", available_when=_machine_when),
     ExternalMenu("percDecayMenu", available_when=_machine_when),
     ExternalMenu("percCrunchMenu", available_when=_machine_when),
+    ExternalMenu("percVelDestMenu", available_when=_machine_when),
     # Skin
     ExternalMenu("skinModeMenu", available_when=_machine_when),
     ExternalMenu("skinPitchMenu", available_when=_machine_when),
@@ -40,6 +43,7 @@ _machine_menus_osc0 = [
     ExternalMenu("skinFoldMenu", available_when=_machine_when),
     ExternalMenu("skinDecayMenu", available_when=_machine_when),
     ExternalMenu("skinNoiseMenu", available_when=_machine_when),
+    ExternalMenu("skinVelDestMenu", available_when=_machine_when),
     # Resonator
     ExternalMenu("resonatorModelMenu", available_when=_machine_when),
     ExternalMenu("resonatorStructureMenu", available_when=_machine_when),
@@ -47,6 +51,7 @@ _machine_menus_osc0 = [
     ExternalMenu("resonatorDampingMenu", available_when=_machine_when),
     ExternalMenu("resonatorPositionMenu", available_when=_machine_when),
     ExternalMenu("resonatorExciteMenu", available_when=_machine_when),
+    ExternalMenu("resonatorVelDestMenu", available_when=_machine_when),
     # SY Osc
     ExternalMenu("syOscModeMenu", available_when=_machine_when),
     ExternalMenu("syOscPitchMenu", available_when=_machine_when),
@@ -55,6 +60,7 @@ _machine_menus_osc0 = [
     ExternalMenu("syOscColorMenu", available_when=_machine_when),
     ExternalMenu("syOscNoiseMenu", available_when=_machine_when),
     ExternalMenu("syOscDecayMenu", available_when=_machine_when),
+    ExternalMenu("syOscVelDestMenu", available_when=_machine_when),
 ]
 
 sync = Menu(
