@@ -67,24 +67,6 @@ void MIDICableUSB::sendMCMsNowIfNeeded() {
 	}
 }
 
-static uint32_t setupUSBMessage(MIDIMessage message) {
-	// format message per USB midi spec on virtual cable 0
-	uint8_t cin;
-	uint8_t first_byte = (message.channel & 15) | (message.statusType << 4);
-
-	switch (first_byte) {
-	case 0xF2: // Position pointer
-		cin = 0x03;
-		break;
-
-	default:
-		cin = message.statusType; // Good for voice commands
-		break;
-	}
-
-	return ((uint32_t)message.data2 << 24) | ((uint32_t)message.data1 << 16) | ((uint32_t)first_byte << 8) | cin;
-}
-
 Error MIDICableUSB::sendMessage(MIDIMessage message) {
 	if (!connectionFlags) {
 		return Error::NONE;

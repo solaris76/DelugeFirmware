@@ -34,6 +34,7 @@
 #include "playback/mode/playback_mode.h"
 #include "processing/engines/audio_engine.h"
 #include "storage/smsysex.h"
+#include "timers_interrupts/timers_interrupts.h"
 #include "version.h"
 #include <algorithm>
 
@@ -120,13 +121,6 @@ void MidiEngine::sendAllNotesOffAllChannels() {
 		sendAllNotesOff(&playbackHandler, channel, kMIDIOutputFilterNoMPE);
 	}
 	flushMIDI();
-}
-
-/// Saturate a value into the 7 bits a MIDI data byte gets. Callers derive these from internal 32-bit parameter values,
-/// which can land outside 0-127; letting one through sets bit 7 and the receiver reads it as a status byte instead - if
-/// it falls in 0xF8-0xFF that's a spurious System Real-Time message (see #4821).
-static uint8_t toDataByte(int32_t value) {
-	return static_cast<uint8_t>(std::clamp<int32_t>(value, 0, 127));
 }
 
 void MidiEngine::sendCC(MIDISource source, int32_t channel, int32_t cc, int32_t value, int32_t filter) {
