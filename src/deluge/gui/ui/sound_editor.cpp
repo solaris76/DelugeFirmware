@@ -146,16 +146,6 @@ PLACE_SDRAM_RODATA constexpr RGB shortcut_colours [][kDisplayHeight] = {
 	{none_colour,			synth_global_colour,	synth_global_colour,    synth_global_colour,    none_colour,			none_colour,		none_colour,		none_colour   },
 };
 
-PLACE_SDRAM_RODATA constexpr RGB poly_mod_shortcut_colours [][kDisplayHeight] = {
-	{delay_colour,			delay_colour,			delay_colour,           delay_colour,           delay_colour,			mod_source_colour,	mod_source_colour,	mod_source_colour   },
-	{mod_source_colour,		mod_source_colour,		mod_source_colour,		mod_source_colour,		mod_source_colour,		mod_source_colour,	mod_source_colour,	mod_source_colour   },
-};
-
-PLACE_SDRAM_RODATA constexpr RGB mono_mod_shortcut_colours [][kDisplayHeight] = {
-	{delay_colour,			delay_colour,			delay_colour,           delay_colour,           delay_colour,			mod_source_colour,	none_colour,	none_colour   },
-	{none_colour,			synth_global_colour,	synth_global_colour,	synth_global_colour,	mod_source_colour,		none_colour,		none_colour,	none_colour   },
-};
-
 //clang-format on
 
 bool isRelevant(ModControllableAudio* forThing, MenuItem* menuitem, int32_t thing)
@@ -168,8 +158,6 @@ bool isRelevant(ModControllableAudio* forThing, MenuItem* menuitem, int32_t thin
 void SoundEditor::renderMainShortcutsOnly(ModControllableAudio* forThing, RGB image[][kDisplayWidth + kSideBarWidth],
                                           uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth], bool doKitAffectEntire)
 {
-
-	D_PRINTLN("rendering with kit affect entire? %b ", doKitAffectEntire);
 
 	// Draw the static shortcut colour map first, so that the shortcut blink (handled separately via
 	// PadLEDs::flashMainPad on the PIC) gets overlaid on top of it, instead of replacing the whole display.
@@ -192,11 +180,51 @@ void SoundEditor::renderMainShortcutsOnly(ModControllableAudio* forThing, RGB im
 	}
 }
 
+bool SoundEditor::should_render_shortcut_overlay()
+{
+	// don't render overlay if feature is turned off
+	if (!runtimeFeatureSettings.isOn(RuntimeFeatureSettingType::ShortcutOverlay)) {
+		return false;
+	}
+	
+	// don't render overlay if you're not holding shift
+	if (!Buttons::isShiftButtonPressed()) {
+		return false;
+	}
+	
+	// don't render overlay if you're not in sound editor (e.g. you're in settings menu or note/note row editors)
+	return in_sound_editor();
+}
+
+// check if we're really in a sound editing menu (e.g. grid shortcut relevant)
+// sound editor class is also used to render settings menu, note editor menu and note row editor menu
+bool SoundEditor::in_sound_editor() {
+	return getCurrentUI() == &soundEditor && !inSettingsMenu() && !inNoteEditor() && !inNoteRowEditor();;
+}
+
+// Exclude the shortcut being considered, matching the source-press gesture.
+static bool isOtherModSourcePadPressed(int32_t x, int32_t y) {
+	for (int32_t source_x = 14; source_x < 16; source_x++) {
+		for (int32_t source_y = source_x == 14 ? 5 : 0; source_y < kDisplayHeight; source_y++) {
+			if ((source_x != x || source_y != y) && matrixDriver.isPadPressed(source_x, source_y)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 bool SoundEditor::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
                                  uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth], bool drawUndefinedArea)
 {
-	if (!runtimeFeatureSettings.isOn(RuntimeFeatureSettingType::ShortcutOverlay)
-		|| !Buttons::isShiftButtonPressed())
+	
+	if (!image)
+	{
+		D_PRINTLN("no image");
+
+		return should_render_shortcut_overlay();
+	}
+	if (!should_render_shortcut_overlay())
 	{
 		if (haveRenderedPads)
 		{
@@ -215,15 +243,10 @@ bool SoundEditor::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth +
 			haveRenderedPads = false;
 		}
 
-		D_PRINTLN("shift not pressed");
-		return false;
+		D_PRINTLN("shortcut overlay not rendered");
+		return false; // show root UI
 	}
 
-	if (!image) {
-		D_PRINTLN("no image");
-
-		return true;
-	}
 
 	D_PRINTLN("rendering pad colours");
 
@@ -234,33 +257,53 @@ bool SoundEditor::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth +
 	if (item)
 	{
 		auto param = item->getParamIndex();
-
-		auto patchable = item->getParamKind() == params::Kind::PATCHED;
-
-		if (patchable)
+		auto kind = item->getParamKind();
+		auto patchable = kind == params::Kind::PATCHED;
+		if (kind == params::Kind::PATCH_CABLE)
 		{
-			D_PRINTLN("it's patchable");
-			// canary - if the local lfo (lfo 2 to users) can't patch then it's a global patched param
-			if (currentSound and currentSound->maySourcePatchToParam(PatchSource::LFO_LOCAL_1, param,
-			                                                         soundEditor.currentParamManager)
-				== PatchCableAcceptance::DISALLOWED)
-			{
-				for (int32_t yDisplay = 0; yDisplay < kDisplayHeight; yDisplay++)
-				{
-					for (int32_t xDisplay = kDisplayWidth - 2; xDisplay < kDisplayWidth; xDisplay++)
-					{
-						image[yDisplay][xDisplay] = mono_mod_shortcut_colours[xDisplay - (kDisplayWidth - 2)][yDisplay];
-					}
+			param = soundEditor.patchingParamSelected;
+			kind = params::Kind::PATCHED;
+			patchable = true;
+		}
+		if (patchable && currentSound != nullptr) {
+			const bool is_volume = param == params::GLOBAL_VOLUME_POST_FX
+			                       || param == params::GLOBAL_VOLUME_POST_REVERB_SEND || param == params::LOCAL_VOLUME;
+			auto source_is_allowed = [&](PatchSource source, bool edits_range) {
+				if (source >= kLastPatchSource) {
+					return false;
 				}
-			}
-			else
-			{
-				for (int32_t yDisplay = 0; yDisplay < kDisplayHeight; yDisplay++)
-				{
-					for (int32_t xDisplay = kDisplayWidth - 2; xDisplay < kDisplayWidth; xDisplay++)
-					{
-						image[yDisplay][xDisplay] = poly_mod_shortcut_colours[xDisplay - (kDisplayWidth - 2)][yDisplay];
+				if (edits_range) {
+					// Match PatchCableStrength::checkPermissionToBeginSession for cable ranges.
+					return source < kFirstLocalSource || param < params::FIRST_GLOBAL;
+				}
+				auto can_patch = [&](uint8_t destination) {
+					return currentSound->maySourcePatchToParam(source, destination, currentParamManager)
+					       != PatchCableAcceptance::DISALLOWED;
+				};
+				// Volume selects its physical destination according to the source.
+				if (is_volume) {
+					return can_patch(params::GLOBAL_VOLUME_POST_FX) || can_patch(params::LOCAL_VOLUME)
+					       || can_patch(params::GLOBAL_VOLUME_POST_REVERB_SEND);
+				}
+				return can_patch(param);
+			};
+			for (int32_t x = 0; x < 2; x++) {
+				for (int32_t y = 0; y < kDisplayHeight; y++) {
+					const bool previous_press_still_active = isOtherModSourcePadPressed(x + 14, y);
+					auto target = PatchingSourceShortcutTarget::PARAMETER;
+					for (int32_t depth = navigationDepth; depth >= 0; depth--) {
+						target = menuItemNavigationRecord[depth]->getPatchingSourceShortcutTarget(
+						    previous_press_still_active);
+						if (target != PatchingSourceShortcutTarget::PARENT) {
+							break;
+						}
 					}
+					const bool edits_range = target == PatchingSourceShortcutTarget::RANGE;
+					if (source_is_allowed(modSourceShortcuts[x][y], edits_range)
+					    || source_is_allowed(modSourceShortcutsSecondLayer[x][y], edits_range)) {
+						image[y][x + kDisplayWidth - 2] = mod_source_colour;
+					}
+					// Otherwise retain the parameter shortcut underneath, if there is one.
 				}
 			}
 		}
@@ -319,6 +362,7 @@ SoundEditor::SoundEditor() {
 void SoundEditor::resetSourceBlinks() {
 	memset(sourceShortcutBlinkFrequencies, 255, sizeof(sourceShortcutBlinkFrequencies));
 	memset(sourceShortcutBlinkColours, 0, sizeof(sourceShortcutBlinkColours));
+	memset(source_shortcut_blink_alternates, 0, sizeof(source_shortcut_blink_alternates));
 }
 
 bool SoundEditor::editingKit() {
@@ -529,11 +573,13 @@ ActionResult SoundEditor::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		}
 	}
 
-	// Encoder button
+	// Potentially render shortcut overlay / refresh root UI pads
 	if (b == SHIFT)
 	{
 		uiNeedsRendering(this, 0xFFFFFFFF,0xFFFFFFFF);
 	}
+
+	// Encoder button
 	if (b == SELECT_ENC) {
 		if (currentUIMode == UI_MODE_NONE || currentUIMode == UI_MODE_AUDITIONING
 		    || currentUIMode == UI_MODE_NOTES_PRESSED || currentUIMode == UI_MODE_HOLDING_AFFECT_ENTIRE_IN_SOUND_EDITOR
@@ -828,6 +874,10 @@ ActionResult SoundEditor::buttonAction(deluge::hid::Button b, bool on, bool inCa
 void SoundEditor::handlePotentialParamMenuChange(deluge::hid::Button b, bool inCardRoutine, MenuItem* previousItem,
                                                  MenuItem* currentItem, bool isHorizontalMenu) {
 	using namespace deluge::hid::button;
+	// currentItem is null once the sound editor has closed entirely (see exitCompletely()).
+	if (currentItem == nullptr) {
+		return;
+	}
 	if (previousItem != currentItem) {
 		bool previousMenuIsParam = (isHorizontalMenu == false || previousItem->isSubmenu() == false)
 		                           && (previousItem->getParamKind() != deluge::modulation::params::Kind::NONE);
@@ -911,7 +961,9 @@ ActionResult SoundEditor::exitCompletely() {
 
 	// end current menu item session before exiting
 	endScreen();
-
+	navigationDepth = 0;
+	shouldGoUpOneLevelOnBegin = false;
+	menuItemNavigationRecord[navigationDepth] = nullptr;
 	display->setNextTransitionDirection(-1);
 	close();
 	possibleChangeToCurrentRangeDisplay();
@@ -953,23 +1005,28 @@ bool SoundEditor::findPatchedParam(int32_t paramLookingFor, int32_t* xout, int32
 void SoundEditor::updateSourceBlinks(MenuItem* currentItem) {
 	for (int32_t x = 0; x < 2; x++) {
 		for (int32_t y = 0; y < kDisplayHeight; y++) {
-			PatchSource source = modSourceShortcuts[x][y];
-			bool isSecondLayerSource = false;
+			auto& frequency = sourceShortcutBlinkFrequencies[x][y];
+			auto& colour = sourceShortcutBlinkColours[x][y];
+			frequency = 255; // don't blink is the default
+			colour = 0; // white shortcut flash is the default
+			source_shortcut_blink_alternates[x][y] = false; // not alternating by default
 
-			if (secondLayerModSourceShortcutsToggled) {
-				const auto secondLayerSource = modSourceShortcutsSecondLayer[x][y];
-				if (secondLayerSource != PatchSource::NOT_AVAILABLE) {
-					source = secondLayerSource;
-					isSecondLayerSource = true;
-				}
+			const auto source = modSourceShortcuts[x][y];
+			if (source < kLastPatchSource) {
+				frequency = currentItem->shouldBlinkPatchingSourceShortcut(source, &colour);
 			}
 
-			if (source < kLastPatchSource) {
-				sourceShortcutBlinkFrequencies[x][y] =
-				    currentItem->shouldBlinkPatchingSourceShortcut(source, &sourceShortcutBlinkColours[x][y]);
-
-				if (sourceShortcutBlinkFrequencies[x][y] != 255 && isSecondLayerSource) {
-					sourceShortcutBlinkColours[x][y] = 0b00000011; // blink yellow on the second layer
+			// Menu navigation can select either layer without pressing a shortcut. Check both,
+			// giving the actively edited source (frequency 0) priority over related sources.
+			const auto second_layer_source = modSourceShortcutsSecondLayer[x][y];
+			if (second_layer_source < kLastPatchSource) {
+				uint8_t second_layer_colour = 0;
+				const auto second_layer_frequency =
+				    currentItem->shouldBlinkPatchingSourceShortcut(second_layer_source, &second_layer_colour);
+				source_shortcut_blink_alternates[x][y] = second_layer_frequency != 255 && second_layer_frequency == frequency;
+				if (second_layer_frequency < frequency) {
+					frequency = second_layer_frequency;
+					colour = 0b00000011; // blink yellow on the second layer
 				}
 			}
 		}
@@ -1187,7 +1244,14 @@ void SoundEditor::blinkShortcut() {
 			for (int32_t y = 0; y < kDisplayHeight; y++) {
 				if (sourceShortcutBlinkFrequencies[x][y] != 255
 				    && (counterForNow & sourceShortcutBlinkFrequencies[x][y]) == 0) {
-					PadLEDs::flashMainPad(x + 14, y, sourceShortcutBlinkColours[x][y]);
+					auto colour = sourceShortcutBlinkColours[x][y];
+					// The frequency is a mask of low counter bits. The next bit alternates
+					// on successive flashes, including when the source blinks slowly.
+					if (source_shortcut_blink_alternates[x][y]
+					    && (counterForNow & (sourceShortcutBlinkFrequencies[x][y] + 1)) != 0) {
+						colour = 0b00000011; // second layer
+					}
+					PadLEDs::flashMainPad(x + 14, y, colour);
 				}
 			}
 		}
@@ -1417,6 +1481,11 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 		}
 	}
 
+	if (!on && getCurrentUI() == this && ((x == 14 && y >= 5) || x == 15)) {
+		// Releasing a held source changes the remaining shortcuts back to direct patching.
+		uiNeedsRendering(this, 0xFFFFFFFF, 0);
+	}
+
 	// ignore if:
 	// A) velocity is off (you let go of pad)
 	// B) you're pressing a pad in sidebar (not a shortcut)
@@ -1451,21 +1520,19 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 
 			// Shortcut to patch a modulation source to the parameter we're already looking at
 			if (getCurrentUI() == &soundEditor && ((x == 14 && y >= 5) || x == 15)) {
-
 				const int32_t modSourceX = x - 14;
 				PatchSource source = modSourceShortcuts[modSourceX][y];
 
-				secondLayerModSourceShortcutsToggled =
-					sourceShortcutBlinkFrequencies[modSourceX][y] != 255
+				const bool second_layer_mod_source_shortcuts_toggled =
+					sourceShortcutBlinkFrequencies[modSourceX][y] == 0
 					&& getCurrentMenuItem()->getParamKind() == modulation::params::Kind::PATCH_CABLE
-						? !secondLayerModSourceShortcutsToggled
-						: false;
+					&& sourceShortcutBlinkColours[modSourceX][y] != 0b00000011; /* yellow */
 
 				// Replace with the second layer shortcut (e.g. env3, lfo3) if the pad was pressed twice
-				if (secondLayerModSourceShortcutsToggled) {
-					const auto secondLayerSource = modSourceShortcutsSecondLayer[modSourceX][y];
-					if (secondLayerSource != PatchSource::NOT_AVAILABLE) {
-						source = secondLayerSource;
+				if (second_layer_mod_source_shortcuts_toggled) {
+					const auto second_layer_source = modSourceShortcutsSecondLayer[modSourceX][y];
+					if (second_layer_source != PatchSource::NOT_AVAILABLE) {
+						source = second_layer_source;
 					}
 				}
 
@@ -1477,21 +1544,7 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 					return ActionResult::DEALT_WITH;
 				}
 
-				bool previousPressStillActive = false;
-				for (int32_t h = 0; h < 2; h++) {
-					for (int32_t i = 0; i < kDisplayHeight; i++) {
-						if (h == 0 && i < 5) {
-							continue;
-						}
-
-						if ((h + 14 != x || i != y) && matrixDriver.isPadPressed(14 + h, i)) {
-							previousPressStillActive = true;
-							goto getOut;
-						}
-					}
-				}
-
-				getOut:
+				const bool previous_press_still_active = isOtherModSourcePadPressed(x, y);
 				bool wentBack = false;
 
 				int32_t newNavigationDepth = navigationDepth;
@@ -1500,7 +1553,7 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 
 					// Ask current MenuItem what to do with this action
 					MenuItem* newMenuItem = menuItemNavigationRecord[newNavigationDepth]->patchingSourceShortcutPress(
-						source, previousPressStillActive);
+						source, previous_press_still_active);
 
 					// If it says "go up a level and ask that MenuItem", do that
 					if (newMenuItem == NO_NAVIGATION) {
@@ -1524,6 +1577,7 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 							endScreen();
 
 							modulationItemFound = true;
+							item = nullptr; // don't open another shortcut on top of this
 							navigationDepth = newNavigationDepth + 1;
 							menuItemNavigationRecord[navigationDepth] = newMenuItem;
 							if (!wentBack) {
@@ -2353,8 +2407,10 @@ void SoundEditor::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 		}
 		currentMenuItem = menuItemNavigationRecord[navigationDepth - 1];
 	}
-
-	currentMenuItem->renderOLED();
+	if (currentMenuItem)
+	{
+		currentMenuItem->renderOLED();
+	}
 }
 
 /*

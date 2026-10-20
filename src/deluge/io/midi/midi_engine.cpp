@@ -26,6 +26,8 @@
 #include "io/midi/device_specific/launchpad_extension.h"
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_device_manager.h"
+#include "io/midi/midi_follow.h"
+#include "io/midi/midi_queue.h"
 #include "io/midi/sysex.h"
 #include "mem_functions.h"
 #include "model/song/song.h"
@@ -230,21 +232,79 @@ void MidiEngine::sendMidi(MIDISource source, MIDIMessage message, int32_t filter
 	*eventStackTop_ = source;
 	++eventStackTop_;
 
-	// Send USB MIDI
-	if (sendUSB) {
-		sendUsbMidi(message, filter);
+	bool sendDIN = MIDIDeviceManager::root_din.cable.wantsToOutputMIDIOnChannel(message, filter);
+	if (sendUSB || sendDIN) {
+		queueMIDI(message, filter, sendUSB, sendDIN, midiDue_);
 	}
 
-	// Send serial MIDI
-	auto& dinCable = MIDIDeviceManager::root_din.cable;
-	if (dinCable.wantsToOutputMIDIOnChannel(message, filter)) {
-		auto error = dinCable.sendMessage(message);
+	--eventStackTop_;
+}
+
+namespace {
+// Shared with the MIDI/gate output timer ISR
+PLACE_SDRAM_BSS MIDIQueue midiQueue;
+} // namespace
+
+void MidiEngine::queueMIDI(MIDIMessage message, int32_t filter, bool sendUSB, bool sendDIN, uint32_t due,
+                           uint8_t device) {
+	if (midiQueue.push(message, filter, sendUSB, sendDIN, due, getSystemTicks(), device)) [[likely]] {
+		return;
+	}
+	// Full - send the oldest early to make room.
+	// queue is consumed by ISR so lock that out to be safe
+	CriticalSectionGuard guard;
+	sendOldestQueuedMIDI(guard);
+	midiQueue.push(message, filter, sendUSB, sendDIN, due, getSystemTicks(), device);
+}
+
+bool MidiEngine::nextMIDIDue(uint32_t& due) {
+	return midiQueue.nextDue(due);
+}
+
+bool MidiEngine::flushQueuedMIDI(bool all, uint32_t now) {
+	QueuedMIDI queued;
+	while (midiQueue.popDue(queued, now, all)) {
+		sendQueuedMIDI(queued);
+	}
+	if (anythingInOutputBuffer()) {
+		flushMIDI();
+	}
+	// Covers both USB and UART (including bytes UART is still sending)
+	return anythingInOutputBuffer();
+}
+
+bool MidiEngine::sendOldestQueuedMIDI(const InterruptsDisabled&) {
+	QueuedMIDI queued;
+	if (!midiQueue.popOldest(queued)) {
+		return false;
+	}
+	sendQueuedMIDI(queued);
+	return true;
+}
+
+void MidiEngine::sendQueuedMIDI(const QueuedMIDI& queued) {
+	if (queued.usb) {
+		if (queued.device == 0) {
+			sendUsbMidi(queued.message, queued.filter);
+		}
+		else {
+			sendUsbMidi(queued.message, queued.filter, queued.device);
+		}
+	}
+	if (queued.din) {
+		auto error = MIDIDeviceManager::root_din.cable.sendMessage(queued.message);
 		if (error != Error::NONE && error != Error::NO_ERROR_BUT_GET_OUT) {
 			D_PRINTLN("MIDI send error: %d", static_cast<int>(error));
 		}
 	}
+}
 
-	--eventStackTop_;
+bool MidiEngine::flushDueMIDI(uint32_t now, const InterruptsDisabled&) {
+	return flushQueuedMIDI(false, now);
+}
+
+void MidiEngine::flushAllQueuedMIDI(const InterruptsDisabled&) {
+	flushQueuedMIDI(true, 0);
 }
 
 void MidiEngine::sendMidi(MIDISource source, MIDIMessage message, int32_t filter, bool sendUSB, uint8_t deviceFilter) {
@@ -264,25 +324,22 @@ void MidiEngine::sendMidi(MIDISource source, MIDIMessage message, int32_t filter
 	*eventStackTop_ = source;
 	++eventStackTop_;
 
-	// Send USB MIDI
-	if (sendUSB) {
-		sendUsbMidi(message, filter, deviceFilter);
-	}
-
-	// Send serial MIDI (DIN)
-	// deviceFilter: 0 = ALL, 1 = DIN only, 2+ = USB devices
-	auto& dinCable = MIDIDeviceManager::root_din.cable;
-	if (dinCable.wantsToOutputMIDIOnChannel(message, filter)) {
-		// Send to DIN if device filter is 0 (ALL) or 1 (DIN)
-		if (deviceFilter == 0 || deviceFilter == 1) {
-			auto error = dinCable.sendMessage(message);
-			if (error != Error::NONE && error != Error::NO_ERROR_BUT_GET_OUT) {
-				D_PRINTLN("MIDI send error: %d", static_cast<int>(error));
-			}
-		}
+	// deviceFilter: 0 = ALL, 1 = DIN only, 2+ = one USB device
+	bool sendUSBNow = sendUSB && deviceFilter != 1;
+	bool sendDIN = (deviceFilter == 0 || deviceFilter == 1)
+	               && MIDIDeviceManager::root_din.cable.wantsToOutputMIDIOnChannel(message, filter);
+	if (sendUSBNow || sendDIN) {
+		queueMIDI(message, filter, sendUSBNow, sendDIN, midiDue_, deviceFilter);
 	}
 
 	--eventStackTop_;
+}
+
+void MidiEngine::check_incoming_usb() {
+	if (!usbLock) {
+		USBAutoLock lock;
+		usb_cstd_usb_task();
+	}
 }
 
 void MidiEngine::sendUsbMidi(MIDIMessage message, int32_t filter) {
