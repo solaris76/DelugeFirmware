@@ -15,6 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 #pragma once
+#include "dsp/machine/patches.h"
 #include "gui/menu_item/decimal.h"
 #include "gui/menu_item/formatted_title.h"
 #include "gui/ui/sound_editor.h"
@@ -87,6 +88,10 @@ public:
 		Source& source = sound->sources[source_id_];
 
 		if (for_modulator_ && sound->getSynthMode() != SynthMode::FM) {
+			return false;
+		}
+		// Machine engines own their phase; Sound Phase has no effect.
+		if (deluge::dsp::machine::isMachineOscType(source.oscType)) {
 			return false;
 		}
 		if (source.oscType == OscType::WAVETABLE) {

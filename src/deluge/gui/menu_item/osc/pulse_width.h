@@ -16,10 +16,12 @@
  */
 #pragma once
 #include "definitions_cxx.hpp"
+#include "dsp/machine/patches.h"
 #include "gui/menu_item/formatted_title.h"
 #include "gui/menu_item/source/patched_param.h"
 #include "modulation/params/param_set.h"
 #include "processing/sound/sound.h"
+#include "processing/source.h"
 
 namespace deluge::gui::menu_item::osc {
 class PulseWidth final : public source::PatchedParam, public FormattedTitle {
@@ -49,7 +51,8 @@ public:
 		}
 
 		return oscType != OscType::SAMPLE && oscType != OscType::INPUT_L && oscType != OscType::INPUT_R
-		       && oscType != OscType::INPUT_STEREO;
+		       && oscType != OscType::INPUT_STEREO && oscType != OscType::DX7
+		       && !deluge::dsp::machine::isMachineOscType(oscType);
 	}
 
 	void renderInHorizontalMenu(const SlotPosition& slot) override {

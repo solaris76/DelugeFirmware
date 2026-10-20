@@ -80,6 +80,12 @@ bool VoiceUnisonPartSource::noteOn(Voice* voice, Source* source, VoiceSamplePlay
 		DxPatch* patch = source->ensureDxPatch();
 		dxVoice->init(*patch, voice->noteCodeAfterArpeggiation, velocity);
 	}
+	else if (synthMode != SynthMode::FM && source->isMachineOsc()) {
+		machineState.reset();
+		if (oscRetriggerPhase != 0xFFFFFFFF) {
+			oscPos = oscRetriggerPhase;
+		}
+	}
 	else {
 		if (oscRetriggerPhase != 0xFFFFFFFF) {
 			oscPos = getOscInitialPhaseForZero(source->oscType) + oscRetriggerPhase;

@@ -143,6 +143,10 @@ public:
 	static const Icon infinityIcon;
 	static const Icon sampleIcon;
 	static const Icon wavetableIcon;
+	static const Icon fmToneIcon;
+	static const Icon waveToneIcon;
+	static const Icon fmDrumIcon;
+	static const Icon percIcon;
 	static const Icon phiMorphIcon;
 	static const Icon phiWeaveIcon;
 	static const Icon phiVoxIcon;

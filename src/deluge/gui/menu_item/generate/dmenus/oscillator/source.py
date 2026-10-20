@@ -1,6 +1,82 @@
-from dmui.dsl import Menu
+from dmui.dsl import ExternalMenu, Menu
 
 _available_txt = 'Oscillator has its type set to <string-for name="STRING_FOR_SAMPLE">SAMPLE</string-for>'
+_machine_when = "Oscillator type is a machine engine (Wavetone / FM Drum / Perc / Skin / Resonator / SY Osc)"
+
+# Defined in menus.cpp — source 0 SYN machine params only
+_machine_menus_osc0 = [
+    # FM Drum
+    ExternalMenu("fmDrumAlgoMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumTuneMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumWaveMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumSweepMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumModMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumFoldMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumDecayMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumNoiseMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumVelDestMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumRandDestMenu", available_when=_machine_when),
+    ExternalMenu("fmDrumRandAmtMenu", available_when=_machine_when),
+    # Wavetone (full)
+    ExternalMenu("wtPitchMenu", available_when=_machine_when),
+    ExternalMenu("wtWave1Menu", available_when=_machine_when),
+    ExternalMenu("wtPd1Menu", available_when=_machine_when),
+    ExternalMenu("wtLev1Menu", available_when=_machine_when),
+    ExternalMenu("wtWave2Menu", available_when=_machine_when),
+    ExternalMenu("wtPd2Menu", available_when=_machine_when),
+    ExternalMenu("wtLev2Menu", available_when=_machine_when),
+    ExternalMenu("wtModMenu", available_when=_machine_when),
+    ExternalMenu("wtDriftMenu", available_when=_machine_when),
+    ExternalMenu("wtNoiseMenu", available_when=_machine_when),
+    ExternalMenu("wtNoiseTypeMenu", available_when=_machine_when),
+    ExternalMenu("wtNoiseCharMenu", available_when=_machine_when),
+    ExternalMenu("wtVelDestMenu", available_when=_machine_when),
+    ExternalMenu("wtRandDestMenu", available_when=_machine_when),
+    ExternalMenu("wtRandAmtMenu", available_when=_machine_when),
+    # Perc
+    ExternalMenu("percRoleMenu", available_when=_machine_when),
+    ExternalMenu("percPitchMenu", available_when=_machine_when),
+    ExternalMenu("percColorMenu", available_when=_machine_when),
+    ExternalMenu("percNoiseMenu", available_when=_machine_when),
+    ExternalMenu("percDecayMenu", available_when=_machine_when),
+    ExternalMenu("percCrunchMenu", available_when=_machine_when),
+    ExternalMenu("percVelDestMenu", available_when=_machine_when),
+    ExternalMenu("percRandDestMenu", available_when=_machine_when),
+    ExternalMenu("percRandAmtMenu", available_when=_machine_when),
+    # Skin
+    ExternalMenu("skinModeMenu", available_when=_machine_when),
+    ExternalMenu("skinPitchMenu", available_when=_machine_when),
+    ExternalMenu("skinHarmMenu", available_when=_machine_when),
+    ExternalMenu("skinMorphMenu", available_when=_machine_when),
+    ExternalMenu("skinFoldMenu", available_when=_machine_when),
+    ExternalMenu("skinDecayMenu", available_when=_machine_when),
+    ExternalMenu("skinNoiseMenu", available_when=_machine_when),
+    ExternalMenu("skinVelDestMenu", available_when=_machine_when),
+    ExternalMenu("skinRandDestMenu", available_when=_machine_when),
+    ExternalMenu("skinRandAmtMenu", available_when=_machine_when),
+    # Resonator
+    ExternalMenu("resonatorModelMenu", available_when=_machine_when),
+    ExternalMenu("resonatorPitchMenu", available_when=_machine_when),
+    ExternalMenu("resonatorStructureMenu", available_when=_machine_when),
+    ExternalMenu("resonatorBrightMenu", available_when=_machine_when),
+    ExternalMenu("resonatorDampingMenu", available_when=_machine_when),
+    ExternalMenu("resonatorPositionMenu", available_when=_machine_when),
+    ExternalMenu("resonatorExciteMenu", available_when=_machine_when),
+    ExternalMenu("resonatorVelDestMenu", available_when=_machine_when),
+    ExternalMenu("resonatorRandDestMenu", available_when=_machine_when),
+    ExternalMenu("resonatorRandAmtMenu", available_when=_machine_when),
+    # SY Osc
+    ExternalMenu("syOscModeMenu", available_when=_machine_when),
+    ExternalMenu("syOscPitchMenu", available_when=_machine_when),
+    ExternalMenu("syOscSweepMenu", available_when=_machine_when),
+    ExternalMenu("syOscRatioMenu", available_when=_machine_when),
+    ExternalMenu("syOscColorMenu", available_when=_machine_when),
+    ExternalMenu("syOscNoiseMenu", available_when=_machine_when),
+    ExternalMenu("syOscDecayMenu", available_when=_machine_when),
+    ExternalMenu("syOscVelDestMenu", available_when=_machine_when),
+    ExternalMenu("syOscRandDestMenu", available_when=_machine_when),
+    ExternalMenu("syOscRandAmtMenu", available_when=_machine_when),
+]
 
 sync = Menu(
     "osc::Sync",
@@ -118,6 +194,7 @@ for i in range(2):
             title="STRING_FOR_OSC_R_PHASE_MENU_TITLE",
             available_when="Voice is in FM mode, or the oscillator is not in sample mode",
         ),
+        *(_machine_menus_osc0 if i == 0 else []),
         Menu(
             "sample::Reverse",
             f"sample{i}ReverseMenu",
