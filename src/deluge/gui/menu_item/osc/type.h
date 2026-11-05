@@ -44,7 +44,7 @@ public:
 	    : Selection(name), FormattedTitle(title_format_str, source_id + 1), sourceId_{source_id} {};
 	void beginSession(MenuItem* navigatedBackwardFrom) override { Selection::beginSession(navigatedBackwardFrom); }
 
-	bool mayUseDx() const { return !soundEditor.editingKit() && sourceId_ == 0; }
+	bool mayUseDx() const { return sourceId_ == 0; }
 
 	/// Build OscType list matching getOptions() order for current context.
 	/// Phi family sits with basic/wavetable (same as on-main); machines are kit-friendly source-0 engines.
@@ -56,6 +56,7 @@ public:
 		out.push_back(OscType::ANALOG_SQUARE);
 		out.push_back(OscType::SAW);
 		out.push_back(OscType::ANALOG_SAW_2);
+		out.push_back(OscType::SUPERSAW);
 		out.push_back(OscType::WAVETABLE);
 		out.push_back(OscType::PHI_MORPH);
 		out.push_back(OscType::PHI_STAIR);
@@ -119,9 +120,9 @@ public:
 
 		const auto needs_unassignment = {
 		    OscType::INPUT_L,   OscType::INPUT_R,   OscType::INPUT_STEREO, OscType::SAMPLE,    OscType::DX7,
-		    OscType::WAVETABLE, OscType::PHI_MORPH, OscType::PHI_STAIR,    OscType::PHI_WEAVE, OscType::PHI_VOX,
-		    OscType::PHI_SWARM, OscType::PHI_GENDY, OscType::WAVETONE,     OscType::FM_DRUM,   OscType::PERC,
-		    OscType::SKIN,      OscType::RESONATOR, OscType::SY_OSC,
+		    OscType::WAVETABLE, OscType::SUPERSAW,  OscType::PHI_MORPH,    OscType::PHI_STAIR, OscType::PHI_WEAVE,
+		    OscType::PHI_VOX,   OscType::PHI_SWARM, OscType::PHI_GENDY,    OscType::WAVETONE,  OscType::FM_DRUM,
+		    OscType::PERC,      OscType::SKIN,      OscType::RESONATOR,    OscType::SY_OSC,
 		};
 
 		if (util::one_of(oldValue, needs_unassignment) || util::one_of(newValue, needs_unassignment)) {
@@ -163,6 +164,9 @@ public:
 				break;
 			case OscType::ANALOG_SAW_2:
 				options.emplace_back(l10n::getView(STRING_FOR_ANALOG_SAW));
+				break;
+			case OscType::SUPERSAW:
+				options.emplace_back(l10n::getView(STRING_FOR_SUPERSAW));
 				break;
 			case OscType::WAVETABLE:
 				options.emplace_back(l10n::getView(STRING_FOR_WAVETABLE));
@@ -263,6 +267,7 @@ public:
 				return OLED::squareIcon;
 			case OscType::SAW:
 			case OscType::ANALOG_SAW_2:
+			case OscType::SUPERSAW:
 				return OLED::sawIcon;
 			case OscType::SAMPLE:
 				return OLED::sampleIcon;
@@ -303,11 +308,11 @@ public:
 
 		image.drawIconCentered(icon, slot.start_x, slot.width, slot.start_y + kHorizontalMenuSlotYOffset + 2);
 
-		if (osc_type == OscType::ANALOG_SQUARE || osc_type == OscType::ANALOG_SAW_2) {
+		if (osc_type == OscType::ANALOG_SQUARE || osc_type == OscType::ANALOG_SAW_2 || osc_type == OscType::SUPERSAW) {
 			const int32_t x = slot.start_x + 4;
 			constexpr int32_t y = OLED_MAIN_HEIGHT_PIXELS - kTextSpacingY - 8;
 			image.clearAreaExact(x - 1, y - 1, x + kTextSpacingX + 1, y + kTextSpacingY + 1);
-			image.drawChar('A', x, y, kTextSpacingX, kTextSpacingY);
+			image.drawChar(osc_type == OscType::SUPERSAW ? 'S' : 'A', x, y, kTextSpacingX, kTextSpacingY);
 		}
 	}
 

@@ -332,7 +332,11 @@ doChangeType:
 
 DxPatch* Source::ensureDxPatch() {
 	if (dxPatch == nullptr) {
-		dxPatch = getDxEngine()->newPatch();
+		DxEngine* engine = getDxEngine();
+		if (engine == nullptr) {
+			return nullptr;
+		}
+		dxPatch = engine->newPatch();
 	}
 	return dxPatch;
 };

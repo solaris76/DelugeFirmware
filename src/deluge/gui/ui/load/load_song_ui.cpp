@@ -49,7 +49,7 @@
 #include "util/try.h"
 #include <string.h>
 
-LoadSongUI loadSongUI{};
+PLACE_SDRAM_BSS LoadSongUI loadSongUI{};
 
 extern void songLoaded(Song* song);
 extern void setUIForLoadedSong(Song* song);

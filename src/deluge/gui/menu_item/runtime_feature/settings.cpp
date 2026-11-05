@@ -75,7 +75,7 @@ SettingToggle menuShowBatteryLevel(RuntimeFeatureSettingType::ShowBatteryLevel);
 SettingToggle menuEnableLaunchpadGridMirror(RuntimeFeatureSettingType::EnableLaunchpadGridMirror);
 Setting menuGeneratorCcOutput(RuntimeFeatureSettingType::GeneratorCcOutput);
 RoundedCornersSettingToggle menuRoundedCorners(RuntimeFeatureSettingType::RoundedCorners);
-SettingToggle menuShortcutOverlay(RuntimeFeatureSettingType::ShortcutOverlay);
+Setting menuShortcutOverlay(RuntimeFeatureSettingType::ShortcutOverlay);
 
 std::array<MenuItem*, RuntimeFeatureSettingType::MaxElement - kNonTopLevelSettings> subMenuEntries{
     &menuDrumRandomizer,

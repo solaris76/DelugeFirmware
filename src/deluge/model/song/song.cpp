@@ -40,6 +40,7 @@
 #include "model/clip/clip_instance.h"
 #include "model/clip/instrument_clip.h"
 #include "model/consequence/consequence_clip_existence.h"
+#include "model/global_effectable/output_stage_gain.h"
 #include "model/instrument/cv_instrument.h"
 #include "model/instrument/midi_instrument.h"
 #include "model/mod_controllable/mod_controllable_audio.h"
@@ -384,9 +385,19 @@ bool Song::ensureAtLeastOneSessionClip() {
 	}
 
 	void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(InstrumentClip));
+	if (!memory) {
+		// Same as the Instrument allocation below - a Song must have a Clip, and there's no recovering this early
+		display->displayError(Error::INSUFFICIENT_RAM);
+		while (1) {}
+	}
 	InstrumentClip* firstClip = new (memory) InstrumentClip(this);
 
-	sessionClips.insertClipAtIndex(firstClip, 0);
+	if (sessionClips.insertClipAtIndex(firstClip, 0) != Error::NONE) {
+		firstClip->~InstrumentClip();
+		delugeDealloc(memory);
+		display->displayError(Error::INSUFFICIENT_RAM);
+		while (1) {}
+	}
 
 	firstClip->loopLength = kDefaultClipLength << insideWorldTickMagnitude;
 
@@ -1278,8 +1289,6 @@ weAreInArrangementEditorOrInClipInstance:
 	GlobalEffectableForClip::writeParamTagsToFile(writer, &paramManager, true, valuesForOverride);
 	writer.writeClosingTag("songParams");
 
-	performanceView.writeSettingsToFile(writer);
-
 	writer.writeArrayStart("instruments");
 	for (Output* thisOutput = firstOutput; thisOutput; thisOutput = thisOutput->next) {
 		thisOutput->writeToFile(nullptr, this);
@@ -2024,7 +2033,9 @@ loadOutput:
 						if (error != Error::NONE) {
 							goto gotError;
 						}
-						((Instrument*)newOutput)->mightExistOnCard = true;
+						if (newOutput->type != OutputType::AUDIO) {
+							static_cast<Instrument*>(newOutput)->mightExistOnCard = true;
+						}
 						*lastPointer = newOutput;
 						lastPointer = &newOutput->next;
 						reader.match('}');
@@ -2071,10 +2082,6 @@ loadOutput:
 				reader.match('{');
 				GlobalEffectableForClip::readParamsFromFile(reader, &paramManager, 2147483647);
 				reader.exitTag("songParams", true);
-			}
-
-			else if (!strcmp(tagName, "performanceView")) {
-				performanceView.readSettingsFromFile(reader);
 			}
 
 			else if (!strcmp(tagName, "tracks") || !strcmp(tagName, "sessionClips")) {
@@ -2193,17 +2200,19 @@ loadOutput:
 			anyOutputsSoloingInArrangement = true;
 		}
 
-		if (thisOutput->clipInstances.getNumElements() == 0
-		    && getBackedUpParamManagerPreferablyWithClip((ModControllableAudio*)thisOutput, nullptr) == nullptr
-		    && thisOutput->type == OutputType::AUDIO) {
-			// This clip has no way to get a param manager, and no clips to help it out. Need to create a backup or
-			// things will go wrong later.
-			ParamManagerForTimeline paramManager{};
+		if (thisOutput->type == OutputType::AUDIO && thisOutput->clipInstances.getNumElements() == 0) {
+			// Backups are keyed by the ModControllableAudio subobject, which isn't at the start of an AudioOutput
+			auto* modControllable = static_cast<ModControllableAudio*>(thisOutput->toModControllable());
+			if (getBackedUpParamManagerPreferablyWithClip(modControllable, nullptr) == nullptr) {
+				// This clip has no way to get a param manager, and no clips to help it out. Need to create a backup or
+				// things will go wrong later.
+				ParamManagerForTimeline paramManager{};
 
-			paramManager.setupUnpatched();
-			GlobalEffectable::initParams(&paramManager);
+				paramManager.setupUnpatched();
+				GlobalEffectable::initParams(&paramManager);
 
-			this->backUpParamManager((ModControllableAudio*)thisOutput->toModControllable(), nullptr, &paramManager);
+				this->backUpParamManager(modControllable, nullptr, &paramManager);
+			}
 		}
 
 		for (int32_t i = 0; i < thisOutput->clipInstances.getNumElements(); i++) {
@@ -2259,7 +2268,10 @@ skipInstance:
 		if (thisOutput->type == OutputType::AUDIO) {
 			auto ao = (AudioOutput*)thisOutput;
 			if (ao->inputChannel == AudioInputChannel::SPECIFIC_OUTPUT) {
-				ao->setOutputRecordingFrom(getOutputFromIndex(ao->outputRecordingFromIndex));
+				// getOutputFromIndex() falls back to the first output, so don't let a missing or bad index land there
+				int32_t index = ao->outputRecordingFromIndex;
+				ao->setOutputRecordingFrom((index >= 0 && index < getNumOutputs()) ? getOutputFromIndex(index)
+				                                                                   : nullptr);
 			}
 		}
 		// If saved before V2.1, set sample-based synth instruments to linear interpolation, cos that's how it was
@@ -2492,7 +2504,7 @@ void Song::renderAudio(std::span<StereoSample> outputBuffer, int32_t* reverbBuff
 	    getFinalParameterValueVolume(
 	        134217728,
 	        cableToLinearParamShortcut(paramManager.getUnpatchedParamSet()->getValue(params::UNPATCHED_VOLUME)))
-	    >> 1;
+	    >> kSongVolumeAdjustmentShift;
 
 	// A "post-FX volume" calculation also happens in audioDriver.render(), which is a bit more relevant really
 	// because that's where filters are happening
@@ -3472,8 +3484,6 @@ void Song::replaceInstrument(Instrument* oldOutput, Instrument* newOutput, bool 
 		}
 	}
 
-	Output* outputRecordingOldOutput = oldOutput->getOutputRecordingThis();
-
 	outputClipInstanceListIsCurrentlyInvalid = true;
 
 	// Tell all the Clips to change their Instrument.
@@ -3545,14 +3555,13 @@ traverseClips:
 	newOutput->armedForRecording = oldOutput->armedForRecording;
 	oldOutput->armedForRecording = false;
 
+	retargetRecordingFromReferences(oldOutput, newOutput);
+
 	// Properly do away with the oldInstrument
 	deleteOrAddToHibernationListOutput(oldOutput);
 
 	// Put the newInstrument into the master list
 	*prevPointer = newOutput;
-	if (outputRecordingOldOutput) {
-		((AudioOutput*)outputRecordingOldOutput)->setOutputRecordingFrom(newOutput);
-	}
 	AudioEngine::mustUpdateReverbParamsBeforeNextRender = true;
 }
 
@@ -3566,6 +3575,9 @@ void Song::deleteOrAddToHibernationListOutput(Output* output) {
 
 	// Otherwise, hibernate it
 	else {
+		// Hibernated instruments stay allocated but leave the active output list, so audio tracks must stop targeting
+		// them (they'd be saved as the wrong track).
+		clearRecordingFromReferencesTo(output);
 		addInstrumentToHibernationList((Instrument*)output);
 	}
 }
@@ -3596,6 +3608,16 @@ void Song::clearRecordingFromReferencesTo(Output* output) {
 	for (Output* other = firstOutput; other; other = other->next) {
 		if (other != output && other->getOutputRecordingFrom() == output) {
 			other->clearRecordingFrom();
+		}
+	}
+}
+
+// When an output is replaced (preset change, output type change), every track recording from it follows to the new one,
+// not just the one monitoring it. Otherwise the rest are left on an output that's about to be deleted or hibernated.
+void Song::retargetRecordingFromReferences(Output* oldOutput, Output* newOutput) {
+	for (Output* other = firstOutput; other; other = other->next) {
+		if (other != oldOutput && other->type == OutputType::AUDIO && other->getOutputRecordingFrom() == oldOutput) {
+			static_cast<AudioOutput*>(other)->setOutputRecordingFrom(newOutput);
 		}
 	}
 }
@@ -5296,6 +5318,8 @@ void Song::replaceOutputLowLevel(Output* newOutput, Output* oldOutput) {
 	newOutput->armedForRecording = oldOutput->armedForRecording;
 	oldOutput->armedForRecording = false;
 
+	retargetRecordingFromReferences(oldOutput, newOutput);
+
 	// Properly do away with the oldInstrument
 	deleteOrAddToHibernationListOutput(oldOutput);
 
@@ -5569,8 +5593,8 @@ Clip* Song::createPendingNextOverdubBelowClip(Clip* clip, int32_t clipIndex, Ove
 	if (anyClipsSoloing) {
 		return nullptr;
 	}
-	// if we're in rows or the clip can't support in place overdub then use the traditional deluge cloning looper
-	if (sessionLayout == SessionLayoutType::SessionLayoutTypeRows || clip->shouldCloneForOverdubs()) {
+	// Use the traditional cloning looper only for clips that don't support overdubbing in place.
+	if (clip->shouldCloneForOverdubs()) {
 		char modelStackMemory[MODEL_STACK_MAX_SIZE];
 		ModelStack* modelStack = setupModelStackWithSong(modelStackMemory, this);
 
@@ -5969,7 +5993,7 @@ doHibernatingInstruments:
 }
 
 void Song::getCurrentRootNoteAndScaleName(StringBuf& buffer) {
-	char noteName[5];
+	char noteName[kNoteCodeStringBufferSize];
 	int32_t isNatural = 1; // gets modified inside noteCodeToString to be 0 if sharp.
 	noteCodeToString(currentSong->key.rootNote, noteName, &isNatural);
 

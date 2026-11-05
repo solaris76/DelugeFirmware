@@ -1344,14 +1344,20 @@ bool doSomeOutputting() {
 	int32_t const* const inputBufferEnd = getInputBufferEnd(monitoringSource);
 
 	// Audio from a USB host, mixed straight into the outputs if the user wants - unless it's already coming through
-	// the sampling monitor or an audio track's. It's added after toUSB is taken, so it isn't sent back to the host,
-	// which would echo it
+	// an audio track's monitoring. The sampler only monitors it when this is off (setMonitoringMode()). It's added
+	// after toUSB is taken, so it isn't sent back to the host, which would echo it
 	bool const doUSBDirectMonitoring =
-	    usb_audio::directMonitoring && !doMonitoring && !usbInputMonitoredByTrack && usb_audio::receivingFromHost();
+	    usb_audio::directMonitoring && !usbInputMonitoredByTrack && usb_audio::receivingFromHost();
 	int32_t const* __restrict__ usbReadPos = getInputReadPos(AudioInputChannel::USB);
 	int32_t const* const usbInputEnd = usb_audio::getInputRingEnd();
 	bool const doSendToUSB = usb_audio::sendingToHost();
 	std::array<StereoSample, SSI_TX_BUFFER_NUM_SAMPLES> toUSB;
+
+	// Or the host might want the line input instead of our output. The internal mic only has a left channel
+	bool const sendLineInToUSB = (usb_audio::outputSource == usb_audio::OutputSource::LINE_IN);
+	bool const lineInIsMono = !lineInPluggedIn && !micPluggedIn;
+	int32_t const* __restrict__ lineInReadPos = getInputReadPos(AudioInputChannel::STEREO);
+	int32_t const* const lineInEnd = getRxBufferEnd();
 
 	while (renderingBufferOutputPosNow != renderingBufferOutputEnd) {
 
@@ -1407,8 +1413,18 @@ bool doSomeOutputting() {
 		}
 
 		if (doSendToUSB) {
-			toUSB[numSamplesOutputted].l = lshiftAndSaturate<AUDIO_OUTPUT_GAIN_DOUBLINGS>(lAdjusted);
-			toUSB[numSamplesOutputted].r = lshiftAndSaturate<AUDIO_OUTPUT_GAIN_DOUBLINGS>(rAdjusted);
+			if (sendLineInToUSB) {
+				toUSB[numSamplesOutputted].l = lineInReadPos[0];
+				toUSB[numSamplesOutputted].r = lineInReadPos[lineInIsMono ? 0 : 1];
+				lineInReadPos += NUM_MONO_INPUT_CHANNELS;
+				if (lineInReadPos >= lineInEnd) {
+					lineInReadPos -= SSI_RX_BUFFER_NUM_SAMPLES * NUM_MONO_INPUT_CHANNELS;
+				}
+			}
+			else {
+				toUSB[numSamplesOutputted].l = lshiftAndSaturate<AUDIO_OUTPUT_GAIN_DOUBLINGS>(lAdjusted);
+				toUSB[numSamplesOutputted].r = lshiftAndSaturate<AUDIO_OUTPUT_GAIN_DOUBLINGS>(rAdjusted);
+			}
 		}
 
 		if (doUSBDirectMonitoring) {
@@ -1637,7 +1653,8 @@ void previewSample(String* path, FilePointer* filePointer, bool shouldActuallySo
 
 	if (shouldActuallySound) {
 		// Adopt the volume of the instrument / kit-row the sample will be loaded into, so the preview sounds the same
-		// before and after selecting it (issue #1591). The song master volume is applied downstream in renderSongFX().
+		// before and after selecting it (issue #1591). The caller has folded in the song and kit output
+		// stages the preview skips; master FX are applied downstream in renderSongFX().
 		PatchedParamSet* previewParams = paramManagerForSamplePreview->getPatchedParamSet();
 		previewParams->params[params::GLOBAL_VOLUME_POST_FX].setCurrentValueBasicForSetup(volume.volumePostFX);
 		previewParams->params[params::LOCAL_VOLUME].setCurrentValueBasicForSetup(volume.localVolume);
@@ -1672,6 +1689,7 @@ void stopAnyPreviewing() {
 void getReverbParamsFromSong(Song* song) {
 	reverb.setModel(song->model);
 	reverb.setRoomSize(song->reverbRoomSize);
+	reverb.setHPF(song->reverbHPF);
 	reverb.setLPF(song->reverbLPF);
 	reverb.setDamping(song->reverbDamp);
 	reverb.setWidth(song->reverbWidth);

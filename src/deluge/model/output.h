@@ -107,8 +107,8 @@ public:
 	uint8_t modKnobMode;
 
 	// Temp stuff for doLaunch()
-	bool alreadyGotItsNewClip;
-	bool isGettingSoloingClip;
+	bool alreadyGotItsNewClip{false};
+	bool isGettingSoloingClip{false};
 
 	bool nextClipFoundShouldGetArmed; // Temp thing for Session::armClipsToStartOrSoloWithQuantization
 

@@ -237,11 +237,26 @@ void ActionLogger::updateAction(Action* newAction) {
 	newAction->modeNotes[AFTER] = currentSong->key.modeNotes;
 }
 
+ActionType ActionLogger::getParameterChangeActionType() const {
+	// Live parameter edits belong to the recording transaction, even when the
+	// parameter itself has no automation. Otherwise these edits (e.g. MIDI
+	// expression) split RECORD actions, repeatedly snapshotting the same note
+	// and automation data until undo history consumes all available memory.
+	if (playbackHandler.recording == RecordingMode::NORMAL && playbackHandler.isEitherClockActive()) {
+		return ActionType::RECORD;
+	}
+	return ActionType::PARAM_UNAUTOMATED_VALUE_CHANGE;
+}
+
 void ActionLogger::recordUnautomatedParamChange(ModelStackWithAutoParam const* modelStack, ActionType actionType) {
 
 	// If this is a param where you should not record automated param changes (e.g. tempo) then exit
 	if (!modelStack->paramCollection->shouldRecordUnautomatedParamChange(modelStack)) {
 		return;
+	}
+
+	if (actionType == ActionType::PARAM_UNAUTOMATED_VALUE_CHANGE) {
+		actionType = getParameterChangeActionType();
 	}
 
 	Action* action = getNewAction(actionType, ActionAddition::ALLOWED);
@@ -299,13 +314,14 @@ void ActionLogger::recordTempoChange(uint64_t timePerBigBefore, uint64_t timePer
 }
 
 /// Record Performance View Hold Press
-void ActionLogger::recordPerformanceViewPress(FXColumnPress fxPressBefore[kDisplayWidth],
-                                              FXColumnPress fxPressAfter[kDisplayWidth], int32_t xDisplay) {
+Action* ActionLogger::recordPerformanceViewPress(FXColumnPress fxPressBefore[kDisplayWidth],
+                                                 FXColumnPress fxPressAfter[kDisplayWidth], int32_t xDisplay) {
 
-	Action* action = getNewAction(ActionType::PARAM_UNAUTOMATED_VALUE_CHANGE, ActionAddition::ALLOWED);
+	// The held-pad state must undo together with the parameter value changed by the pad.
+	Action* action = getNewAction(getParameterChangeActionType(), ActionAddition::ALLOWED);
 
 	if (!action) {
-		return;
+		return nullptr;
 	}
 
 	void* consMemory = GeneralMemoryAllocator::get().allocLowSpeed(sizeof(ConsequencePerformanceViewPress));
@@ -315,6 +331,7 @@ void ActionLogger::recordPerformanceViewPress(FXColumnPress fxPressBefore[kDispl
 		    new (consMemory) ConsequencePerformanceViewPress(fxPressBefore, fxPressAfter, xDisplay);
 		action->addConsequence(newConsequence);
 	}
+	return action;
 }
 
 // Returns whether anything was reverted.
@@ -877,23 +894,26 @@ bool ActionLogger::undoJustOneConsequencePerNoteRow(ModelStack* modelStack) {
 	Consequence* firstConsequence = firstAction[BEFORE]->firstConsequence;
 	if (firstConsequence) { // Should always be true
 
-		// Work out if multiple Consequences per NoteRow (see big comment above)
-		int32_t firstNoteRowId = ((ConsequenceNoteArrayChange*)firstConsequence)->noteRowId;
+		// Work out if multiple Consequences per NoteRow (see big comment above). Only NoteArrayChanges carry a
+		// noteRowId - if the most recent Consequence is something else, there's no "mini action" boundary to find.
+		Consequence* nextForSameNoteRow = nullptr;
+		if (firstConsequence->type == Consequence::NOTE_ARRAY_CHANGE) {
+			int32_t firstNoteRowId = static_cast<ConsequenceNoteArrayChange*>(firstConsequence)->noteRowId;
 
-		Consequence* thisConsequence = firstConsequence->next;
-		while (thisConsequence) {
-			if (thisConsequence->type == Consequence::NOTE_ARRAY_CHANGE
-			    && ((ConsequenceNoteArrayChange*)thisConsequence)->noteRowId == firstNoteRowId) {
-				goto gotMultipleConsequencesPerNoteRow;
+			for (Consequence* thisConsequence = firstConsequence->next; thisConsequence;
+			     thisConsequence = thisConsequence->next) {
+				if (thisConsequence->type == Consequence::NOTE_ARRAY_CHANGE
+				    && static_cast<ConsequenceNoteArrayChange*>(thisConsequence)->noteRowId == firstNoteRowId) {
+					nextForSameNoteRow = thisConsequence;
+					break;
+				}
 			}
-
-			thisConsequence = thisConsequence->next;
 		}
 
-		// If multiple Consequences per NoteRow, just revert most recent one per NoteRow
-		if (false) {
-gotMultipleConsequencesPerNoteRow:
-			do {
+		// If multiple Consequences per NoteRow, just revert most recent one per NoteRow - everything before the next
+		// Consequence for the same NoteRow
+		if (nextForSameNoteRow) {
+			while (firstConsequence != nextForSameNoteRow) {
 				firstConsequence->revert(BEFORE,
 				                         modelStack); // Unlike reverting a whole Action, this doesn't update anything
 				                                      // visually or call any expectEvent() functions
@@ -903,8 +923,7 @@ gotMultipleConsequencesPerNoteRow:
 				firstConsequence->~Consequence();
 				delugeDealloc(firstConsequence);
 				firstConsequence = firstAction[BEFORE]->firstConsequence;
-			} while (thisConsequence->type != Consequence::NOTE_ARRAY_CHANGE
-			         || ((ConsequenceNoteArrayChange*)firstConsequence)->noteRowId != firstNoteRowId);
+			}
 
 			D_PRINTLN("did secret undo, just one Consequence");
 		}

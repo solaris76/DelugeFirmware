@@ -43,7 +43,7 @@ static constexpr const char* PATTERN_MELODIC_DEFAULT_FOLDER = "PATTERNS/MELODIC"
 static constexpr const char* PATTERN_SEQUENCER_STEP_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/STEP";
 static constexpr const char* PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/PULSE";
 
-SavePatternUI savePatternUI{};
+PLACE_SDRAM_BSS SavePatternUI savePatternUI{};
 
 SavePatternUI::SavePatternUI() {
 	filePrefix = "PATTERN";

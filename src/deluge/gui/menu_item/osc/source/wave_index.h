@@ -40,7 +40,9 @@ public:
 		if (source.isPhiFamily()) {
 			return true;
 		}
-		return source.oscType == OscType::WAVETABLE && source.hasAtLeastOneAudioFileLoaded();
+		// The supersaw uses it for spread
+		return source.oscType == OscType::SUPERSAW
+		       || (source.oscType == OscType::WAVETABLE && source.hasAtLeastOneAudioFileLoaded());
 	}
 
 	void selectEncoderAction(int32_t offset) override {

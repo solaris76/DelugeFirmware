@@ -1326,7 +1326,10 @@ for the Lumi Keys Studio Edition, described below.
   alongside USB MIDI.
   - Audio from the computer plays through the Deluge's outputs, and the Deluge's output is sent to the computer.
   - `USB INPUT` can be chosen as an audio clip's `AUDIO SOURCE`, to record or monitor audio from the computer.
-  - USB audio can be turned off in `SETTINGS > USB AUDIO`, after which the Deluge is a USB MIDI device only.
+  - `SETTINGS > USB AUDIO > INPUT` chooses whether the computer's audio is mixed straight into the Deluge's outputs
+    (on by default). `SETTINGS > USB AUDIO > OUTPUT` chooses whether the computer receives the Deluge's main mix (the
+    default) or its line input.
+  - USB audio can be turned off in `SETTINGS > USB AUDIO > ENABLED`, after which the Deluge is a USB MIDI device only.
   - See [USB Audio](/features/usb_audio) for details.
 
 ## 5. Community Features Menu (aka Runtime Settings)
@@ -1398,6 +1401,10 @@ Note: these settings are saved to `SETTINGS/CommunityFeatures.XML` on your SD ca
   - When On, the ability to trim from the start of an audio clip without needing to reverse it is enabled.
 - `Show Battery Level (BATT)` <Badge text="c1.3" variant="tip" />
   - When On, displays battery level information in the System menu. Shows voltage and percentage on OLED displays, percentage on 7-segment displays.
+- `Shortcut Overlay (OVER)` <Badge text="c1.3" variant="tip" />
+  - `Off` disables the coloured shortcut overlay.
+  - `On - Menu only (MENU)` (default) shows it while holding Shift in a sound editing menu.
+  - `On - Menu + Clip (FULL)` also shows it while holding Shift in instrument and audio clip views.
 
 ## 6. Sysex Handling
 

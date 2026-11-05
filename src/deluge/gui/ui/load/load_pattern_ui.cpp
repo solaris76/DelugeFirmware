@@ -40,7 +40,7 @@ static constexpr const char* PATTERN_MELODIC_DEFAULT_FOLDER = "PATTERNS/MELODIC"
 static constexpr const char* PATTERN_SEQUENCER_STEP_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/STEP";
 static constexpr const char* PATTERN_SEQUENCER_PULSE_DEFAULT_FOLDER = "PATTERNS/SEQUENCER/PULSE";
 
-LoadPatternUI loadPatternUI{};
+PLACE_SDRAM_BSS LoadPatternUI loadPatternUI{};
 
 bool LoadPatternUI::getGreyoutColsAndRows(uint32_t* cols, uint32_t* rows) {
 	// greyout the sidebar, not the main pads

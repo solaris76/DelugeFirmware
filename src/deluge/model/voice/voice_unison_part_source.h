@@ -19,6 +19,7 @@
 
 #include "definitions_cxx.hpp"
 #include "dsp/machine/patches.h"
+#include "dsp/oscillators/supersaw.h"
 #include "model/sample/sample.h"
 #include <gsl/gsl>
 
@@ -43,6 +44,7 @@ public:
 
 	uint32_t oscPos; // FKA phase. No longer used for Sample playback / rate conversion position. Only waves, including
 	                 // wavetable.
+	deluge::dsp::Supersaw::SidePhases supersawPhases = deluge::dsp::Supersaw::sidePhasesFrom(0);
 	uint32_t phaseIncrementStoredValue;
 	uint64_t prevPhaseScaler{0}; // For PHI_SWARM / PHI_VOX state across buffers
 	int32_t carrierFeedback;

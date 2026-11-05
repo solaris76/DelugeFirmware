@@ -57,7 +57,10 @@ SampleRecorder::~SampleRecorder() {
 	if (sample != nullptr) {
 		detachSample();
 	}
-	outputRecordingFrom->removeRecorder();
+	// Only set when recording from a specific track
+	if (outputRecordingFrom != nullptr) {
+		outputRecordingFrom->removeRecorder();
+	}
 }
 
 // This can be called when this SampleRecorder is destructed routinely - or earlier if we've aborted and the sample file
@@ -1060,7 +1063,7 @@ doFinishCapturing:
 			// check if there's any audio in this cycle
 			if (thresholdRecording) [[unlikely]] {
 				size_t samples_to_copy = minThresholdMargin;
-				StereoFloatSample approxRMSLevel = envelopeFollower.calcApproxRMS(input);
+				StereoFloatSample approxRMSLevel = envelopeFollower.calcApproxRMS(input.first(numSamplesThisCycle));
 				if (std::max(approxRMSLevel.l, approxRMSLevel.r) > startValueThreshold) {
 					thresholdRecording = false;
 					samples_to_copy += numSamplesThisCycle;
