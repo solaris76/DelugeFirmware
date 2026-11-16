@@ -151,6 +151,15 @@ Error MIDIRootComplexUSBPeripheral::poll() {
 					if (statusType == 2 || statusType == 3) { // 2 or 3 byte system common messages
 						statusType = 0x0F;
 					}
+					// System Real-Time (0xF8 to 0xFF) should come with CIN 0xF, but some hosts send it with
+					// CIN 0x5 (single-byte System Common / SysEx end) - the Windows 11 USB MIDI 2 class driver
+					// among them. Take it as real-time: otherwise clock, start and stop are lost, and the byte
+					// ends the SysEx in progress on this cable.
+					else if (statusType == 0x05 && readPos[1] >= 0xF8) {
+						statusType = 0x0F;
+						data1 = 0;
+						data2 = 0;
+					}
 					else { // Invalid, or sysex, or something
 						if (cable < this->cables_.size()) {
 							this->cables_[cable].checkIncomingSysex(readPos, ip, d);

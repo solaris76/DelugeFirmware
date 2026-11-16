@@ -1466,7 +1466,8 @@ needToGrabLeftmostButHaveToReadFirst:
 /// Caller must call emptyFileItems() at some point after calling this function - unless an error is returned
 /// Caller must remove OLED working animation after calling this too.
 PresetNavigationResult LoadInstrumentPresetUI::doPresetNavigation(int32_t offset, Instrument* oldInstrument,
-                                                                  Availability availabilityRequirement, bool doBlink) {
+                                                                  Availability availabilityRequirement, bool doBlink,
+                                                                  Clip* displayClip) {
 
 	AudioEngine::logAction("doPresetNavigation");
 
@@ -1612,7 +1613,7 @@ doneMoving:
 	bool isHibernating = toReturn.fileItem->instrument && !toReturn.fileItem->instrumentAlreadyInSong;
 
 	if (toReturn.fileItem->instrument) {
-		view.displayOutputName(toReturn.fileItem->instrument, doBlink);
+		view.displayOutputName(toReturn.fileItem->instrument, doBlink, displayClip);
 	}
 	else {
 		toReturn.error = toReturn.fileItem->getFilenameWithoutExtension(&newName);
@@ -1625,7 +1626,7 @@ doneMoving:
 			emptyFileItems();
 			return toReturn;
 		}
-		view.drawOutputNameFromDetails(outputType, 0, 0, newName.get(), newName.isEmpty(), false, doBlink);
+		view.drawOutputNameFromDetails(outputType, 0, 0, newName.get(), newName.isEmpty(), false, doBlink, displayClip);
 	}
 
 	if (display->haveOLED()) {

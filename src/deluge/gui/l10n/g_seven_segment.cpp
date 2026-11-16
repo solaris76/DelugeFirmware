@@ -609,6 +609,10 @@ PLACE_SDRAM_DATA Language seven_segment{
         {STRING_FOR_PHI_GENDY, "GNDY"},
         {STRING_FOR_PHI_STEREO, "STER"},
         {STRING_FOR_PHI_STAIR, "STAI"},
+        {STRING_FOR_CURVE, "CURV"},
+        {STRING_FOR_ENV_LEVEL, "LEVL"},
+        {STRING_FOR_ENV_FOLLOW_Z, "Z"},
+        {STRING_FOR_ENV_FOLLOW_Y, "Y"},
     },
     &built_in::english,
 };
