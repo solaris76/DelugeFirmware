@@ -124,6 +124,28 @@ static void SetupGeneratorCcOutputSetting(RuntimeFeatureSetting& setting, deluge
 	};
 }
 
+static void SetupGoldKnobSensitivitySetting(RuntimeFeatureSetting& setting, deluge::l10n::String displayName,
+                                            std::string_view xmlName, RuntimeFeatureStateGoldKnobSensitivity def) {
+	setting.displayName = displayName;
+	setting.xmlName = xmlName;
+	setting.value = static_cast<uint32_t>(def);
+
+	setting.options = {
+	    {
+	        .displayName = display->haveOLED() ? "Normal" : "NORM",
+	        .value = RuntimeFeatureStateGoldKnobSensitivity::Normal,
+	    },
+	    {
+	        .displayName = display->haveOLED() ? "Fine" : "FINE",
+	        .value = RuntimeFeatureStateGoldKnobSensitivity::Fine,
+	    },
+	    {
+	        .displayName = display->haveOLED() ? "Slow" : "SLOW",
+	        .value = RuntimeFeatureStateGoldKnobSensitivity::Slow,
+	    },
+	};
+}
+
 void RuntimeFeatureSettings::init() {
 	using enum deluge::l10n::String;
 	// Drum randomizer
@@ -249,6 +271,11 @@ void RuntimeFeatureSettings::init() {
 	    {l10n::getView(STRING_FOR_SHORTCUT_OVERLAY_MENU_AND_CLIP),
 	     static_cast<uint32_t>(RuntimeFeatureStateShortcutOverlay::MenuAndClip)},
 	};
+
+	// Gold knob (mod encoder) sensitivity: how many edges per knobPos step
+	SetupGoldKnobSensitivitySetting(settings[RuntimeFeatureSettingType::GoldKnobSensitivity],
+	                                STRING_FOR_COMMUNITY_FEATURE_GOLD_KNOB_SENSITIVITY, "goldKnobSensitivity",
+	                                RuntimeFeatureStateGoldKnobSensitivity::Normal);
 }
 
 void RuntimeFeatureSettings::factoryReset(bool showPopup) {

@@ -38,11 +38,25 @@ namespace deluge::hid::encoders {
 
 uint32_t timeModEncoderLastTurned[2];
 static int8_t modEncoderInitialTurnDirection[2];
+/// Leftover quadrature edges after sensitivity division, one accum per gold knob.
+static int32_t modEncoderEdgeAccum[2];
 
 static uint32_t timeNextSDTestAction = 0;
 static int32_t nextSDTestDirection = 1;
 
 static uint32_t encodersWaitingForCardRoutineEnd;
+
+/// Edges required per knobPos step for the community Gold Knob Sensitivity setting.
+static int32_t goldKnobEdgesPerStep() {
+	switch (runtimeFeatureSettings.get(RuntimeFeatureSettingType::GoldKnobSensitivity)) {
+	case RuntimeFeatureStateGoldKnobSensitivity::Fine:
+		return 2;
+	case RuntimeFeatureStateGoldKnobSensitivity::Slow:
+		return 3;
+	default:
+		return 1;
+	}
+}
 
 void interpretEncodersTask() {
 	poll_encoder_pins();
@@ -177,9 +191,20 @@ checkResult:
 
 				// Do it, only if
 				if (offset + modEncoderInitialTurnDirection[e] != 0) {
-					int8_t offset_accelerated = offset * encoder.calcNextKnobSpeed(offset);
+					const int32_t edgesPerStep = goldKnobEdgesPerStep();
+					if ((modEncoderEdgeAccum[e] > 0 && offset < 0) || (modEncoderEdgeAccum[e] < 0 && offset > 0)) {
+						modEncoderEdgeAccum[e] = 0;
+					}
+					modEncoderEdgeAccum[e] += offset;
+					const int32_t steps = modEncoderEdgeAccum[e] / edgesPerStep;
+					modEncoderEdgeAccum[e] -= steps * edgesPerStep;
 
-					getCurrentUI()->modEncoderAction(e, offset_accelerated);
+					if (steps != 0) {
+						const int8_t stepOffset = static_cast<int8_t>(
+						    std::clamp(steps, static_cast<int32_t>(-128), static_cast<int32_t>(127)));
+						const int8_t offset_accelerated = stepOffset * encoder.calcNextKnobSpeed(stepOffset);
+						getCurrentUI()->modEncoderAction(e, offset_accelerated);
+					}
 
 					modEncoderInitialTurnDirection[e] = 0;
 				}
