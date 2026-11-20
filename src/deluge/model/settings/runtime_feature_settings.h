@@ -50,6 +50,10 @@ enum RuntimeFeatureStateGeneratorCcOutput : uint32_t {
 // Keep the former On value as MenuOnly to preserve existing settings.
 enum class RuntimeFeatureStateShortcutOverlay : uint32_t { Off = 0, MenuOnly = 1, MenuAndClip = 2 };
 
+/// How many quadrature edges per gold-knob knobPos step. Normal matches stock (~¾ turn min→max);
+/// Fine ≈ 1½ turns; Slow ≈ 2¼ turns.
+enum RuntimeFeatureStateGoldKnobSensitivity : uint32_t { Normal = 0, Fine = 1, Slow = 2 };
+
 /// Every setting needs to be declared in here
 enum RuntimeFeatureSettingType : uint32_t {
 	DrumRandomizer,
@@ -79,6 +83,7 @@ enum RuntimeFeatureSettingType : uint32_t {
 	GeneratorCcOutput,
 	RoundedCorners,
 	ShortcutOverlay,
+	GoldKnobSensitivity,
 	MaxElement // Keep as boundary
 };
 

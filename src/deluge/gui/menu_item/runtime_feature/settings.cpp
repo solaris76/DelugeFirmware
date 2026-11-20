@@ -76,6 +76,7 @@ SettingToggle menuEnableLaunchpadGridMirror(RuntimeFeatureSettingType::EnableLau
 Setting menuGeneratorCcOutput(RuntimeFeatureSettingType::GeneratorCcOutput);
 RoundedCornersSettingToggle menuRoundedCorners(RuntimeFeatureSettingType::RoundedCorners);
 Setting menuShortcutOverlay(RuntimeFeatureSettingType::ShortcutOverlay);
+Setting menuGoldKnobSensitivity(RuntimeFeatureSettingType::GoldKnobSensitivity);
 
 std::array<MenuItem*, RuntimeFeatureSettingType::MaxElement - kNonTopLevelSettings> subMenuEntries{
     &menuDrumRandomizer,
@@ -84,6 +85,7 @@ std::array<MenuItem*, RuntimeFeatureSettingType::MaxElement - kNonTopLevelSettin
     &menuCatchNotes,
     &menuDeleteUnusedKitRows,
     &menuAltGoldenKnobDelayParams,
+    &menuGoldKnobSensitivity,
     &menuDevSysexAllowed,
     &menuSyncScalingAction,
     &menuHighlightIncomingNotes,
